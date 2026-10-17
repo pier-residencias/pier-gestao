@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>[ENSAIO] Pier Gestão · Painel de desempenho</title>
+<style>
+:root{--bg:#f4f6f8;--surface:#fff;--fg:#17232f;--muted:#5b6b7a;--line:#d6dee6;--accent:#2d6a93;--ok:#2c7a4c;--ok-bg:#e0f1e6;--crit:#b8362a;--crit-bg:#f8e0dc;--warn:#9a5b00;--warn-bg:#fbedd5}
+@media (prefers-color-scheme: dark){:root{--bg:#0f1820;--surface:#16222d;--fg:#e4edf4;--muted:#93a6b6;--line:#2a3b4a;--accent:#6fb0db;--ok:#5fc48b;--ok-bg:#163326;--crit:#f06c5f;--crit-bg:#3d1b18;--warn:#eaa53d;--warn-bg:#3a2a12}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.faixa{position:sticky;top:0;z-index:5;background:repeating-linear-gradient(135deg,#6d28d9 0 14px,#5b21b6 14px 28px);color:#fff;text-align:center;padding:7px 12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;font-size:13px}
+main{max-width:1100px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:1.35rem;margin:6px 0 2px}
+h2{font-size:1.05rem;margin:0 0 10px}
+p.lead{color:var(--muted);margin:0 0 18px}
+section{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px;margin:0 0 16px}
+label{display:block;font-weight:600;font-size:.88rem;margin:0 0 4px}
+.grid{display:grid;grid-template-columns:2fr 1fr 110px;gap:12px}
+@media (max-width:720px){.grid{grid-template-columns:1fr}}
+input[type=text],input[type=password],input[type=number]{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);font:inherit}
+.acoes{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;align-items:center}
+button{font:inherit;font-weight:600;border:1px solid var(--line);background:var(--surface);color:var(--fg);padding:8px 14px;border-radius:6px;cursor:pointer}
+button.primario{background:var(--accent);border-color:var(--accent);color:#fff}
+button:disabled{opacity:.45;cursor:not-allowed}
+.hint{color:var(--muted);font-size:.86rem}
+ul.travas{list-style:none;padding:0;margin:10px 0 0;display:grid;gap:4px}
+ul.travas li{padding:6px 10px;border-radius:6px;font-size:.9rem}
+li.ok{background:var(--ok-bg);color:var(--ok)} li.erro{background:var(--crit-bg);color:var(--crit)} li.pend{background:var(--bg);color:var(--muted)}
+table{width:100%;border-collapse:collapse;font-size:.9rem}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+.tabela{overflow-x:auto}
+.estado{font-size:.82rem;font-weight:600}
+.estado.ok{color:var(--ok)} .estado.erro{color:var(--crit)} .estado.rodando{color:var(--warn)}
+pre#log{max-height:280px;overflow:auto;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:10px;font-size:.8rem;white-space:pre-wrap;margin:0}
+.aviso{background:var(--warn-bg);color:var(--warn);padding:10px 12px;border-radius:6px;font-size:.9rem;margin-top:10px}
+</style>
+</head>
+<body>
+<div class="faixa">Ensaio de desempenho · dados fictícios · não é o sistema oficial</div>
+<main>
+  <h1>Pier Gestão — Painel do ensaio de desempenho</h1>
+  <p class="lead">Mede o tempo de cada operação na planilha de ensaio. Só conversa com o endereço do ensaio, depois de conferir a versão do sistema (A = atual ou B = otimizada), as contas e os materiais [ENSAIO]. Para comparar, confira um endereço, rode, depois confira o outro e rode de novo: os resultados ficam separados por versão. Nada é guardado neste computador além do arquivo CSV que você baixar.</p>
+
+  <section>
+    <h2>1. Ambiente</h2>
+    <div class="grid">
+      <div><label for="url">Endereço /exec da implantação de ENSAIO</label><input type="text" id="url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" spellcheck="false"></div>
+      <div><label for="senha">Senha das contas de ensaio</label><input type="password" id="senha" autocomplete="off"></div>
+      <div><label for="amostras">Amostras</label><input type="number" id="amostras" value="30" min="3" max="100"></div>
+    </div>
+    <div class="acoes">
+      <button class="primario" id="b-conferir">Conferir ambiente</button>
+      <label class="hint" style="font-weight:400;margin:0"><input type="checkbox" id="sondagem"> incluir a sondagem de aprovação em lote de 100</label>
+    </div>
+    <ul class="travas" id="travas"></ul>
+  </section>
+
+  <section>
+    <h2>2. Cenários</h2>
+    <p class="hint" style="margin-top:0">Rode na ordem. Cada cenário prepara o que precisa (contagens para aprovar, por exemplo) sem contar esse preparo no tempo. A recuperação é medida no editor do Apps Script (veja o LEIA-ME).</p>
+    <div class="tabela"><table><thead><tr><th>Cenário</th><th class="n">Amostras</th><th>Situação</th><th></th></tr></thead><tbody id="cenarios"></tbody></table></div>
+    <div class="acoes"><button class="primario" id="b-todos" disabled>Rodar todos na ordem</button><button id="b-parar" disabled>Parar depois do atual</button></div>
+  </section>
+
+  <section>
+    <h2>3. Resultados (tempo do clique até a resposta, em milissegundos)</h2>
+    <div class="tabela"><table><thead><tr><th>Cenário</th><th>Versão</th><th class="n">n</th><th class="n">Erros</th><th class="n">"Ocupado"</th><th class="n">Mínimo</th><th class="n">Médio</th><th class="n">Máximo</th><th class="n">p95</th></tr></thead><tbody id="resultados"></tbody></table></div>
+    <p class="hint">O p95 só aparece com 20 amostras ou mais.</p>
+    <div class="acoes"><button id="b-csv" disabled>Baixar CSV</button><button id="b-consistencia" disabled>Conferir consistência (só leitura)</button><button id="b-sair" disabled>Encerrar sessões</button></div>
+    <div id="consistencia"></div>
+  </section>
+
+  <section>
+    <h2>Registro</h2>
+    <pre id="log"></pre>
+  </section>
+</main>
+<script>
+(() => {
+"use strict";
+// ---------------- regras fixas do ensaio ----------------
+// a implantação do ensaio usa o Código.gs da liberação com o sufixo abaixo na VERSAO (ensaio/Codigo-ensaio.gs);
+// produção e homologação não têm o sufixo, então nenhum POST sai para elas mesmo com um endereço novo
+// Só estas duas versões são aceitas (A = liberação atual, B = consulta otimizada); as duas têm o sufixo do ensaio.
+const VERSOES = {
+  "2026-10-16 inventário com aprovação da Administração · ENSAIO DE DESEMPENHO": "A",
+  "2026-10-17 inventário com aprovação da Administração + consulta otimizada (fase 1) · ENSAIO DE DESEMPENHO": "B"
+};
+const NOME_VERSAO = { A: "A — liberação atual", B: "B — consulta otimizada (fase 1)" };
+const PROIBIDOS = [["AKfycbyL0rDZ", "implantação de PRODUÇÃO"], ["AKfycby-MWYi", "implantação de HOMOLOGAÇÃO existente"]];
+const CONTAS = { admins: ["admin.ensaio1", "admin.ensaio2"], manut: ["manut.ensaio1", "manut.ensaio2", "manut.ensaio3", "manut.ensaio4", "manut.ensaio5"] };
+const MARCA = "[ENSAIO]";
+const MIN_ITENS = 250;
+
+const $ = s => document.querySelector(s);
+const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const S = { estado: {}, versao: "", url: "", candidata: "", liberado: false, tok: {}, itens: [], pend: new Set(), bloq: new Set(), contagens: [], amostras: [], parar: false, ocupado: false };
+const log = t => { const el = $("#log"); el.textContent += new Date().toLocaleTimeString("pt-BR") + "  " + t + "\n"; el.scrollTop = el.scrollHeight; };
+
+// ---------------- trava de rede: só o endereço do ensaio, já conferido ----------------
+const fetchOriginal = window.fetch.bind(window);
+const ehAppsScript = u => /^https:\/\/script\.google(usercontent)?\.com\//i.test(String(u || ""));
+// fase 1: só um GET (leitura da versão) ao endereço candidato; fase 2: POST só depois que a versão bateu
+window.fetch = function (recurso, opcoes) {
+  const u = typeof recurso === "string" ? recurso : (recurso && recurso.url) || "";
+  const metodo = String((opcoes && opcoes.method) || (recurso && recurso.method) || "GET").toUpperCase();
+  if (ehAppsScript(u) || u.indexOf("://script.") >= 0) {
+    const proibido = PROIBIDOS.some(p => u.indexOf(p[0]) >= 0);
+    const leitura = metodo === "GET" && !(opcoes && opcoes.body) && S.candidata && u === S.candidata;
+    const liberado = S.url && u === S.url;
+    if (proibido || !(leitura || liberado)) {
+      log("BLOQUEADO: " + metodo + " para " + u.slice(0, 70) + "… não é o endereço do ensaio conferido.");
+      return Promise.reject(new TypeError("Bloqueado pelo painel: endereço não autorizado."));
+    }
+  }
+  return fetchOriginal(recurso, opcoes);
+};
+if (navigator.sendBeacon) navigator.sendBeacon = () => false; // o painel não usa; nada sai por aqui
+const XHR = window.XMLHttpRequest; window.XMLHttpRequest = function () { throw new Error("Bloqueado pelo painel."); }; void XHR;
+
+// ---------------- comunicação ----------------
+async function chamar(token, acao, extra) {
+  const corpo = Object.assign({ acao, token, meses: [mesAtual()] }, extra || {});
+  const t0 = performance.now(), inicio = new Date().toISOString();
+  let r, erro = "";
+  try {
+    const resp = await fetch(S.url, { method: "POST", body: JSON.stringify(corpo), redirect: "follow" });
+    r = await resp.json();
+    if (!r.ok) erro = r.erro || "erro sem mensagem";
+  } catch (e) { erro = e.message || "falha de rede"; r = { ok: false }; }
+  return { ms: Math.round(performance.now() - t0), r, erro, inicio, fim: new Date().toISOString() };
+}
+const mesAtual = () => new Date().toISOString().slice(0, 7);
+function mesesDesde(n) { const out = [], d = new Date(); for (let i = 0; i <= n; i++) { const x = new Date(d.getFullYear(), d.getMonth() - i, 1); out.push(x.getFullYear() + "-" + String(x.getMonth() + 1).padStart(2, "0")); } return out; }
+const hojeIso = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+
+// ---------------- 1. conferência do ambiente (travas em camadas, para na primeira que falhar) ----------------
+function trava(id, txt, estado) {
+  let li = document.getElementById("tr-" + id);
+  if (!li) { li = document.createElement("li"); li.id = "tr-" + id; $("#travas").appendChild(li); }
+  li.className = estado; li.textContent = (estado === "ok" ? "✔ " : estado === "erro" ? "✖ " : "… ") + txt;
+}
+async function conferirAmbiente() {
+  // a tela fica travada desde já: nenhum cenário pode começar enquanto a conferência (ou a troca de implantação) acontece
+  S.liberado = false; $("#travas").innerHTML = ""; habilitar();
+  if (S.url && Object.keys(S.tok).length) {           // trocar de implantação: fecha antes as sessões abertas na anterior
+    trava("sair", "Encerrando as sessões da implantação anterior…", "pend");
+    await encerrarSessoes();
+    $("#travas").innerHTML = "";
+  }
+  S.url = ""; S.candidata = ""; S.tok = {}; habilitar();
+  const url = $("#url").value.trim(), senha = $("#senha").value;
+  // a) formato do endereço
+  if (!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,}\/exec$/.test(url)) return trava("fmt", "O endereço precisa ser um link /exec do Apps Script.", "erro");
+  trava("fmt", "Formato do endereço", "ok");
+  // b) não pode ser produção nem a homologação existente
+  const proib = PROIBIDOS.find(p => url.indexOf(p[0]) >= 0);
+  if (proib) return trava("proib", "Este endereço é da " + proib[1] + ". Nada foi enviado.", "erro");
+  trava("proib", "Não é a produção nem a homologação existente", "ok");
+  if (senha.length < 10) return trava("senha", "Digite a senha das contas de ensaio (a mesma usada na carga).", "erro");
+  S.candidata = url;
+  // c) versão do sistema (leitura: o doGet não grava nada) — nenhum POST antes disto
+  trava("versao", "Conferindo a versão do sistema…", "pend");
+  let v;
+  try { v = await (await fetch(S.candidata, { method: "GET", redirect: "follow" })).json(); } catch (e) { S.candidata = ""; return trava("versao", "Não foi possível ler a versão (" + e.message + "). Confira se a implantação está como \"Qualquer pessoa\".", "erro"); }
+  const ver = v && Object.prototype.hasOwnProperty.call(VERSOES, v.versao) ? VERSOES[v.versao] : "";
+  if (!ver) { S.candidata = ""; return trava("versao", "Esta implantação informa a versão \"" + (v && v.versao) + "\", que não é nenhuma das duas do ensaio (A ou B). Não é a implantação do ensaio: parado antes de qualquer login ou gravação.", "erro"); }
+  if (ver !== S.versao) S.estado = {};
+  S.versao = ver; S.url = S.candidata; S.candidata = "";
+  trava("versao", "A implantação se identificou como ENSAIO DE DESEMPENHO — versão " + NOME_VERSAO[ver], "ok");
+  // d) contas de ensaio (só existem na planilha de ensaio)
+  trava("contas", "Entrando com as contas de ensaio…", "pend");
+  const todas = CONTAS.admins.concat(CONTAS.manut);
+  for (const u of todas) {
+    const x = await chamar(undefined, "entrar", { usuario: u, senha, registro: { motivo: "login", entrada: u.indexOf("admin") === 0 ? "Administração" : "Manutenção", aparelho: "painel de ensaio" } });
+    if (!x.r.ok || !x.r.token) { S.url = ""; return trava("contas", "A conta " + u + " não entrou (" + x.erro + "). Parado antes de qualquer gravação.", "erro"); }
+    if (x.r.usuario !== u || x.r.perfil !== (u.indexOf("admin") === 0 ? "Administração" : "Manutenção")) { S.url = ""; return trava("contas", "A conta " + u + " voltou com usuário/perfil inesperado (" + x.r.usuario + " / " + x.r.perfil + "). Parado.", "erro"); }
+    S.tok[u] = x.r.token;
+  }
+  trava("contas", "As 7 contas de ensaio entraram", "ok");
+  // e) dados: só materiais [ENSAIO]
+  trava("dados", "Conferindo os materiais…", "pend");
+  const okDados = await carregar();
+  if (!okDados) { S.url = ""; return; }
+  const sem = S.itens.filter(i => String(i.nome).indexOf(MARCA) !== 0);
+  if (sem.length || S.itens.length < MIN_ITENS) { S.url = ""; return trava("dados", sem.length ? sem.length + " material(is) sem a marca " + MARCA + " (ex.: \"" + sem[0].nome + "\"). Esta não é a planilha de ensaio. Parado antes de qualquer gravação." : "Só " + S.itens.length + " materiais; esperado pelo menos " + MIN_ITENS + ".", "erro"); }
+  trava("dados", S.itens.length + " materiais, todos [ENSAIO]; " + S.bloq.size + " bloqueado(s); " + S.pend.size + " com ajuste pendente", "ok");
+  S.liberado = true; habilitar();
+  log("Ambiente conferido: " + S.url.slice(0, 60) + "…");
+}
+async function carregar() {
+  const x = await chamar(S.tok["admin.ensaio1"], "dados", { meses: [mesAtual()] });
+  if (!x.r.ok || !x.r.dados) { trava("dados", "Não foi possível ler os dados (" + x.erro + ").", "erro"); return false; }
+  const d = x.r.dados;
+  S.itens = d.itens || []; S.pend = new Set(d.ajustesPendentes || []); S.bloq = new Set((d.bloqueios || []).map(b => b.itemId)); S.contagens = d.contagens || [];
+  return true;
+}
+
+// ---------------- amostras e estatística ----------------
+function registrar(cenario, rodada, usuario, x) {
+  const ocupado = /ocupado/i.test(x.erro || "");
+  S.amostras.push({ cenario, versao: S.versao, rodada, usuario, inicio: x.inicio, fim: x.fim, ms: x.ms, ok: !x.erro, erro: x.erro || "", ocupado });
+  if (x.erro) log(cenario + " #" + rodada + " (" + usuario + "): " + x.erro);
+}
+function estat(lista) {
+  const v = lista.map(a => a.ms).sort((a, b) => a - b), n = v.length;
+  if (!n) return null;
+  return { n, min: v[0], med: Math.round(v.reduce((a, b) => a + b, 0) / n), max: v[n - 1], p95: n >= 20 ? v[Math.ceil(0.95 * n) - 1] : null };
+}
+function renderResultados() {
+  const grupos = [...new Set(S.amostras.map(a => a.cenario + "\u0000" + a.versao))];
+  $("#resultados").innerHTML = grupos.map(g => {
+    const [c, vr] = g.split("\u0000");
+    const todas = S.amostras.filter(a => a.cenario === c && a.versao === vr), e = estat(todas);
+    const f = x => x === null ? "—" : x.toLocaleString("pt-BR");
+    return `<tr><td>${esc(c)}</td><td>${esc(vr)}</td><td class="n">${e.n}</td><td class="n">${todas.filter(a => !a.ok).length}</td><td class="n">${todas.filter(a => a.ocupado).length}</td><td class="n">${f(e.min)}</td><td class="n">${f(e.med)}</td><td class="n">${f(e.max)}</td><td class="n">${f(e.p95)}</td></tr>`;
+  }).join("") || `<tr><td colspan="9" class="hint">Nenhuma medição ainda.</td></tr>`;
+  $("#b-csv").disabled = !S.amostras.length;
+}
+
+// ---------------- escolha de materiais (só [ENSAIO], Manutenção, livres) ----------------
+let giro = 0;
+function livres(k, minQtd) {
+  const lista = S.itens.filter(i => i.setor === "Manutenção" && String(i.nome).indexOf(MARCA) === 0 && !S.pend.has(i.id) && !S.bloq.has(i.id) && (Number(i.qtd) || 0) >= (minQtd || 0));
+  if (lista.length < k) throw new Error("Só " + lista.length + " materiais livres; o cenário precisa de " + k + ".");
+  const out = []; for (let j = 0; j < k; j++) out.push(lista[(giro + j) % lista.length]); giro += k;
+  return out;
+}
+const manut = i => CONTAS.manut[i % CONTAS.manut.length];
+const N = () => Math.max(3, Math.min(100, Number($("#amostras").value) || 30));
+
+async function contar(usuario, itens, igual) {
+  return chamar(S.tok[usuario], "contagemEnviar", { itens: itens.map(i => ({ itemId: i.id, qtd: igual ? Number(i.qtd) : Number(i.qtd) + 1, saldoVisto: Number(i.qtd), justificativa: "Ensaio de desempenho" })) });
+}
+async function pendentesDe(prefixo, k) {
+  await carregar();
+  const p = S.contagens.filter(c => c.status === "Pendente" && !c.etapa && String(c.contadoPor).indexOf(prefixo) === 0);
+  if (p.length < k) throw new Error("Só " + p.length + " contagens pendentes; o cenário precisa de " + k + ".");
+  return p.slice(0, k);
+}
+async function prepararPendentes(k) { // preparo fora da medição: contagens da Manutenção para aprovar
+  await carregar();
+  let falta = k, i = 0;
+  while (falta > 0) { const lote = Math.min(50, falta); const x = await contar(manut(i++), livres(lote, 1)); if (x.erro) throw new Error("Preparo: " + x.erro); falta -= lote; await carregar(); }
+}
+
+// ---------------- cenários ----------------
+const CENARIOS = [
+  { id: "consulta_manut", nome: "Consulta (Manutenção)", n: () => N(), rodar: async n => { for (let i = 0; i < n && !S.parar; i++) registrar("Consulta (Manutenção)", i + 1, manut(i), await chamar(S.tok[manut(i)], "dados")); } },
+  { id: "consulta_admin", nome: "Consulta (Administração)", n: () => N(), rodar: async n => { for (let i = 0; i < n && !S.parar; i++) registrar("Consulta (Administração)", i + 1, "admin.ensaio1", await chamar(S.tok["admin.ensaio1"], "dados")); } },
+  { id: "entrada", nome: "Entrada", n: () => N(), rodar: async n => { await carregar(); for (let i = 0; i < n && !S.parar; i++) { const it = livres(1)[0]; registrar("Entrada", i + 1, manut(i), await chamar(S.tok[manut(i)], "registrar", { mov: { itemId: it.id, tipo: "entrada", qtd: 1, data: hojeIso(), fornecedor: "Fornecedor do ensaio" } })); it.qtd = Number(it.qtd) + 1; } } },
+  { id: "saida", nome: "Saída", n: () => N(), rodar: async n => { await carregar(); for (let i = 0; i < n && !S.parar; i++) { const it = livres(1, 2)[0]; registrar("Saída", i + 1, manut(i), await chamar(S.tok[manut(i)], "registrar", { mov: { itemId: it.id, tipo: "saida", qtd: 1, responsavel: "Equipe Ensaio", destino: "Área Técnica Ensaio", data: hojeIso() } })); it.qtd = Number(it.qtd) - 1; } } },
+  { id: "conferencia", nome: "Contagem sem diferença (1 item)", n: () => 10, rodar: async n => { await carregar(); for (let i = 0; i < n && !S.parar; i++) registrar("Contagem sem diferença (1 item)", i + 1, manut(i), await contar(manut(i), livres(1), true)); } },
+  { id: "contagem_1", nome: "Contagem com diferença (1 item)", n: () => N(), rodar: async n => { await carregar(); for (let i = 0; i < n && !S.parar; i++) { const it = livres(1)[0]; registrar("Contagem com diferença (1 item)", i + 1, manut(i), await contar(manut(i), [it])); S.pend.add(it.id); } } },
+  { id: "aprovacao_1", nome: "Aprovação individual", n: () => N(), rodar: async n => { await carregar(); let lista = pendManut(); if (lista.length < n) { await prepararPendentes(n - lista.length); lista = await pendentesDe("manut.", n); } for (let i = 0; i < n && !S.parar; i++) { const c = lista[i]; registrar("Aprovação individual", i + 1, "admin.ensaio2", await chamar(S.tok["admin.ensaio2"], "contagemDecidir", { op: "aprovar", itens: [{ id: c.id, versao: c.versao }] })); } } },
+  { id: "rejeicao", nome: "Rejeição", n: () => 10, rodar: async n => { await prepararPendentes(n); const lista = await pendentesDe("manut.", n); for (let i = 0; i < n && !S.parar; i++) { const c = lista[i]; registrar("Rejeição", i + 1, "admin.ensaio2", await chamar(S.tok["admin.ensaio2"], "contagemDecidir", { op: "rejeitar", itens: [{ id: c.id, versao: c.versao }], motivo: "Rejeição do ensaio" })); } } },
+  { id: "contagem_20", nome: "Contagem em lote (20 itens)", n: () => 5, rodar: async n => { await carregar(); for (let i = 0; i < n && !S.parar; i++) { const its = livres(20); registrar("Contagem em lote (20 itens)", i + 1, manut(i), await contar(manut(i), its)); its.forEach(x => S.pend.add(x.id)); } } },
+  { id: "aprov_10", nome: "Aprovação em lote (10)", n: () => 5, rodar: async n => aprovarLotes("Aprovação em lote (10)", 10, n) },
+  { id: "aprov_25", nome: "Aprovação em lote (25)", n: () => 4, rodar: async n => aprovarLotes("Aprovação em lote (25)", 25, n) },
+  { id: "contagem_50", nome: "Contagem em lote (50 itens)", n: () => 3, rodar: async n => { await carregar(); for (let i = 0; i < n && !S.parar; i++) { const its = livres(50); registrar("Contagem em lote (50 itens)", i + 1, manut(i), await contar(manut(i), its)); its.forEach(x => S.pend.add(x.id)); } } },
+  { id: "aprov_50", nome: "Aprovação em lote (50)", n: () => 3, rodar: async n => aprovarLotes("Aprovação em lote (50)", 50, n) },
+  { id: "aprov_100", nome: "Aprovação em lote (100) — sondagem", n: () => 1, opcional: true, rodar: async n => aprovarLotes("Aprovação em lote (100) — sondagem", 100, n) },
+  { id: "importacao", nome: "Importação de 250 linhas (Manutenção, atualizar)", n: () => 3, rodar: async n => { for (let i = 0; i < n && !S.parar; i++) { await carregar(); const linhas = S.itens.filter(x => x.setor === "Manutenção").map(x => ({ codigo: x.codigo, nome: x.nome, qtd: Number(x.qtd), unidade: x.unidade, categoria: x.categoria, local: x.local })); registrar("Importação de 250 linhas", i + 1, "admin.ensaio1", await chamar(S.tok["admin.ensaio1"], "importarContagem", { linhas, modo: "atualizar", setor: "Manutenção", motivo: "Importação do ensaio", confirmarRepeticao: true })); } } },
+  { id: "simult_3", nome: "Simultâneos: 3 saídas ao mesmo tempo", n: () => 10, rodar: async n => simultaneos(3, n) },
+  { id: "simult_5", nome: "Simultâneos: 5 saídas ao mesmo tempo", n: () => 10, rodar: async n => simultaneos(5, n) },
+  { id: "simult_8", nome: "Simultâneos: 8 saídas ao mesmo tempo", n: () => 10, rodar: async n => simultaneos(8, n) },
+  { id: "misto", nome: "Misto: aprovação de 25 + 4 saídas ao mesmo tempo", n: () => 3, rodar: async n => misto(n) }
+];
+const pendManut = () => S.contagens.filter(c => c.status === "Pendente" && !c.etapa && String(c.contadoPor).indexOf("manut.") === 0);
+async function aprovarLotes(nome, tam, n) {
+  for (let i = 0; i < n && !S.parar; i++) {
+    await carregar(); let lista = pendManut();
+    if (lista.length < tam) { await prepararPendentes(tam - lista.length); lista = await pendentesDe("manut.", tam); }
+    const lote = lista.slice(0, tam).map(c => ({ id: c.id, versao: c.versao }));
+    const x = await chamar(S.tok["admin.ensaio2"], "contagemDecidir", { op: "aprovar", itens: lote });
+    const naoOk = x.r && x.r.resultados ? x.r.resultados.filter(r => !r.ok).length : 0;
+    if (naoOk) x.erro = (x.erro ? x.erro + "; " : "") + naoOk + " de " + tam + " não aprovadas";
+    registrar(nome, i + 1, "admin.ensaio2", x);
+  }
+}
+async function sessoesExtras(k) { // 8 simultâneos = 7 contas + uma segunda sessão da manut.ensaio1
+  const usuarios = CONTAS.manut.concat(CONTAS.admins);
+  const out = [];
+  for (let i = 0; i < k; i++) {
+    const u = usuarios[i % usuarios.length];
+    if (i < usuarios.length) out.push({ u, t: S.tok[u] });
+    else { const key = u + "#2"; if (!S.tok[key]) { const x = await chamar(undefined, "entrar", { usuario: u, senha: $("#senha").value, registro: { motivo: "login", entrada: "Manutenção", aparelho: "painel de ensaio 2" } }); S.tok[key] = x.r.token; } out.push({ u: key, t: S.tok[key] }); }
+  }
+  return out;
+}
+async function simultaneos(k, n) {
+  const sess = await sessoesExtras(k);
+  for (let i = 0; i < n && !S.parar; i++) {
+    await carregar(); const its = livres(k, 2);
+    const res = await Promise.all(sess.map((s, j) => chamar(s.t, "registrar", { mov: { itemId: its[j].id, tipo: "saida", qtd: 1, responsavel: "Equipe Ensaio", destino: "Área Técnica Ensaio", data: hojeIso() } })));
+    res.forEach((x, j) => registrar("Simultâneos: " + k + " saídas", i + 1, sess[j].u, x));
+  }
+}
+async function misto(n) {
+  for (let i = 0; i < n && !S.parar; i++) {
+    await carregar();
+    let lista = pendManut();
+    if (lista.length < 25) { await prepararPendentes(25 - lista.length); lista = await pendentesDe("manut.", 25); }
+    await carregar(); const its = livres(4, 2);
+    const lote = lista.slice(0, 25).map(c => ({ id: c.id, versao: c.versao }));
+    const tarefas = [chamar(S.tok["admin.ensaio2"], "contagemDecidir", { op: "aprovar", itens: lote })]
+      .concat(its.map((it, j) => chamar(S.tok[CONTAS.manut[1 + j]], "registrar", { mov: { itemId: it.id, tipo: "saida", qtd: 1, responsavel: "Equipe Ensaio", destino: "Área Técnica Ensaio", data: hojeIso() } })));
+    const res = await Promise.all(tarefas);
+    registrar("Misto: aprovação de 25", i + 1, "admin.ensaio2", res[0]);
+    res.slice(1).forEach((x, j) => registrar("Misto: saídas durante a aprovação", i + 1, CONTAS.manut[1 + j], x));
+  }
+}
+
+// ---------------- execução ----------------
+function renderCenarios() {
+  $("#cenarios").innerHTML = CENARIOS.filter(c => !c.opcional || $("#sondagem").checked).map(c => `<tr><td>${esc(c.nome)}</td><td class="n">${c.n()}</td><td><span class="estado ${(S.estado[c.id] || {}).cls || ""}" id="st-${c.id}">${esc((S.estado[c.id] || {}).txt || "—")}</span></td><td><button data-c="${c.id}" ${S.liberado && !S.ocupado ? "" : "disabled"}>Rodar</button></td></tr>`).join("");
+}
+function habilitar() {
+  $("#b-todos").disabled = !S.liberado || S.ocupado; $("#b-parar").disabled = !S.ocupado;
+  $("#b-consistencia").disabled = !S.liberado || S.ocupado; $("#b-sair").disabled = !Object.keys(S.tok).length || S.ocupado;
+  renderCenarios();
+}
+async function rodar(c) {
+  const marcar = (cls, txt) => { S.estado[c.id] = { cls, txt }; const el = document.getElementById("st-" + c.id); if (el) { el.className = "estado " + cls; el.textContent = txt; } };
+  const n = c.n(); log("Início: " + c.nome + " (" + n + ")");
+  marcar("rodando", "rodando…");
+  try { await c.rodar(n); marcar("ok", S.parar ? "interrompido" : "concluído"); }
+  catch (e) { log("Erro em " + c.nome + ": " + e.message); marcar("erro", "erro: " + e.message); }
+  renderResultados();
+}
+async function rodarVarios(lista) {
+  S.ocupado = true; S.parar = false; habilitar();
+  try { for (const c of lista) { if (S.parar) break; await rodar(c); } }
+  finally { S.ocupado = false; habilitar(); renderResultados(); log("Fim da rodada de cenários."); }
+}
+$("#cenarios").addEventListener("click", e => { const b = e.target.closest("[data-c]"); if (!b) return; const c = CENARIOS.find(x => x.id === b.dataset.c); if (c) rodarVarios([c]); });
+$("#b-todos").addEventListener("click", () => rodarVarios(CENARIOS.filter(c => !c.opcional || $("#sondagem").checked)));
+$("#b-parar").addEventListener("click", () => { S.parar = true; log("Parando depois do cenário atual…"); });
+$("#b-conferir").addEventListener("click", async () => {
+  if (S.conferindo) return;
+  S.conferindo = true; $("#b-conferir").disabled = true;
+  try { await conferirAmbiente(); } catch (e) { log("Erro: " + e.message); }
+  finally { S.conferindo = false; $("#b-conferir").disabled = false; }
+});
+$("#sondagem").addEventListener("change", renderCenarios);
+
+// ---------------- consistência (só leitura) ----------------
+$("#b-consistencia").addEventListener("click", async () => {
+  const x = await chamar(S.tok["admin.ensaio1"], "dados", { meses: mesesDesde(8) });
+  if (!x.r.ok) { $("#consistencia").innerHTML = `<p class="aviso">Não foi possível ler: ${esc(x.erro)}</p>`; return; }
+  const d = x.r.dados, soma = {};
+  d.movs.forEach(m => { soma[m.itemId] = Math.round(((soma[m.itemId] || 0) + (Number(m.delta) || 0)) * 1000) / 1000; });
+  const div = d.itens.filter(i => Math.round((Number(i.qtd) || 0) * 1000) / 1000 !== (soma[i.id] || 0));
+  const ids = d.movs.map(m => m.id), dup = ids.length - new Set(ids).size;
+  const sem = d.itens.filter(i => String(i.nome).indexOf(MARCA) !== 0).length;
+  const presas = (d.contagens || []).filter(c => c.etapa === "aplicando").length;
+  const ok = !div.length && !dup && !sem && !presas && !(d.bloqueios || []).length;
+  $("#consistencia").innerHTML = `<p class="${ok ? "hint" : "aviso"}">${ok ? "✔ " : "✖ "}${d.itens.length} materiais · ${d.movs.length} movimentações lidas · saldo diferente da soma do histórico: <b>${div.length}</b> · IDs repetidos: <b>${dup}</b> · sem a marca [ENSAIO]: <b>${sem}</b> · contagens presas: <b>${presas}</b> · bloqueados: <b>${(d.bloqueios || []).length}</b>${div.length ? "<br>Ex.: " + esc(div.slice(0, 5).map(i => i.codigo + " saldo " + i.qtd + " / histórico " + (soma[i.id] || 0)).join("; ")) : ""}</p>`;
+  log("Consistência: " + (ok ? "sem divergências" : "DIVERGÊNCIAS encontradas"));
+});
+
+// ---------------- CSV e encerramento ----------------
+$("#b-csv").addEventListener("click", () => {
+  // inicio = quando a chamada saiu do navegador; fim = quando a resposta chegou (para alinhar com Execuções)
+  const linhas = [["cenario", "versao", "rodada", "usuario", "inicio", "fim", "ms", "ok", "ocupado", "erro"].join(";")].concat(S.amostras.map(a => [a.cenario, a.versao, a.rodada, a.usuario, a.inicio, a.fim, a.ms, a.ok ? 1 : 0, a.ocupado ? 1 : 0, '"' + String(a.erro).replace(/"/g, "'") + '"'].join(";")));
+  const blob = new Blob(["﻿" + linhas.join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "ensaio-desempenho-" + new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-") + ".csv"; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+});
+async function encerrarSessoes() {
+  for (const k of Object.keys(S.tok)) { try { await chamar(S.tok[k], "sair"); } catch (e) {} }
+  S.tok = {}; S.liberado = false; habilitar(); log("Sessões encerradas.");
+}
+$("#b-sair").addEventListener("click", () => encerrarSessoes());
+window.addEventListener("beforeunload", () => { S.tok = {}; });
+renderCenarios(); renderResultados();
+})();
+</script>
+</body>
+</html>
