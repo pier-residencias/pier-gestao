@@ -163,13 +163,13 @@ const LOCAIS_PADRAO = {
   'Manutenção': []
 };
 function abaConfig() {
-  const ss = SpreadsheetApp.getActive();
+  const ss = planilha_();
   let sh = ss.getSheetByName('Config');
   if (!sh) { sh = ss.insertSheet('Config'); sh.getRange(1, 1, 1, 3).setValues([['Configuração', 'Valor', 'Para que serve']]).setFontWeight('bold'); }
   return sh;
 }
-function lerLocais(setor) {
-  const vals = abaConfig().getDataRange().getValues();
+function lerLocais(setor, config) {
+  const vals = config || abaConfig().getDataRange().getValues();
   const chave = 'Locais - ' + setor;
   for (let i = 0; i < vals.length; i++) {
     if (String(vals[i][0]).trim() === chave) return String(vals[i][1] || '').split('\n').map(x => x.trim()).filter(Boolean);
@@ -211,20 +211,23 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-10-16 inventário com aprovação da Administração';
+const VERSAO = '2026-10-17 inventário com aprovação da Administração + consulta otimizada (fase 1)';
 
 function doGet() {
   return json({ ok: true, app: 'Pier Gestão', versao: VERSAO });
 }
 
 function doPost(e) {
-  AUDIT_DET = ''; AUDIT_FEITO = false; SALDO_OK = {};
+  AUDIT_DET = ''; AUDIT_FEITO = false; SALDO_OK = {}; PLANILHA_REQ = null;
   let req;
   try { req = JSON.parse(e.postData.contents); }
   catch (err) { return json({ ok: false, erro: 'Pedido inválido.' }); }
   let conta = null;
   try {
-    garantirIdsUsuarios();
+    // a aba Usuarios é lida uma vez por chamada e reaproveitada na sessão e na consulta;
+    // se a conferência dos identificadores gravar algo, ela é lida de novo
+    let usuariosReq = lerUsuarios();
+    if (garantirIdsUsuarios(false, usuariosReq) || usuariosReq.c['ID'] < 0) usuariosReq = lerUsuarios();
     let token = '';
     if (req.acao === 'entrar' && req.senha !== undefined) {
       // entrada com usuário e senha: confere bloqueio por tentativas, a senha (com hash) e abre uma sessão
@@ -244,7 +247,7 @@ function doPost(e) {
       limparFalhasLogin(usuarioDig);
       token = abrirSessao(conta, req.registro);
     } else {
-      conta = contaDaSessao(req.token);
+      conta = contaDaSessao(req.token, usuariosReq);
       // código 'senha' também faz as versões antigas do site voltarem para a tela de entrada
       if (!conta) return json({ ok: false, codigo: 'senha', sessao: 'fim', erro: 'Sua sessão terminou. Entre de novo.' });
     }
@@ -261,7 +264,7 @@ function doPost(e) {
     if (req.acao === 'sair') { encerrarSessao(req.token); auditar(conta, 'Saiu do sistema', ''); return json({ ok: true }); }
     if (req.acao === 'acessos') { pode('acessos'); return json(Object.assign(base, { acessos: lerAcessos(req.dias) })); }
     if (req.acao === 'auditoria') { pode('acessos'); return json(Object.assign(base, { auditoria: lerAuditoria(req.dias) })); }
-    if (req.acao === 'dados') return json(Object.assign(base, { dados: dados(req.meses, conta) }));
+    if (req.acao === 'dados') return json(Object.assign(base, { dados: dados(req.meses, conta, usuariosReq) }));
     if (req.acao === 'relatorio') { pode('dashboard'); return json(Object.assign(base, { relatorio: relatorio(req.de, req.ate, conta) })); }
     if (req.acao === 'usuarios') { pode('usuarios'); return json(Object.assign(base, { equipe: equipe() })); }
     if (req.acao === 'pendencias') { pode('pendencias'); return json(Object.assign(base, { pendencias: pendLista() })); }
@@ -521,44 +524,46 @@ function estornar(r, nome, conta) {
 
 // ---------- leitura ----------
 
-function dados(meses, conta) {
+function dados(meses, conta, U) {
   const ms = (Array.isArray(meses) ? meses : []).filter(x => /^\d{4}-\d{2}$/.test(String(x)));
   const limpa = o => { const c = Object.assign({}, o); delete c._row; return c; };
   const p0 = (conta && conta.perms) || {};
   // perfil sem nenhuma permissão do estoque (ex.: Síndico) não recebe itens nem movimentações
   if (!PERMS_ESTOQUE.some(k => p0[k])) {
     const vazio = { itens: [], emprestimos: [], movs: [], setores: [], locais: {} };
-    return Object.assign(vazio, dadosOsDem(ms, conta, [], limpa));
+    return Object.assign(vazio, dadosOsDem(ms, conta, [], limpa, U));
   }
-  const todas = linhas(tabela('movs'));
+  const todas = lerTabela('movs').linhas;
   const V = visaoSetores(conta);
+  const config = abaConfig().getDataRange().getValues();   // aba Config lida uma vez (antes: uma vez por setor)
   const out = {
     itens: V.itens.map(limpa),
-    emprestimos: linhas(tabela('emp')).filter(V.ve).map(e => V.marca(limpa(e))),
+    emprestimos: lerTabela('emp').linhas.filter(V.ve).map(e => V.marca(limpa(e))),
     movs: todas.filter(m => ms.indexOf(String(m.data).slice(0, 7)) >= 0 && V.ve(m)).map(m => V.marca(limpa(m))),
     setores: V.setores,
-    locais: V.setores.reduce((m, st) => { m[st] = lerLocais(st); return m; }, {})
+    locais: V.setores.reduce((m, st) => { m[st] = lerLocais(st, config); return m; }, {})
   };
-  // contagens: solicitações visíveis e itens com ajuste aguardando aprovação
-  const cs = contagensVisiveis(conta);
+  // contagens: solicitações visíveis e itens com ajuste aguardando aprovação (a aba é lida uma vez para os dois)
+  const conts = lerTabela('cont').linhas;
+  const cs = contagensVisiveis(conta, conts);
   if (cs) out.contagens = cs;
-  out.ajustesPendentes = linhas(tabela('cont')).filter(c => c.status === CONT_STATUS.pendente || c.etapa === 'aplicando').map(c => c.itemId);
+  out.ajustesPendentes = conts.filter(c => c.status === CONT_STATUS.pendente || c.etapa === 'aplicando').map(c => c.itemId);
   // itens bloqueados para revisão (saldo alterado fora do sistema ou recuperação sem consistência)
   const bq = itensBloqueados();
   out.bloqueios = Object.keys(bq).map(k => bq[k]).filter(b => V.itens.some(i => i.id === b.itemId) || (conta && conta.perfil === PERFIL_TOTAL));
   if (conta && conta.perfil === PERFIL_TOTAL) {
     out.integridade = estadoIntegridade();
-    out.adminsAtivos = lerUsuarios().lista.filter(u => u.ativo && u.perfil === PERFIL_TOTAL).length;
+    out.adminsAtivos = (U || lerUsuarios()).lista.filter(u => u.ativo && u.perfil === PERFIL_TOTAL).length;
   }
-  return Object.assign(out, dadosOsDem(ms, conta, todas, limpa));
+  return Object.assign(out, dadosOsDem(ms, conta, todas, limpa, U));
 }
-function dadosOsDem(ms, conta, todas, limpa) {
+function dadosOsDem(ms, conta, todas, limpa, U) {
   const out = {};
   const p = (conta && conta.perms) || {};
   if (p.os_ver || p.os_abrir || p.os_atender || p.os_gerenciar) {
     // OS em aberto, mais as encerradas nos últimos 90 dias e as abertas nos meses consultados
     const corte = Utilities.formatDate(new Date(Date.now() - 90 * 864e5), Session.getScriptTimeZone(), 'yyyy-MM-dd');
-    const lista = linhas(tabela('os')).filter(o =>
+    const lista = lerTabela('os').linhas.filter(o =>
       o.status === OS_STATUS.aberta || o.status === OS_STATUS.andamento ||
       String(o.concluidaEm || o.atualizadoEm).slice(0, 10) >= corte ||
       ms.indexOf(String(o.abertaEm).slice(0, 7)) >= 0);
@@ -566,18 +571,18 @@ function dadosOsDem(ms, conta, todas, limpa) {
   }
   if (p.dem_ver || p.dem_executar || p.dem_delegar) {
     const corte = Utilities.formatDate(new Date(Date.now() - 90 * 864e5), Session.getScriptTimeZone(), 'yyyy-MM-dd');
-    let lista = linhas(tabela('dem')).filter(d =>
+    let lista = lerTabela('dem').linhas.filter(d =>
       d.status === DEM_STATUS.pendente || d.status === DEM_STATUS.andamento ||
       String(d.concluidaEm || d.atualizadoEm).slice(0, 10) >= corte ||
       ms.indexOf(String(d.criadaEm).slice(0, 7)) >= 0);
     // quem só executa vê as próprias demandas e as que estão sem responsável
     if (!p.dem_ver && !p.dem_delegar) lista = lista.filter(d => d.responsavelUsuario === conta.usuario || !d.responsavelUsuario);
     out.demandas = lista.map(limpa);
-    if (p.dem_delegar) out.preventivas = linhas(tabela('prev')).map(limpa);
+    if (p.dem_delegar) out.preventivas = lerTabela('prev').linhas.map(limpa);
   }
   if (out.os || out.demandas) {
     const fone = p.dem_delegar || p.os_gerenciar || p.usuarios;
-    out.colaboradores = lerUsuarios().lista.filter(u => u.ativo).map(u =>
+    out.colaboradores = (U || lerUsuarios()).lista.filter(u => u.ativo).map(u =>
       fone ? { usuario: u.usuario, nome: u.nome || u.usuario, telefone: u.telefone } : { usuario: u.usuario, nome: u.nome || u.usuario });
   }
   return out;
@@ -586,7 +591,7 @@ function dadosOsDem(ms, conta, todas, limpa) {
 // itens dos setores que a pessoa vê, e funções para filtrar e marcar movimentações e empréstimos
 function visaoSetores(conta) {
   const setores = setoresDe(conta);
-  const todos = linhas(tabela('itens'));
+  const todos = lerTabela('itens').linhas;
   const por = {};
   todos.forEach(i => { por[i.id] = setorDe(i); });
   const setorMov = x => por[x.itemId] || 'Manutenção';
@@ -644,16 +649,42 @@ function tabela(chave) {
 function linhas(t) {
   const n = t.sh.getLastRow() - 1;
   if (n < 1) return [];
-  const vals = t.sh.getRange(2, 1, n, t.ncol).getValues();
+  return linhasDe(t, t.sh.getRange(2, 1, n, t.ncol).getValues(), 0);
+}
+// converte as linhas de dados (a partir da posição "desde" de vals) em objetos; _row é a linha na planilha
+function linhasDe(t, vals, desde) {
   const out = [];
-  vals.forEach((r, i) => {
-    const o = { _row: i + 2 };
+  for (let i = desde; i < vals.length; i++) {
+    const r = vals[i];
+    const o = { _row: i - desde + 2 };
     t.def.cols.forEach(([k]) => { o[k] = celula(r[t.idx[k]], t.def.num.indexOf(k) >= 0); });
-    if (!o.id) return;
+    if (!o.id) continue;
     if (t.def === ABAS.movs) o.tipo = TIPO_POR_NOME[o.tipo] || String(o.tipo).toLowerCase();
     out.push(o);
-  });
+  }
   return out;
+}
+
+// Leitura de uma aba inteira (cabeçalho e dados) em uma chamada só, para as consultas.
+// Mesmo resultado de linhas(tabela(chave)). Se faltar a aba ou alguma coluna, usa o caminho de tabela(),
+// que cria o que falta exatamente como antes.
+var PLANILHA_REQ = null;
+function planilha_() { return PLANILHA_REQ || (PLANILHA_REQ = SpreadsheetApp.getActive()); }
+function lerTabela(chave) {
+  const def = ABAS[chave];
+  const sh = planilha_().getSheetByName(def.nome);
+  if (sh) {
+    const vals = sh.getDataRange().getValues();
+    const head = (vals[0] || []).map(h => String(h).trim());
+    const idx = {};
+    const completa = def.cols.every(([k, label]) => { const i = head.indexOf(label); idx[k] = i; return i >= 0; });
+    if (completa) {
+      const t = { sh, def, idx, ncol: head.length };
+      return { t, linhas: linhasDe(t, vals, 1) };
+    }
+  }
+  const t = tabela(chave);
+  return { t, linhas: linhas(t) };
 }
 
 function gravar(t, obj, row) {
@@ -747,8 +778,8 @@ function garantirColunaIdConta(U) {
   return lerUsuarios();
 }
 // dá identificador a quem não tem e troca identificadores repetidos (linha copiada à mão na planilha)
-function garantirIdsUsuarios(semBloqueio) {
-  let U = lerUsuarios();
+function garantirIdsUsuarios(semBloqueio, jaLida) {
+  let U = jaLida || lerUsuarios();
   const vistos = {};
   const precisa = U.c['ID'] < 0 || U.lista.some(u => { const dup = !u.uid || vistos[u.uid]; vistos[u.uid] = true; return dup; });
   if (!precisa) return 0;
@@ -806,8 +837,13 @@ function lerUsuarios() {
 }
 
 function lerPerfis() {
-  const sh = abaPerfis();
-  const vals = sh.getDataRange().getValues();
+  // leitura única; a conferência e a criação das colunas de permissão (abaPerfis) só rodam se faltar a aba ou alguma coluna
+  let sh = planilha_().getSheetByName('Perfis');
+  let vals = sh ? sh.getDataRange().getValues() : null;
+  if (!sh || PERMISSOES.some(p => vals[0].map(h => String(h).trim()).indexOf(p[1]) < 0)) {
+    sh = abaPerfis();
+    vals = sh.getDataRange().getValues();
+  }
   const head = vals[0].map(h => String(h).trim());
   const out = {};
   for (let i = 1; i < vals.length; i++) {
@@ -1079,7 +1115,7 @@ function garantirColunasPerfis(sh) {
 
 // Cria a aba "Usuarios" na primeira vez, com a administração e 3 funcionários.
 function abaUsuarios() {
-  const ss = SpreadsheetApp.getActive();
+  const ss = planilha_();
   let sh = ss.getSheetByName('Usuarios');
   if (sh) return sh;
   const lock = LockService.getScriptLock();
@@ -2368,10 +2404,10 @@ function lerSessao(token) {
   if (t - s.v > SEG.sessaoInativa || t - s.c > SEG.sessaoMax) { props.deleteProperty(k); return null; }
   return { k, s, props };
 }
-function contaDaSessao(token) {
+function contaDaSessao(token, U) {
   const x = lerSessao(token);
   if (!x) return null;
-  const us = lerUsuarios().lista.find(u => u.usuario === x.s.u);
+  const us = (U || lerUsuarios()).lista.find(u => u.usuario === x.s.u);
   // login apagado e recriado com o mesmo nome não herda a sessão da conta antiga
   if (!us || !us.ativo || (x.s.i && us.uid && x.s.i !== us.uid)) { x.props.deleteProperty(x.k); return null; }
   if (Date.now() - x.s.v > 5 * 60e3) { x.s.v = Date.now(); x.props.setProperty(x.k, JSON.stringify(x.s)); }
@@ -2884,11 +2920,11 @@ function contagemCancelar(r, conta) {
 }
 
 // o que cada um vê: Administração vê todas; quem conta vê as próprias (pendentes e dos últimos 90 dias)
-function contagensVisiveis(conta) {
+function contagensVisiveis(conta, conts) {
   if (!podeContar(conta)) return null;
   const corte = Utilities.formatDate(new Date(Date.now() - 90 * 864e5), Session.getScriptTimeZone(), 'yyyy-MM-dd');
   const admin = conta.perfil === PERFIL_TOTAL;
-  return linhas(tabela('cont'))
+  return (conts || linhas(tabela('cont')))
     .filter(c => c.status === CONT_STATUS.pendente || c.etapa === 'aplicando' || String(c.contadoEm).slice(0, 10) >= corte)
     .filter(c => admin || contouEsta(c, conta))
     .map(c => {
