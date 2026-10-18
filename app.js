@@ -91,7 +91,8 @@ const lerSessao = () => { try { return JSON.parse(localStorage.getItem("estoque-
 const apagarSessao = () => { try { localStorage.removeItem("estoque-sessao"); } catch(e){} };
 
 // ---------- comunicação com a planilha ----------
-async function api(acao, extra){
+// opc.soLer: só lê (ex.: meses extras para conferir nota repetida) sem trocar o que a tela mostra
+async function api(acao, extra, opc){
   if (!API) throw {paraUsuario:true, message:"O endereço da planilha ainda não foi configurado (arquivo config.js)."};
   const meses = [...new Set([mesDe(), S.histMes].concat(S.iPer.tipo && S.iPer.tipo !== "cad" ? [perMes()] : []))];
   const corpo = Object.assign({acao, token:S.token, meses}, extra||{});
@@ -110,8 +111,8 @@ async function api(acao, extra){
   if (r.perms) { S.perms = r.perms; aplicarPermissoes(); }
   if (r.perfil) S.perfil = r.perfil;
   if (r.nome) S.nome = r.nome;
-  // na entrada, os dados que vêm junto são aplicados depois de escolhido o setor (entradaDados)
-  if (r.dados && acao !== "entrar") { S.mesesCarregados = meses; aplicar(r.dados); }
+  // na entrada, os dados que vêm junto são aplicados depois de escolhido o setor (entradaDados); "soLer" só consulta
+  if (r.dados && acao !== "entrar" && !(opc && opc.soLer)) { S.mesesCarregados = meses; aplicar(r.dados); }
   if (r.dados) r._meses = meses;
   return r;
 }
@@ -1040,6 +1041,7 @@ function renderAll(){
 
 // ---------- permissões na tela ----------
 function aplicarPermissoes(){
+  renderMemBtn();
   $$("nav.tabs [role=tablist] > button[data-tab]").forEach(b => b.hidden = !podeAba(b.dataset.tab) || (TEM_ADM && ABAS_ADM.includes(b.dataset.tab)));
   if (TEM_ADM) {
     $$("#adm-menu [data-adm-tab]").forEach(b => b.hidden = !podeAba(b.dataset.admTab));
@@ -2326,17 +2328,38 @@ async function lerNotaFoto(fotos, chave){
   renderNfAnexo();
   if (dados && dados.itens.length && $("#modal").hidden && S.tab === "registrar") abrirLote();
 }
-const mapaNF = { ler(){ try { return JSON.parse(localStorage.getItem("nf-mapa")||"{}"); } catch(e){ return {}; } },
-  gravar(m){ try { localStorage.setItem("nf-mapa", JSON.stringify(m)); } catch(e){} } };
+// ---------- memória das escolhas da nota (só neste navegador) ----------
+// "nf-mapa" é a memória antiga: nunca é apagada sozinha e agora só serve de dica (nunca pré-seleciona).
+// "nf-mapa-v2" guarda também quem escolheu (pessoa ou automático), quando e a medida do material na época.
+const MEM_ANTIGA = "nf-mapa", MEM_NOVA = "nf-mapa-v2", MEM_LIMITE = 2000;
+const memNF = {
+  ler(k){ try { const m = JSON.parse(localStorage.getItem(k) || "{}"); return m && typeof m === "object" && !Array.isArray(m) ? m : {}; } catch(e){ return {}; } },
+  antiga(){ return memNF.ler(MEM_ANTIGA); },
+  nova(){ const m = memNF.ler(MEM_NOVA); Object.keys(m).forEach(k => { if (!m[k] || typeof m[k] !== "object" || !m[k].itemId) delete m[k]; }); return m; },
+  gravar(m){
+    const ch = Object.keys(m);
+    if (ch.length > MEM_LIMITE) ch.sort((a, b) => ((m[a].vezes||0) - (m[b].vezes||0)) || String(m[a].quando||"").localeCompare(String(m[b].quando||""))).slice(0, ch.length - MEM_LIMITE).forEach(k => delete m[k]);
+    try { localStorage.setItem(MEM_NOVA, JSON.stringify(m)); } catch(e){}
+  },
+  esquecer(chave){ const m = memNF.nova(); delete m[chave]; memNF.gravar(m); },
+  esquecerTodas(antigaTambem){ try { localStorage.removeItem(MEM_NOVA); if (antigaTambem) localStorage.removeItem(MEM_ANTIGA); } catch(e){} }
+};
 const chaveProduto = (forn, it) => norm(forn).replace(/[^a-z0-9]/g,"") + "|" + (it.codigo && it.codigo.length >= 6 ? it.codigo : norm(it.descricao));
 const fValorNF = v => { let t = (Number(v)||0).toFixed(4).replace(/0{1,2}$/, ""); return t.replace(".", ","); };
 const seloLote = st => ({
-  lembrado:'<span class="pill s-ok selo">Já cadastrado · escolhido antes</span>',
+  lembrado:'<span class="pill s-ok selo">Escolhido antes</span>',
   ok:'<span class="pill s-ok selo">Já cadastrado</span>',
   manual:'<span class="pill s-ok selo">Escolhido</span>',
   confira:'<span class="pill s-baixo selo">Confira o item</span>',
+  medida:'<span class="pill s-zero selo">Medida diferente</span>',
   novo:'<span class="pill st-aberta selo">Item novo · será cadastrado</span>',
-  escolha:'<span class="pill s-zero selo">Escolha o item</span>'}[st] || "");
+  escolha:'<span class="pill s-zero selo">Escolha o item</span>',
+  feito:'<span class="pill s-ok selo">Registrado</span>'}[st] || "");
+// etiquetas das características (24 mm, 12 W…); as secundárias (comprimento do rolo, tensão) ficam mais claras
+const carTags = lista => (lista && lista.length) ? `<span class="car-lista">${lista.map(f => `<span class="car${f.principal ? "" : " sec"}">${esc(f.rotulo)}</span>`).join("")}</span>` : "";
+const nfNorm = v => String(v ?? "").replace(/\D/g, "").replace(/^0+/, "");
+const fornCurto = s => norm(s).replace(/[^a-z0-9]/g, "").slice(0, 12);
+const mesMais = (ym, k) => { let [y, m] = ym.split("-").map(Number); m += k; while (m > 12) { m -= 12; y++; } while (m < 1) { m += 12; y--; } return y + "-" + String(m).padStart(2, "0"); };
 // para um item novo, copia categoria, tipo e local do item mais parecido (ou do local mais comum)
 function dadosDeItemNovo(desc){
   const todos = itensArr(), sug = LeitorNF.sugerir(desc, todos, 1)[0];
@@ -2345,92 +2368,302 @@ function dadosDeItemNovo(desc){
   return sug && sug.nota >= 0.2 ? {categoria: sug.it.categoria || "", tipoItem: sug.it.tipoItem || "Consumível", local: sug.it.local || localComum} : {categoria:"", tipoItem:"Consumível", local: localComum};
 }
 const nomeDeNota = d => { const s = String(d||"").toLowerCase().replace(/\s+/g," ").trim(); return s.charAt(0).toUpperCase() + s.slice(1); };
+
+// ---------- conferência da nota ----------
+// Cada linha passa pela memória e pela comparação de características (LeitorNF.classificar).
+// Nada com dúvida entra sem uma escolha: "Confira" não vem pré-selecionado, medida diferente pede confirmação,
+// duas linhas no mesmo material pedem confirmação e nota já lançada fica bloqueada até a confirmação com motivo.
 function abrirLote(){
   const L = S.nfLida; if (!L || !L.dados) return;
-  const N = L.dados, todos = itensArr(), mapa = mapaNF.ler(), podeNovo = can("itens_cadastrar");
-  const forn = $("#m-forn").value.trim() || N.fornecedor, nf = $("#m-nf").value.trim() || N.numero;
+  const N = L.dados, todos = itensArr(), podeNovo = can("itens_cadastrar");
+  const mem2 = memNF.nova(), mem1 = memNF.antiga();
+  const forn0 = $("#m-forn").value.trim() || N.fornecedor, nf0 = $("#m-nf").value.trim() || N.numero;
   const linhas = N.itens.map((it, i) => {
-    const sug = LeitorNF.sugerir(it.descricao, todos, 5);
-    const lembrado = mapa[chaveProduto(forn, it)];
-    let sel = "", st = "escolha";
-    const folga = sug.length > 1 ? sug[0].nota - sug[1].nota : 1;
-    if (lembrado && S.itens.has(lembrado)) { sel = lembrado; st = "lembrado"; }
-    else if (sug.length && folga >= 0.08 && (sug[0].nota >= 0.5 || (sug[0].cobre === 1 && sug[0].nota >= 0.35))) { sel = sug[0].it.id; st = "ok"; }
-    else if (sug.length && sug[0].nota >= 0.35) { sel = sug[0].it.id; st = "confira"; }
-    else if (podeNovo) { sel = "__novo"; st = "novo"; }
-    const opt = i2 => `<option value="${esc(i2.id)}" ${i2.id===sel?"selected":""}>${esc((i2.codigo?i2.codigo+" · ":"") + i2.nome)} (${fNum(i2.qtd)} ${esc(i2.unidade||"")})</option>`;
-    const sugIds = new Set(sug.map(x => x.it.id)); if (lembrado) sugIds.add(lembrado);
-    const topo = [...sugIds].map(id => S.itens.get(id)).filter(Boolean);
-    return `<div class="lote-item" data-i="${i}">
-      <label class="lote-top"><input type="checkbox" data-k="usar" checked> <span><b>${esc(it.descricao)}</b> ${seloLote(st)}${it.incerto ? '<span class="pill s-baixo">Confira qtd e valor</span>' : ""}<span class="sub">${it.codigo ? "cód. " + esc(it.codigo) + " · " : ""}${fNum(it.qtd)} ${esc(it.unidade)} × ${fBRL(it.valorUnit)} = ${fBRL(it.valorTotal)}</span></span></label>
+    const chave = chaveProduto(forn0, it);
+    const c = LeitorNF.classificar(it, todos, {podeNovo, memoria: mem2[chave] || null, antiga: typeof mem1[chave] === "string" ? mem1[chave] : ""});
+    return {i, it, chave, c, st0: c.status, sel: c.sel, selInicial: c.sel, mexeu: false, usar: true, feito: false, confConflito: false, mesmo: false, jaLancada: null, cmp: null};
+  });
+  const rep = {estado: "", chave: "", movs: [], outroForn: [], erro: "", conf: {ok: false, num: "", mot: ""}};
+  let revisando = false, enviando = false;
+
+  const itemDe = id => S.itens.get(id) || todos.find(x => x.id === id) || null;
+  const comparar = l => {
+    if (!l.sel || l.sel === "__novo") return null;
+    if (l.cmp && l.cmp.sel === l.sel) return l.cmp.r;
+    const it = itemDe(l.sel); if (!it) return null;
+    const ci = LeitorNF.caracteristicas(it.nome);
+    l.cmp = {sel: l.sel, r: Object.assign({ci}, LeitorNF.compararCaracteristicas(l.c.caracteristicas, ci))};
+    return l.cmp.r;
+  };
+  const conflitoDe = l => { const r = comparar(l); return !!(r && r.resultado === "conflito"); };
+  const estadoLinha = l => {
+    if (l.feito) return "feito";
+    if (!l.sel) return l.st0 === "confira" ? "confira" : "escolha";
+    if (l.sel === "__novo") return "novo";
+    if (conflitoDe(l)) return "medida";
+    if (!l.mexeu && l.sel === l.selInicial) return l.st0;
+    return "manual";
+  };
+  const vivas = () => linhas.filter(l => l.usar && !l.feito);
+  // linhas marcadas que apontam para o mesmo material (a primeira de cada grupo não precisa confirmar)
+  const duplicadas = () => {
+    const g = {}; vivas().forEach(l => { if (l.sel && l.sel !== "__novo") (g[l.sel] = g[l.sel] || []).push(l); });
+    const out = new Map(); Object.values(g).filter(x => x.length > 1).forEach(x => x.forEach((l, k) => out.set(l, {outras: x.filter(o => o !== l).map(o => o.i + 1), primeira: k === 0})));
+    return out;
+  };
+  const rotCand = x => x.car === "conflito" ? " — medida diferente" : x.car === "incompleto" ? " — confira a medida" : x.car === "compativel" ? " — mesma medida" : "";
+  const difsTexto = difs => difs.map(d => d.falta
+    ? (d.nota.length ? `a nota diz <b>${esc(d.nota.join(", "))}</b> e o nome do material não tem essa medida` : `o material tem <b>${esc(d.item.join(", "))}</b> e a nota não diz a medida`)
+    : `<b>${esc(d.nota.join(", "))}</b> na nota, <b>${esc(d.item.join(", "))}</b> no estoque`).join("; ");
+  const memoHTML = m => !m ? "" : m.tipo === "lembrado"
+    ? `<p class="lote-memo">Escolhido antes${m.quando ? " em " + esc(fData(m.quando)) : ""} neste computador. <button type="button" class="link small-link" data-k="esquecer">Esquecer esta escolha</button></p>`
+    : m.tipo === "dica" ? `<p class="lote-memo">${m.antiga ? "Escolha antiga deste computador" : "Sugestão de uma nota anterior"} no topo da lista: confira antes de usar.</p>`
+    : `<p class="lote-memo aviso">Escolha anterior ignorada: ${esc(m.motivo)}.</p>`;
+
+  function htmlLinha(l){
+    const it = l.it, i = l.i, c = l.c;
+    const sugIds = new Set(c.candidatos.map(x => x.it.id));
+    const opt = (i2, rot) => `<option value="${esc(i2.id)}" ${i2.id===l.sel?"selected":""}>${esc((i2.codigo?i2.codigo+" · ":"") + i2.nome)} (${fNum(i2.qtd)} ${esc(i2.unidade||"")})${rot||""}</option>`;
+    const st = estadoLinha(l);
+    return `<div class="lote-item st-${st}${l.usar ? "" : " off"}${l.feito ? " feito" : ""}" data-i="${i}">
+      <label class="lote-top"><input type="checkbox" data-k="usar" ${l.usar ? "checked" : ""} ${l.feito ? "disabled" : ""}> <span><span class="lote-n">${i+1}</span><b>${esc(it.descricao)}</b> <span class="selo-box">${seloLote(st)}</span>${it.incerto ? '<span class="pill s-baixo">Confira qtd e valor</span>' : ""}<span class="sub">${it.codigo ? "cód. " + esc(it.codigo) + " · " : ""}${fNum(it.qtd)} ${esc(it.unidade)} × ${fBRL(it.valorUnit)} = ${fBRL(it.valorTotal)}</span>${carTags(c.caracteristicas.lista)}</span></label>
+      ${memoHTML(c.memoria)}
       <div class="lote-campos">
-        <div class="field"><label for="lt-it-${i}">Item do estoque</label><select class="input" id="lt-it-${i}" data-k="item">
-          <option value="" ${sel===""?"selected":""}>Escolha o item do estoque…</option>
-          ${topo.length ? `<optgroup label="Mais parecidos">${topo.map(opt).join("")}</optgroup>` : ""}
-          ${podeNovo ? `<option value="__novo" ${sel==="__novo"?"selected":""}>+ Cadastrar como item novo: ${esc(nomeDeNota(it.descricao))}</option>` : ""}
-          <optgroup label="Todos os itens">${todos.filter(x => !sugIds.has(x.id)).map(opt).join("")}</optgroup>
+        <div class="field"><label for="lt-it-${i}">Item do estoque</label><select class="input" id="lt-it-${i}" data-k="item" ${l.feito ? "disabled" : ""}>
+          <option value="" ${l.sel===""?"selected":""}>Escolha o item do estoque…</option>
+          ${c.candidatos.length ? `<optgroup label="Mais parecidos">${c.candidatos.map(x => opt(x.it, rotCand(x))).join("")}</optgroup>` : ""}
+          ${podeNovo ? `<option value="__novo" ${l.sel==="__novo"?"selected":""}>+ Cadastrar como item novo: ${esc(nomeDeNota(it.descricao))}</option>` : ""}
+          <optgroup label="Todos os itens">${todos.filter(x => !sugIds.has(x.id)).map(x => opt(x)).join("")}</optgroup>
         </select></div>
-        <div class="field lote-nome" ${sel==="__novo" ? "" : "hidden"}><label for="lt-n-${i}">Nome do item novo</label><input class="input" id="lt-n-${i}" data-k="nome" value="${esc(nomeDeNota(it.descricao))}"></div>
+        <div class="field lote-nome" ${l.sel==="__novo" ? "" : "hidden"}><label for="lt-n-${i}">Nome do item novo</label><input class="input" id="lt-n-${i}" data-k="nome" value="${esc(nomeDeNota(it.descricao))}"></div>
         <div class="field"><label for="lt-q-${i}">Quantidade</label><input class="input num" id="lt-q-${i}" data-k="qtd" inputmode="decimal" value="${esc(String(Math.round(it.qtd*1000)/1000).replace(".", ","))}"></div>
         <div class="field"><label for="lt-v-${i}">Valor unitário (R$)</label><input class="input num" id="lt-v-${i}" data-k="valor" inputmode="decimal" value="${esc(fValorNF(it.valorUnit))}"></div>
       </div>
+      <div class="lote-alerta" data-k="alerta"></div>
       <span class="hint lote-st"></span>
     </div>`;
-  }).join("");
+  }
+  // a parte da linha que muda com as escolhas: material no estoque, medida diferente, mesmo material, já lançada
+  function alertaLinha(l, dup){
+    const partes = [];
+    if (l.jaLancada && !l.feito) partes.push(`<div class="lote-aviso crit">Esta linha já foi lançada em ${esc(fData(l.jaLancada.data))} por ${esc(l.jaLancada.registradoPor || "—")} (+${fNum(l.jaLancada.qtd)} ${esc(l.jaLancada.unidade || "")}). Por isso ela veio desmarcada.</div>`);
+    const r = comparar(l), it = l.sel && l.sel !== "__novo" ? itemDe(l.sel) : null;
+    if (it && !l.feito) {
+      partes.push(`<p class="lote-estoque">No estoque: <b>${esc(it.nome)}</b> ${carTags(r ? r.ci.lista : [])}<span class="muted"> · ${fNum(it.qtd)} ${esc(it.unidade || "")} agora</span></p>`);
+      if (r && r.resultado === "conflito") partes.push(`<div class="lote-aviso crit"><b>Medida diferente:</b> ${difsTexto(r.difs.filter(d => !d.falta))}. Escolha outro material ou confirme. <label class="lote-conf"><input type="checkbox" data-k="confConflito" ${l.confConflito ? "checked" : ""}> Confirmo: o material é este mesmo</label></div>`);
+      else if (r && r.resultado === "incompleto") partes.push(`<div class="lote-aviso warn">Confira a medida: ${difsTexto(r.difs)}.</div>`);
+    }
+    if (dup && !l.feito) partes.push(`<div class="lote-aviso warn">A linha ${dup.outras.join(" e ")} desta nota também está neste material.${dup.primeira ? "" : ` Troque o material ou confirme. <label class="lote-conf"><input type="checkbox" data-k="mesmo" ${l.mesmo ? "checked" : ""}> São o mesmo material</label>`}</div>`);
+    return partes.join("");
+  }
+  const repConfirmada = () => rep.conf.ok && nfNorm(rep.conf.num) === nfNorm($("#lt-nf").value) && rep.conf.mot.trim().length >= 10;
+  function pendencias(dups){
+    const out = [];
+    if (!nfNorm($("#lt-nf").value)) out.push("Informe o número da nota fiscal.");
+    if (rep.estado === "conferindo") out.push("Aguarde: conferindo se a nota já foi lançada…");
+    if ((rep.estado === "repetida" || rep.estado === "falhou") && !repConfirmada()) out.push(rep.estado === "repetida" ? "Esta nota já foi lançada: confirme a nova entrega ou feche sem lançar." : "Não foi possível conferir se a nota já foi lançada: tente de novo ou confirme.");
+    const v = vivas();
+    if (!v.length) out.push("Nenhuma linha marcada.");
+    v.forEach(l => {
+      const el = linhaEl(l), n = l.i + 1;
+      if (!l.sel) out.push(`Linha ${n}: escolha o material do estoque.`);
+      else if (conflitoDe(l) && !l.confConflito) out.push(`Linha ${n}: medida diferente — escolha outro material ou confirme.`);
+      const d = dups.get(l); if (d && !d.primeira && !l.mesmo) out.push(`Linha ${n}: mesmo material da linha ${d.outras.join(" e ")} — troque ou confirme.`);
+      if (!(pQtd($("[data-k=qtd]", el).value) > 0)) out.push(`Linha ${n}: quantidade inválida.`);
+      const vv = $("[data-k=valor]", el).value.trim(); if (vv && !Number.isFinite(pQtd(vv))) out.push(`Linha ${n}: valor inválido.`);
+    });
+    return out;
+  }
+  const linhaEl = l => $(`#f-lote .lote-item[data-i="${l.i}"]`);
+
   const soma = N.itens.reduce((t, it) => t + (Number(it.valorTotal)||0), 0);
-  // nota já lançada antes? (procura nas entradas carregadas: mês atual e o do histórico)
-  const fornCurto = norm(forn).replace(/[^a-z0-9]/g, "").slice(0, 12);
-  const jaLancadas = nf ? S.movs.filter(m => m.tipo === "entrada" && !m.estornado && String(m.nf).replace(/^0+/, "") === String(nf).replace(/^0+/, "") && (!fornCurto || norm(m.fornecedor).replace(/[^a-z0-9]/g, "").slice(0, 12) === fornCurto)) : [];
   $("#modal-box").innerHTML = `
-    <h3>Conferir a nota${nf ? " " + esc(nf) : ""}</h3>
-    <p class="muted" style="margin:-6px 0 14px">${esc([forn, N.data ? "emitida em " + fData(N.data) : "", N.valorTotal != null ? "total " + fBRL(N.valorTotal) : ""].filter(Boolean).join(" · "))}. O sistema já preencheu tudo: confira as linhas marcadas em amarelo e clique em Finalizar.</p>
-    ${N.foto ? `<div class="notice">Estes itens foram lidos da <b>foto</b> da nota. Confira nomes, quantidades e valores com a nota antes de finalizar.${N.valorTotal != null && Math.abs(N.itens.reduce((t, it) => t + (Number(it.valorTotal)||0), 0) - N.valorTotal) > 0.05 ? " A soma dos itens não bate com o total da nota: pode ter faltado algum item." : ""}</div>` : ""}
-    ${jaLancadas.length ? `<div class="notice warn"><b>Atenção: esta nota já foi lançada.</b> Há ${jaLancadas.length} ${jaLancadas.length===1?"entrada":"entradas"} da nota ${esc(nf)} registrada${jaLancadas.length===1?"":"s"} em ${esc(fData(jaLancadas[0].data))} por ${esc(jaLancadas[0].registradoPor||"—")}. Finalizar de novo vai somar as quantidades outra vez no estoque.</div>` : ""}
+    <h3>Conferir a nota${nf0 ? " " + esc(nf0) : ""}</h3>
+    <p class="muted" style="margin:-6px 0 10px">${esc([forn0, N.data ? "emitida em " + fData(N.data) : "", N.valorTotal != null ? "total " + fBRL(N.valorTotal) : ""].filter(Boolean).join(" · "))}.</p>
+    <p class="lote-resumo" id="lt-resumo"></p>
+    ${N.foto ? `<div class="notice">Estes itens foram lidos da <b>foto</b> da nota. Confira nomes, quantidades e valores com a nota antes de finalizar.${N.valorTotal != null && Math.abs(soma - N.valorTotal) > 0.05 ? " A soma dos itens não bate com o total da nota: pode ter faltado algum item." : ""}</div>` : ""}
+    <div id="lt-rep"></div>
     <form class="form" id="f-lote" novalidate autocomplete="off">
-      <div class="field"><label for="lt-forn">Fornecedor</label><input class="input" id="lt-forn" value="${esc(forn)}" list="dl-forn"></div>
-      <div class="field"><label for="lt-nf">Nota fiscal</label><input class="input" id="lt-nf" value="${esc(nf)}"></div>
+      <div class="field"><label for="lt-forn">Fornecedor</label><input class="input" id="lt-forn" value="${esc(forn0)}" list="dl-forn"></div>
+      <div class="field"><label for="lt-nf">Nota fiscal</label><input class="input" id="lt-nf" value="${esc(nf0)}" inputmode="numeric"></div>
       <div class="field"><label for="lt-data">Data da entrada</label><input class="input" type="date" id="lt-data" value="${esc(N.data || $("#m-data").value || hoje())}"></div>
       <div class="field"><label for="lt-rec">Quem recebeu</label><input class="input" id="lt-rec" value="${esc($("#m-recebeu").value.trim() || S.nome)}" list="dl-resp"></div>
-      <div class="full lote">${linhas}</div>
+      <div class="full lote">${linhas.map(htmlLinha).join("")}</div>
       <p class="hint full">${N.itens.length===1 ? "1 item lido" : N.itens.length + " itens lidos"}, somando ${fBRL(soma)}${N.valorTotal != null && Math.abs(soma - N.valorTotal) > 0.05 ? ` · o total da nota é ${fBRL(N.valorTotal)} (pode haver frete ou desconto)` : ""}. A nota fica anexada em cada entrada.</p>
-      <div class="full actions"><button class="btn primary" type="submit" id="lt-ok">Finalizar</button><button class="btn" type="button" id="lt-no">Cancelar</button><span class="hint" id="lt-msg"></span></div>
+      <div class="full lote-rev" id="lt-rev" hidden></div>
+      <ul class="full lote-pend" id="lt-pend" hidden></ul>
+      <div class="full actions"><button class="btn primary" type="submit" id="lt-ok">Finalizar</button><button class="btn" type="button" id="lt-voltar" hidden>Voltar e corrigir</button><button class="btn" type="button" id="lt-no">Cancelar</button><span class="hint" id="lt-msg"></span></div>
     </form>`;
   $("#modal-box").classList.add("largo");
   $("#modal").hidden = false;
+  const form = $("#f-lote");
   $("#lt-no").onclick = fecharModal;
-  const contar = () => {
-    const vivos = $$("#f-lote .lote-item").filter(el => { const c = $("[data-k=usar]", el); return c.checked && !c.disabled; });
-    const novos = vivos.filter(el => $("[data-k=item]", el).value === "__novo").length, n = vivos.length;
-    $("#lt-ok").textContent = n ? `Finalizar: registrar ${n} ${n===1?"entrada":"entradas"}${novos ? ` e cadastrar ${novos} ${novos===1?"item novo":"itens novos"}` : ""}` : "Nenhum item marcado";
-    $("#lt-ok").disabled = !n;
-  };
-  $$("#f-lote [data-k=item]").forEach(sel => sel.addEventListener("change", () => {
-    const top = sel.closest(".lote-item").querySelector(".selo"), st = sel.value === "__novo" ? "novo" : sel.value ? "manual" : "escolha";
-    if (top) top.outerHTML = seloLote(st);
-    const nm = sel.closest(".lote-item").querySelector(".lote-nome"); if (nm) nm.hidden = sel.value !== "__novo";
-    contar();
-  }));
-  $$("#f-lote [data-k=usar]").forEach(c => c.addEventListener("change", () => { c.closest(".lote-item").classList.toggle("off", !c.checked); contar(); }));
-  contar();
+
+  // ----- nota já lançada? procura nos meses desde a emissão (até 6) sem mudar o que a tela mostra -----
+  function mesesRep(){
+    const atual = mesDe(), entrada = mesDe($("#lt-data").value || hoje());
+    let ini = [N.data, $("#lt-data").value].filter(Boolean).map(d => mesDe(d)).sort()[0] || atual;
+    const lim = mesMais(atual, -5); if (ini < lim) ini = lim; if (ini > atual) ini = atual;
+    const out = []; for (let m = ini; m <= atual; m = mesMais(m, 1)) out.push(m);
+    if (!out.includes(entrada)) out.push(entrada);
+    return out;
+  }
+  function renderRep(){
+    const box = $("#lt-rep"); if (!box) return;
+    const nf = esc($("#lt-nf").value.trim());
+    const campos = rotulo => `<div class="rep-conf">
+        <label class="lote-conf"><input type="checkbox" id="lt-rep-ok" ${rep.conf.ok ? "checked" : ""}> ${rotulo}</label>
+        <div class="rep-campos" ${rep.conf.ok ? "" : "hidden"}>
+          <div class="field"><label for="lt-rep-num">Digite o número da nota para confirmar</label><input class="input" id="lt-rep-num" inputmode="numeric" autocomplete="off" value="${esc(rep.conf.num)}"></div>
+          <div class="field"><label for="lt-rep-mot">Motivo (pelo menos 10 letras)</label><input class="input" id="lt-rep-mot" maxlength="150" autocomplete="off" value="${esc(rep.conf.mot)}" placeholder="Ex.: segunda entrega da mesma nota"></div>
+        </div></div>`;
+    if (rep.estado === "conferindo") box.innerHTML = `<div class="notice"><span class="spin" aria-hidden="true"></span> Conferindo se a nota ${nf} já foi lançada…</div>`;
+    else if (rep.estado === "repetida") {
+      const l = rep.movs.slice(0, 8).map(m => `<li>${esc(fData(m.data))} · ${esc(m.registradoPor || "—")} · ${esc(m.itemNome || m.item || (itemDe(m.itemId) || {}).nome || "material")} · +${fNum(m.qtd)} ${esc(m.unidade || "")}</li>`).join("");
+      box.innerHTML = `<div class="notice crit lote-rep"><b>Esta nota já foi lançada.</b> ${rep.movs.length === 1 ? "Há 1 entrada" : `Há ${rep.movs.length} entradas`} da nota ${nf} no estoque:<ul>${l}${rep.movs.length > 8 ? `<li>e mais ${rep.movs.length - 8}</li>` : ""}</ul>
+        Finalizar de novo soma as quantidades outra vez. Se for a continuação de um lançamento interrompido, escreva isso no motivo.
+        ${campos("Esta é uma nova entrega desta nota: lançar mesmo assim")}
+        <div class="actions"><button type="button" class="btn" id="lt-rep-fechar">Fechar sem lançar</button></div></div>`;
+    } else if (rep.estado === "falhou") {
+      box.innerHTML = `<div class="notice crit lote-rep"><b>Não foi possível conferir se a nota ${nf} já foi lançada.</b> ${esc(rep.erro || "")}
+        <div class="actions"><button type="button" class="btn" id="lt-rep-tentar">Tentar de novo</button><button type="button" class="btn" id="lt-rep-fechar">Fechar sem lançar</button></div>
+        ${campos("Lançar mesmo sem conferir")}</div>`;
+    } else if (rep.estado === "ok" && rep.outroForn.length) {
+      const m = rep.outroForn[0];
+      box.innerHTML = `<div class="notice warn">A nota ${nf} também aparece para outro fornecedor (${esc(m.fornecedor || "—")}, em ${esc(fData(m.data))}). Números de nota se repetem entre fornecedores: confira se não é a mesma compra.</div>`;
+    } else box.innerHTML = "";
+    const f = $("#lt-rep-fechar"); if (f) f.onclick = fecharModal;
+    const t = $("#lt-rep-tentar"); if (t) t.onclick = () => { rep.chave = ""; conferirRepeticao(); };
+    const ok = $("#lt-rep-ok"); if (ok) ok.onchange = () => { rep.conf.ok = ok.checked; $(".rep-campos", box).hidden = !ok.checked; sairDaRevisao(); atualizarTudo(); };
+    const num = $("#lt-rep-num"); if (num) num.oninput = () => { rep.conf.num = num.value; sairDaRevisao(); atualizarTudo(); };
+    const mot = $("#lt-rep-mot"); if (mot) mot.oninput = () => { rep.conf.mot = mot.value; sairDaRevisao(); atualizarTudo(); };
+  }
+  async function conferirRepeticao(){
+    const numero = nfNorm($("#lt-nf").value), fc = fornCurto($("#lt-forn").value), meses = mesesRep();
+    const chave = numero + "|" + fc + "|" + meses.join(",");
+    if (!numero) { rep.estado = ""; rep.chave = ""; renderRep(); atualizarTudo(); return; }
+    if (chave === rep.chave) return;
+    rep.chave = chave; rep.estado = "conferindo"; rep.movs = []; rep.outroForn = []; renderRep(); atualizarTudo();
+    let movs = S.movs.slice();
+    try {
+      const falta = meses.filter(m => !S.mesesCarregados.includes(m));
+      if (falta.length) { const r = await api("dados", {meses: falta}, {soLer: true}); movs = movs.concat((r.dados && r.dados.movs) || []); }
+    } catch(e){
+      if (rep.chave !== chave || !form.isConnected) return;
+      rep.estado = "falhou"; rep.erro = e.message || ""; renderRep(); atualizarTudo(); return;
+    }
+    if (rep.chave !== chave || !form.isConnected) return;
+    const vistos = new Set(); movs = movs.filter(m => { const k = m.id || JSON.stringify(m); if (vistos.has(k)) return false; vistos.add(k); return true; });
+    const mesma = movs.filter(m => m.tipo === "entrada" && !m.estornado && nfNorm(m.nf) === numero);
+    rep.movs = mesma.filter(m => !fc || fornCurto(m.fornecedor) === fc);
+    rep.outroForn = mesma.filter(m => fc && fornCurto(m.fornecedor) !== fc);
+    rep.estado = rep.movs.length ? "repetida" : "ok";
+    // linha já lançada (pela observação "Na nota: …" gravada em cada entrada): vem desmarcada
+    linhas.forEach(l => {
+      const obs = "Na nota: " + l.it.descricao;
+      const m = rep.movs.find(x => { const o = String(x.obs || ""); return o === obs || o.startsWith(obs + " · "); }) || null;
+      if (m && !l.jaLancada && !l.feito) { l.usar = false; const el = linhaEl(l); if (el) { $("[data-k=usar]", el).checked = false; el.classList.add("off"); } }
+      l.jaLancada = m;
+    });
+    renderRep(); atualizarTudo();
+  }
+
+  // ----- revisão final: produto da nota, material do estoque, medidas, unidade e quantidade -----
+  function sairDaRevisao(){
+    if (!revisando) return;
+    revisando = false; $("#lt-rev").hidden = true; $("#lt-rev").innerHTML = ""; $("#lt-voltar").hidden = true;
+  }
+  function mostrarRevisao(){
+    const v = vivas(), dups = duplicadas();
+    const repTxt = rep.estado === "repetida" ? `<p class="lote-aviso crit">Nota já lançada antes: será registrada de novo, com o motivo “${esc(rep.conf.mot.trim())}”.</p>` : rep.estado === "falhou" ? `<p class="lote-aviso crit">Sem conferir se a nota já foi lançada, com o motivo “${esc(rep.conf.mot.trim())}”.</p>` : "";
+    $("#lt-rev").innerHTML = `<h4>Confira antes de registrar</h4>${repTxt}<ol>${v.map(l => {
+      const el = linhaEl(l), qtd = pQtd($("[data-k=qtd]", el).value), novo = l.sel === "__novo", it = novo ? null : itemDe(l.sel), r = comparar(l);
+      const nome = novo ? (($("[data-k=nome]", el) || {}).value || "").trim() || nomeDeNota(l.it.descricao) : (it ? it.nome : "—");
+      const un = novo ? String(l.it.unidade || "un").toLowerCase() : (it && it.unidade) || "";
+      const avisos = [conflitoDe(l) ? "medida diferente confirmada" : "", (dups.get(l) && !dups.get(l).primeira) ? "mesmo material de outra linha" : ""].filter(Boolean);
+      return `<li data-i="${l.i}"><div class="rev-nota"><span class="lote-n">${l.i+1}</span><b>${esc(l.it.descricao)}</b>${carTags(l.c.caracteristicas.lista)}<span class="sub">na nota: ${fNum(l.it.qtd)} ${esc(l.it.unidade || "")}</span></div>
+        <div class="rev-item">→ ${novo ? "<b>Item novo:</b> " : ""}<b>${esc(nome)}</b>${carTags(novo ? l.c.caracteristicas.lista : (r ? r.ci.lista : []))}<span class="sub">entra: <b>+${fNum(qtd)} ${esc(un)}</b>${it ? ` · estoque ${fNum(it.qtd)} → ${fNum((Number(it.qtd)||0) + qtd)}` : ""}${avisos.length ? ` · <span class="rev-aviso">${esc(avisos.join(" · "))}</span>` : ""}</span></div></li>`;
+    }).join("")}</ol>`;
+    $("#lt-rev").hidden = false; $("#lt-voltar").hidden = false; revisando = true;
+    $("#lt-rev").scrollIntoView({block: "nearest"});
+  }
+  $("#lt-voltar").onclick = () => { sairDaRevisao(); atualizarTudo(); };
+
+  // ----- estado da tela: selos, avisos de cada linha, pendências e botão -----
+  function atualizarTudo(){
+    if (!form.isConnected) return;
+    const dups = duplicadas();
+    linhas.forEach(l => {
+      const el = linhaEl(l); if (!el) return;
+      const st = estadoLinha(l);
+      ["confira","medida","escolha","ok","lembrado","manual","novo","feito"].forEach(s => el.classList.toggle("st-" + s, s === st));
+      const box = $(".selo-box", el); if (box && box.dataset.st !== st) { box.innerHTML = seloLote(st); box.dataset.st = st; }
+      const al = $("[data-k=alerta]", el), html = alertaLinha(l, dups.get(l));
+      if (al.dataset.html !== html) { al.innerHTML = html; al.dataset.html = html; }
+    });
+    const pend = enviando ? [] : pendencias(dups), v = vivas();
+    const ul = $("#lt-pend"); ul.innerHTML = pend.map(p => `<li>${esc(p)}</li>`).join(""); ul.hidden = !pend.length;
+    const prontas = v.filter(l => l.sel && !(conflitoDe(l) && !l.confConflito)).length;
+    const nDesm = linhas.filter(l => !l.usar && !l.feito).length, nFeitas = linhas.filter(l => l.feito).length;
+    $("#lt-resumo").innerHTML = `${linhas.length} ${linhas.length===1?"linha":"linhas"} · <b>${prontas}</b> ${prontas===1?"pronta":"prontas"}${v.length - prontas ? ` · <b class="txt-warn">${v.length - prontas}</b> para conferir` : ""}${nDesm ? ` · ${nDesm} ${nDesm===1?"desmarcada":"desmarcadas"}` : ""}${nFeitas ? ` · ${nFeitas} ${nFeitas===1?"registrada":"registradas"}` : ""}`;
+    const novos = v.filter(l => l.sel === "__novo").length, n = v.length, btn = $("#lt-ok");
+    btn.textContent = !n ? "Nenhum item marcado" : revisando ? `Confirmar e registrar ${n} ${n===1?"entrada":"entradas"}${novos ? ` e cadastrar ${novos} ${novos===1?"item novo":"itens novos"}` : ""}` : "Finalizar";
+    btn.disabled = enviando || !!pend.length;
+  }
+
+  // ----- eventos -----
+  const linhaDoEvento = e => { const el = e.target.closest(".lote-item"); return el ? linhas[Number(el.dataset.i)] : null; };
+  form.addEventListener("change", e => {
+    const l = linhaDoEvento(e), k = e.target.dataset.k;
+    if (l && k === "item") {
+      l.sel = e.target.value; l.mexeu = true; l.confConflito = false; l.mesmo = false;
+      const nm = $(".lote-nome", linhaEl(l)); if (nm) nm.hidden = l.sel !== "__novo";
+    } else if (l && k === "usar") { l.usar = e.target.checked; linhaEl(l).classList.toggle("off", !l.usar); }
+    else if (l && k === "confConflito") l.confConflito = e.target.checked;
+    else if (l && k === "mesmo") l.mesmo = e.target.checked;
+    else if (["lt-nf","lt-forn","lt-data"].includes(e.target.id)) conferirRepeticao();
+    sairDaRevisao(); atualizarTudo();
+  });
+  let espera = null;
+  form.addEventListener("input", e => {
+    if (["lt-nf","lt-forn"].includes(e.target.id)) { clearTimeout(espera); espera = setTimeout(conferirRepeticao, 700); }
+    if (e.target.matches("[data-k=qtd],[data-k=valor],[data-k=nome],#lt-nf")) { sairDaRevisao(); atualizarTudo(); }
+  });
+  form.addEventListener("click", e => {
+    const b = e.target.closest("[data-k=esquecer]"); if (!b) return;
+    const l = linhaDoEvento(e); if (!l) return;
+    memNF.esquecer(l.chave);
+    const el = linhaEl(l), q = $("[data-k=qtd]", el).value, v = $("[data-k=valor]", el).value, nm = ($("[data-k=nome]", el) || {}).value;
+    const ant = memNF.antiga()[l.chave];
+    l.c = LeitorNF.classificar(l.it, todos, {podeNovo, memoria: null, antiga: typeof ant === "string" ? ant : ""});
+    Object.assign(l, {st0: l.c.status, sel: l.c.sel, selInicial: l.c.sel, mexeu: false, confConflito: false, mesmo: false, cmp: null});
+    el.outerHTML = htmlLinha(l);
+    const el2 = linhaEl(l); $("[data-k=qtd]", el2).value = q; $("[data-k=valor]", el2).value = v; if (nm != null && $("[data-k=nome]", el2)) $("[data-k=nome]", el2).value = nm;
+    renderMemBtn(); sairDaRevisao(); atualizarTudo();
+  });
+
   const registrados = [];
-  $("#f-lote").addEventListener("submit", async ev => {
+  form.addEventListener("submit", async ev => {
     ev.preventDefault();
-    const msg = $("#lt-msg"); msg.className = "hint err";
+    const msg = $("#lt-msg"); msg.className = "hint err"; msg.textContent = "";
+    if (enviando) return;
+    const pend = pendencias(duplicadas());
+    if (pend.length) { atualizarTudo(); return; }
+    if (!revisando) { mostrarRevisao(); atualizarTudo(); return; }
     const fornecedor = $("#lt-forn").value.trim(), numero = $("#lt-nf").value.trim(), data = $("#lt-data").value || hoje(), receb = $("#lt-rec").value.trim();
-    const filas = $$("#f-lote .lote-item").map(el => ({el, it: N.itens[Number(el.dataset.i)], usar: $("[data-k=usar]", el), sel: $("[data-k=item]", el).value, nome: ($("[data-k=nome]", el)||{}).value, qtd: pQtd($("[data-k=qtd]", el).value), valor: $("[data-k=valor]", el).value.trim()}))
-      .filter(f => f.usar.checked && !f.usar.disabled);
-    const falta = filas.find(f => !f.sel); if (falta) { msg.textContent = `Escolha o item do estoque para "${falta.it.descricao}".`; $("[data-k=item]", falta.el).focus(); return; }
-    const semQtd = filas.find(f => !(f.qtd > 0)); if (semQtd) { msg.textContent = `Quantidade inválida em "${semQtd.it.descricao}".`; return; }
-    const valRuim = filas.find(f => f.valor && !Number.isFinite(pQtd(f.valor))); if (valRuim) { msg.textContent = `Valor inválido em "${valRuim.it.descricao}".`; return; }
-    const btn = $("#lt-ok"); btn.disabled = true; $("#lt-no").disabled = true;
-    S.ocupado = true; renderSync();
+    const motivo = rep.conf.mot.trim().replace(/\s+/g, " ").slice(0, 150);
+    const extraObs = rep.estado === "repetida" ? ` · Nota já lançada antes, confirmado: ${motivo}` : rep.estado === "falhou" ? ` · Sem conferir se a nota já foi lançada, confirmado: ${motivo}` : "";
+    const dups = duplicadas();
+    const filas = vivas().map(l => { const el = linhaEl(l); return {l, el, it: l.it, sel: l.sel, nome: ($("[data-k=nome]", el)||{}).value, qtd: pQtd($("[data-k=qtd]", el).value), valor: $("[data-k=valor]", el).value.trim(), excecao: conflitoDe(l) || !!(dups.get(l) && !dups.get(l).primeira)}; });
+    const btn = $("#lt-ok"); btn.disabled = true; $("#lt-no").disabled = true; $("#lt-voltar").hidden = true;
+    enviando = true; S.ocupado = true; renderSync();
     try {
       // a nota vai para o Drive uma vez só e fica ligada a todas as entradas
       $("#m-forn").value = fornecedor; $("#m-nf").value = numero;
       let ids = [];
       if (S.nfArq.length) { ids = await enviarNF(S.nfArq, numero, fornecedor, msg); if (!ids) return; S.nfAnexo = {chave: chaveNF(), ids}; S.nfArq = []; S.nfLida = null; renderNfAnexo(); }
       else if (nfAnexoValido()) ids = S.nfAnexo.ids;
-      const mapa = mapaNF.ler(); let feitas = 0;
+      const mapa = memNF.nova(); let feitas = 0;
       for (let k = 0; k < filas.length; k++) {
         const f = filas[k], st = $(".lote-st", f.el);
         msg.className = "hint"; msg.innerHTML = `<span class="spin" aria-hidden="true"></span> Registrando ${k+1} de ${filas.length}…`;
@@ -2444,28 +2677,76 @@ function abrirLote(){
             if (!novo) throw {message:"O item novo não apareceu na lista. Atualize a página."};
             itemId = novo.id;
           }
-          const mov = {tipo:"entrada", itemId, qtd:f.qtd, data, fornecedor, nf:numero, valorUnit: f.valor ? pQtd(f.valor) : "", responsavel:receb, obs:`Na nota: ${f.it.descricao}`};
+          const mov = {tipo:"entrada", itemId, qtd:f.qtd, data, fornecedor, nf:numero, valorUnit: f.valor ? pQtd(f.valor) : "", responsavel:receb, obs:`Na nota: ${f.it.descricao}${extraObs}`};
           if (ids.length) mov.nfFotos = ids.join(",");
           await api("registrar", {mov});
           const itR = S.itens.get(itemId) || {};
           registrados.push({itemId, nome: itR.nome || f.nome || nomeDeNota(f.it.descricao), codigo: itR.codigo || "", unidade: itR.unidade || "", estoque: itR.qtd, qtd: f.qtd, valor: mov.valorUnit, novo: f.sel === "__novo", descricao: f.it.descricao});
-          mapa[chaveProduto(fornecedor, f.it)] = itemId;
-          f.usar.disabled = true; f.el.classList.add("feito"); st.className = "hint lote-st ok"; st.textContent = "Registrado.";
+          // memória: só a escolha de uma pessoa vira "Escolhido antes"; exceções confirmadas não viram regra
+          if (!f.excecao) {
+            const chave = chaveProduto(fornecedor, f.it), velha = mapa[chave];
+            const auto = (f.l.st0 === "ok" || f.l.st0 === "novo") && !f.l.mexeu;
+            const origem = velha && velha.itemId === itemId && velha.origem === "pessoa" ? "pessoa" : auto ? "auto" : "pessoa";
+            mapa[chave] = {itemId, origem, quando: hoje(), vezes: (velha && velha.itemId === itemId ? (velha.vezes || 0) : 0) + 1, forn: fornecedor, descNota: f.it.descricao,
+              nomeItem: itR.nome || "", carItem: LeitorNF.assinaturaCar(LeitorNF.caracteristicas(itR.nome || ""))};
+          }
+          f.l.feito = true; f.el.classList.add("feito"); $("[data-k=usar]", f.el).disabled = true; $("[data-k=item]", f.el).disabled = true;
+          st.className = "hint lote-st ok"; st.textContent = "Registrado.";
           feitas++;
         } catch(e){
           st.className = "hint lote-st err"; st.textContent = e.message || "Não foi possível registrar.";
           msg.className = "hint err"; msg.textContent = `${feitas} de ${filas.length} registradas. Corrija o item marcado e clique de novo para registrar o que falta.`;
-          mapaNF.gravar(mapa); contar(); return;
+          memNF.gravar(mapa); renderMemBtn(); return;
         }
       }
-      mapaNF.gravar(mapa);
+      memNF.gravar(mapa); renderMemBtn();
       fecharModal();
       const nNovos = registrados.filter(r => r.novo).length;
       toast(`Nota ${numero} finalizada: ${registrados.length} ${registrados.length===1?"entrada registrada":"entradas registradas"}${nNovos ? ` e ${nNovos} ${nNovos===1?"item novo cadastrado":"itens novos cadastrados"}` : ""}.`);
       mostrarResumoNota({numero, fornecedor, data, receb, ids, itens: registrados, valorTotal: N.valorTotal});
-    } finally { if ($("#lt-no")) $("#lt-no").disabled = false; S.ocupado = false; renderSync(); if ($("#lt-ok")) contar(); }
+    } finally {
+      enviando = false; if ($("#lt-no")) $("#lt-no").disabled = false; S.ocupado = false; renderSync();
+      if (form.isConnected) { sairDaRevisao(); atualizarTudo(); }
+    }
   });
+  atualizarTudo();
+  conferirRepeticao();
 }
+
+// ---------- escolhas lembradas neste computador ----------
+function renderMemBtn(){
+  const b = $("#m-nf-mem"); if (!b) return;
+  try {
+    const n2 = Object.keys(memNF.nova()).length, n1 = Object.keys(memNF.antiga()).length;
+    b.hidden = !(n1 + n2) || !can("registrar_entrada");
+    b.textContent = `Escolhas lembradas neste computador (${n2 + n1})`;
+  } catch(e){ b.hidden = true; } // chamado antes de a memória estar pronta (carregamento da página)
+}
+function abrirMemoriaNF(){
+  const m2 = memNF.nova(), m1 = memNF.antiga(), ch2 = Object.keys(m2), ch1 = Object.keys(m1);
+  const descDaChave = k => k.split("|").slice(1).join("|");
+  const nomeItem = id => { const it = S.itens.get(id); return it ? it.nome : "(material não encontrado)"; };
+  $("#modal-box").innerHTML = `
+    <h3>Escolhas lembradas neste computador</h3>
+    <p class="muted" style="margin:-6px 0 14px">Quando uma pessoa escolhe o material de uma linha da nota, este computador lembra a escolha para a próxima nota do mesmo fornecedor. Só as escolhas feitas por uma pessoa voltam prontas, e só se a medida ainda bater.</p>
+    ${ch2.length ? `<div class="tablebox flat"><table><thead><tr><th>Na nota</th><th>Material</th><th class="hide-s">Origem</th><th class="hide-s">Data</th><th></th></tr></thead><tbody>${ch2.map(k => { const e = m2[k]; return `<tr data-ch="${esc(k)}"><td>${esc(e.descNota || descDaChave(k))}<span class="sub">${esc(e.forn || k.split("|")[0])}</span></td><td>${esc(nomeItem(e.itemId))}</td><td class="hide-s">${e.origem === "pessoa" ? "escolhida por uma pessoa" : "automática"}</td><td class="hide-s">${esc(fData(e.quando))}</td><td class="n"><button type="button" class="btn small" data-esq="${esc(k)}">Esquecer</button></td></tr>`; }).join("")}</tbody></table></div>`
+      : `<p class="empty">Nenhuma escolha nova guardada.</p>`}
+    ${ch1.length ? `<p class="hint">Há também ${ch1.length} ${ch1.length===1?"escolha antiga":"escolhas antigas"} (da versão anterior). Elas só aparecem como sugestão para conferir e nunca são usadas sozinhas.</p>` : ""}
+    <div class="actions" id="mem-acoes">${ch2.length || ch1.length ? `<button type="button" class="btn" id="mem-todas">Esquecer todas…</button>` : ""}<button type="button" class="btn" id="mem-fechar">Fechar</button></div>
+    <div class="notice warn" id="mem-conf" hidden>
+      <p>Esquecer ${ch2.length} ${ch2.length===1?"escolha lembrada":"escolhas lembradas"} neste computador?</p>
+      ${ch1.length ? `<label class="lote-conf"><input type="checkbox" id="mem-antigas"> Apagar também as ${ch1.length} ${ch1.length===1?"escolha antiga":"escolhas antigas"}</label>` : ""}
+      <div class="actions"><button type="button" class="btn primary" id="mem-sim">Sim, esquecer</button><button type="button" class="btn" id="mem-nao">Cancelar</button></div>
+    </div>`;
+  $("#modal").hidden = false;
+  $("#mem-fechar").onclick = fecharModal;
+  $("#modal-box").onclick = e => { const b = e.target.closest("[data-esq]"); if (!b) return; memNF.esquecer(b.dataset.esq); renderMemBtn(); abrirMemoriaNF(); };
+  const t = $("#mem-todas"); if (t) t.onclick = () => { $("#mem-conf").hidden = false; t.disabled = true; };
+  const nao = $("#mem-nao"); if (nao) nao.onclick = () => { $("#mem-conf").hidden = true; if (t) t.disabled = false; };
+  const sim = $("#mem-sim"); if (sim) sim.onclick = () => { memNF.esquecerTodas(!!($("#mem-antigas") && $("#mem-antigas").checked)); renderMemBtn(); fecharModal(); toast("Escolhas esquecidas neste computador."); };
+}
+if ($("#m-nf-mem")) $("#m-nf-mem").addEventListener("click", abrirMemoriaNF);
+renderMemBtn();
 
 // depois de finalizar a nota, a tela Registrar mostra o que entrou e fica limpa para a próxima
 function mostrarResumoNota(R){
