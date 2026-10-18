@@ -335,14 +335,33 @@
     massa: f => f.valor >= 1000 ? virgula(f.valor / 1000) + " kg" : virgula(f.valor) + " g"
   };
   // lê as características de uma descrição; "resto" é o texto sem elas, para comparar as palavras
+  // marca 3M: em fita, lixa, esponja, EPI etc. "3M" é o fabricante, não 3 metros
+  const PRODUTO_3M = /\b(fitas?|isolante|adesiv\w*|dupla|scotch\w*|lixas?|abrasiv\w*|espumas?|esponjas?|mascaras?|respirador\w*|protetor\w*|auricular\w*|vhb|silver|tape|filtros?|microporo|post|highland|tartan|veda\w*|cola)\b/;
+  const MEDE_3M = /\b(trenas?|metrica|mangueiras?|cabos?|fios?|corrente|cordas?|tubos?|canos?|perfil|barras?|eletroduto|conduite)\b/;
   function caracteristicas(texto) {
-    let t = " " + String(texto || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
-      .replace(/[”“″]/g, '"').replace(/''/g, '"').replace(/²/g, "2") + " ";
+    let t = " " + String(texto || "").replace(/½/g, " 1/2").replace(/¼/g, " 1/4").replace(/¾/g, " 3/4").replace(/⅛/g, " 1/8").replace(/⁄/g, "/")
+      .normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
+      .replace(/[”“″]/g, '"').replace(/''/g, '"').replace(/²/g, "2").replace(/[®™©]/g, " ") + " ";
     const lista = [];
     const tira = (re, fn) => { t = t.replace(re, function () { const r = fn.apply(null, arguments); return r === false ? arguments[0] : " ".repeat(arguments[0].length); }); };
     const add = (tipo, f) => { f.tipo = tipo; lista.push(f); };
     const N = "(\\d+(?:[.,]\\d+)?)", FIM = "(?![a-z0-9])";
     const eFio = /\b(cabo|fio|cordao)\b/.test(t), eDisj = /\bdisj/.test(t);
+    let marca = "";
+    // "3M" grudado é a marca quando o produto é de linha 3M, ou quando já há outra medida linear no texto
+    // ("TRENA 3M", "MANGUEIRA 3M" continuam sendo 3 metros)
+    const RE3M = /(^|[^0-9.,a-z])3m(?![a-z0-9²])/g;
+    if (RE3M.test(t)) {
+      const semEle = t.replace(RE3M, (m, a) => a + "  ");
+      const outraMedida = new RegExp("\\d\\s*(mm|cm|mts|mt|m)" + FIM + "|\\d\\s*x\\s*\\d").test(semEle);
+      if (!MEDE_3M.test(t) && (PRODUTO_3M.test(t) || outraMedida)) { marca = "3M"; t = semEle; }
+    }
+    // rosca métrica de parafuso, porca, barra roscada: M8 / M8x40 (diâmetro 8 mm; comprimento secundário)
+    if (/\b(paraf\w*|porcas?|arruelas?|barras?|roscad\w*|chumbador\w*|prisioneir\w*|rosca)\b/.test(t))
+      tira(new RegExp("\\bm\\s?(\\d{1,2}(?:[.,]\\d)?)(?:\\s*x\\s*" + N + "\\s*(mm)?)?" + FIM, "g"), (m, d, c) => {
+        add("medida", { bruto: numC(d), valor: numC(d), principal: true });
+        if (c) add("medida", { bruto: numC(c), valor: numC(c), principal: false });
+      });
     // seção de cabo: 2,5mm2 / 2,5 mm²
     tira(new RegExp(N + "\\s*mm\\s*2" + FIM, "g"), (m, n) => add("secao", { valor: numC(n), principal: true }));
     // polegadas: 2 1/2" · 3/4 · 3/4 pol · 2"
@@ -378,7 +397,7 @@
     if (lista.some(f => f.principal && !(f.tipo === "medida" && f.valor >= 1000)))
       lista.forEach(f => { if (f.tipo === "medida" && f.valor >= 1000) f.principal = false; });
     lista.forEach(f => { f.rotulo = ROTULO[f.tipo](f); });
-    return { lista, resto: t.replace(/\s+/g, " ").trim() };
+    return { lista, resto: t.replace(/\s+/g, " ").trim(), marca };
   }
   const igualN = (a, b) => Math.abs(a - b) <= Math.max(1e-6, LIMITES.TOLERANCIA * Math.max(Math.abs(a), Math.abs(b)));
   function mesmo(x, y) {
@@ -418,13 +437,13 @@
     const a = fichas(restoNota), b = fichas(restoItem);
     const aW = a.filter(x => !/^\d+$/.test(x)), bW = b.filter(x => !/^\d+$/.test(x) && x.length >= 2);
     const aN = a.filter(x => /^\d+$/.test(x)), bN = b.filter(x => /^\d+$/.test(x));
-    if (!aW.length || !bW.length) return { nota: 0, cobre: 0 };
+    // números soltos (grão da lixa, modelo, referência) diferentes dos dois lados: pesam contra e impedem a escolha automática
+    const numDif = !!(aN.length && bN.length && !aN.some(x => bN.indexOf(x) >= 0));
+    if (!aW.length || !bW.length) return { nota: 0, cobre: 0, numDif, numNota: aN, numItem: bN };
     const cobre = bW.filter(u => aW.some(t => casa(t, u) >= 0.75)).length / bW.length;
     const pontos = aW.reduce((s, t) => s + Math.max(...bW.map(u => casa(t, u))), 0);
     const parec = pontos / Math.max(aW.length, Math.min(bW.length, 4) * 0.8);
-    // números soltos diferentes dos dois lados (modelo, referência) pesam contra
-    const multa = aN.length && bN.length && !aN.some(x => bN.indexOf(x) >= 0) ? 0.25 : 0;
-    return { nota: Math.max(0, 0.65 * cobre + 0.35 * parec - multa), cobre };
+    return { nota: Math.max(0, 0.65 * cobre + 0.35 * parec - (numDif ? 0.25 : 0)), cobre, numDif, numNota: aN, numItem: bN };
   }
   const codigoDoFornecedor = it => { const m = /c[oó]d\. do fornecedor (\S+)/i.exec(String(it.obs || "")); return m ? m[1] : ""; };
 
@@ -446,7 +465,8 @@
       const cmp = compararCaracteristicas(cn, ci);
       const s = semelhanca(cn.resto, ci.resto);
       const codigoBate = cod.length >= 3 && (cod === String(it.codigo || "") || cod === codigoDoFornecedor(it));
-      return { it, nota: codigoBate ? Math.max(s.nota, 1) : s.nota, cobre: codigoBate ? 1 : s.cobre, car: cmp.resultado, difs: cmp.difs, carItem: ci, codigoBate };
+      return { it, nota: codigoBate ? Math.max(s.nota, 1) : s.nota, cobre: codigoBate ? 1 : s.cobre, car: cmp.resultado, difs: cmp.difs, carItem: ci, codigoBate,
+        numDif: s.numDif && !codigoBate, numNota: s.numNota, numItem: s.numItem };
     });
     const ordem = (x, y) => ((x.car === "conflito") - (y.car === "conflito")) || (y.nota - x.nota) || (y.cobre - x.cobre);
     const porNota = cands.filter(c => c.nota > LIMITES.SUGERE || c.codigoBate).sort(ordem);
@@ -454,7 +474,7 @@
     const completos = validos.filter(c => c.car === "compativel" || c.car === "sem");
     const top = completos[0], segundo = validos.find(c => c !== top);
     const folga = top ? top.nota - (segundo ? segundo.nota : 0) : 0;
-    const auto = !!top && top.cobre === 1 && top.nota >= LIMITES.AUTO && folga >= LIMITES.FOLGA;
+    const auto = !!top && top.cobre === 1 && top.nota >= LIMITES.AUTO && folga >= LIMITES.FOLGA && !top.numDif;
 
     // memória: só a escolha feita por uma pessoa, ainda compatível, vira "Escolhido antes"
     let memoria = null, dica = null;

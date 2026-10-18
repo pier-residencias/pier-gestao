@@ -2384,6 +2384,8 @@ function abrirLote(){
     return {i, it, chave, c, st0: c.status, sel: c.sel, selInicial: c.sel, mexeu: false, usar: true, feito: false, confConflito: false, mesmo: false, jaLancada: null, cmp: null};
   });
   const rep = {estado: "", chave: "", movs: [], outroForn: [], erro: "", conf: {ok: false, num: "", mot: ""}};
+  const proprias = {}; // entradas gravadas por esta conferência (depois de uma falha no meio, não contam como repetição)
+  const assinaturaMov = m => [m.itemId, nfNorm(m.nf), String(m.data || "").slice(0, 10), Number(m.qtd), String(m.obs || "")].join("|");
   let revisando = false, enviando = false;
 
   const itemDe = id => S.itens.get(id) || todos.find(x => x.id === id) || null;
@@ -2391,8 +2393,8 @@ function abrirLote(){
     if (!l.sel || l.sel === "__novo") return null;
     if (l.cmp && l.cmp.sel === l.sel) return l.cmp.r;
     const it = itemDe(l.sel); if (!it) return null;
-    const ci = LeitorNF.caracteristicas(it.nome);
-    l.cmp = {sel: l.sel, r: Object.assign({ci}, LeitorNF.compararCaracteristicas(l.c.caracteristicas, ci))};
+    const ci = LeitorNF.caracteristicas(it.nome), sm = LeitorNF.semelhanca(l.c.caracteristicas.resto, ci.resto);
+    l.cmp = {sel: l.sel, r: Object.assign({ci, numDif: sm.numDif, numNota: sm.numNota, numItem: sm.numItem}, LeitorNF.compararCaracteristicas(l.c.caracteristicas, ci))};
     return l.cmp.r;
   };
   const conflitoDe = l => { const r = comparar(l); return !!(r && r.resultado === "conflito"); };
@@ -2411,7 +2413,7 @@ function abrirLote(){
     const out = new Map(); Object.values(g).filter(x => x.length > 1).forEach(x => x.forEach((l, k) => out.set(l, {outras: x.filter(o => o !== l).map(o => o.i + 1), primeira: k === 0})));
     return out;
   };
-  const rotCand = x => x.car === "conflito" ? " — medida diferente" : x.car === "incompleto" ? " — confira a medida" : x.car === "compativel" ? " — mesma medida" : "";
+  const rotCand = x => x.car === "conflito" ? " — medida diferente" : x.car === "incompleto" ? " — confira a medida" : x.numDif ? " — confira o número" : x.car === "compativel" ? " — mesma medida" : "";
   const difsTexto = difs => difs.map(d => d.falta
     ? (d.nota.length ? `a nota diz <b>${esc(d.nota.join(", "))}</b> e o nome do material não tem essa medida` : `o material tem <b>${esc(d.item.join(", "))}</b> e a nota não diz a medida`)
     : `<b>${esc(d.nota.join(", "))}</b> na nota, <b>${esc(d.item.join(", "))}</b> no estoque`).join("; ");
@@ -2452,6 +2454,7 @@ function abrirLote(){
       partes.push(`<p class="lote-estoque">No estoque: <b>${esc(it.nome)}</b> ${carTags(r ? r.ci.lista : [])}<span class="muted"> · ${fNum(it.qtd)} ${esc(it.unidade || "")} agora</span></p>`);
       if (r && r.resultado === "conflito") partes.push(`<div class="lote-aviso crit"><b>Medida diferente:</b> ${difsTexto(r.difs.filter(d => !d.falta))}. Escolha outro material ou confirme. <label class="lote-conf"><input type="checkbox" data-k="confConflito" ${l.confConflito ? "checked" : ""}> Confirmo: o material é este mesmo</label></div>`);
       else if (r && r.resultado === "incompleto") partes.push(`<div class="lote-aviso warn">Confira a medida: ${difsTexto(r.difs)}.</div>`);
+      if (r && r.resultado !== "conflito" && r.numDif) partes.push(`<div class="lote-aviso warn">Confira a especificação: a nota tem <b>${esc(r.numNota.join(", "))}</b> e o material tem <b>${esc(r.numItem.join(", "))}</b> (grão, modelo ou referência).</div>`);
     }
     if (dup && !l.feito) partes.push(`<div class="lote-aviso warn">A linha ${dup.outras.join(" e ")} desta nota também está neste material.${dup.primeira ? "" : ` Troque o material ou confirme. <label class="lote-conf"><input type="checkbox" data-k="mesmo" ${l.mesmo ? "checked" : ""}> São o mesmo material</label>`}</div>`);
     return partes.join("");
@@ -2547,14 +2550,21 @@ function abrirLote(){
     let movs = S.movs.slice();
     try {
       const falta = meses.filter(m => !S.mesesCarregados.includes(m));
-      if (falta.length) { const r = await api("dados", {meses: falta}, {soLer: true}); movs = movs.concat((r.dados && r.dados.movs) || []); }
+      if (falta.length) {
+        let relogio;
+        const limite = new Promise((ok, erro) => { relogio = setTimeout(() => erro({message: "A planilha demorou demais para responder."}), 45000); });
+        const r = await Promise.race([api("dados", {meses: falta}, {soLer: true}), limite]).finally(() => clearTimeout(relogio));
+        movs = movs.concat((r.dados && r.dados.movs) || []);
+      }
     } catch(e){
       if (rep.chave !== chave || !form.isConnected) return;
       rep.estado = "falhou"; rep.erro = e.message || ""; renderRep(); atualizarTudo(); return;
     }
     if (rep.chave !== chave || !form.isConnected) return;
     const vistos = new Set(); movs = movs.filter(m => { const k = m.id || JSON.stringify(m); if (vistos.has(k)) return false; vistos.add(k); return true; });
-    const mesma = movs.filter(m => m.tipo === "entrada" && !m.estornado && nfNorm(m.nf) === numero);
+    const usar = Object.assign({}, proprias);
+    const mesma = movs.filter(m => m.tipo === "entrada" && !m.estornado && nfNorm(m.nf) === numero)
+      .filter(m => { const k = assinaturaMov(m); if (usar[k]) { usar[k]--; return false; } return true; });
     rep.movs = mesma.filter(m => !fc || fornCurto(m.fornecedor) === fc);
     rep.outroForn = mesma.filter(m => fc && fornCurto(m.fornecedor) !== fc);
     rep.estado = rep.movs.length ? "repetida" : "ok";
@@ -2576,13 +2586,15 @@ function abrirLote(){
   function mostrarRevisao(){
     const v = vivas(), dups = duplicadas();
     const repTxt = rep.estado === "repetida" ? `<p class="lote-aviso crit">Nota já lançada antes: será registrada de novo, com o motivo “${esc(rep.conf.mot.trim())}”.</p>` : rep.estado === "falhou" ? `<p class="lote-aviso crit">Sem conferir se a nota já foi lançada, com o motivo “${esc(rep.conf.mot.trim())}”.</p>` : "";
+    const saldo = {}; // saldo previsto acumulado: duas linhas no mesmo material somam em sequência
     $("#lt-rev").innerHTML = `<h4>Confira antes de registrar</h4>${repTxt}<ol>${v.map(l => {
       const el = linhaEl(l), qtd = pQtd($("[data-k=qtd]", el).value), novo = l.sel === "__novo", it = novo ? null : itemDe(l.sel), r = comparar(l);
+      const antes = it ? (l.sel in saldo ? saldo[l.sel] : (Number(it.qtd) || 0)) : 0, depois = antes + qtd; if (it) saldo[l.sel] = depois;
       const nome = novo ? (($("[data-k=nome]", el) || {}).value || "").trim() || nomeDeNota(l.it.descricao) : (it ? it.nome : "—");
       const un = novo ? String(l.it.unidade || "un").toLowerCase() : (it && it.unidade) || "";
-      const avisos = [conflitoDe(l) ? "medida diferente confirmada" : "", (dups.get(l) && !dups.get(l).primeira) ? "mesmo material de outra linha" : ""].filter(Boolean);
+      const avisos = [conflitoDe(l) ? "medida diferente confirmada" : "", (dups.get(l) && !dups.get(l).primeira) ? "mesmo material de outra linha" : "", r && r.numDif && !conflitoDe(l) ? "confira o número" : "", r && r.resultado === "incompleto" ? "a nota não confirma a medida" : ""].filter(Boolean);
       return `<li data-i="${l.i}"><div class="rev-nota"><span class="lote-n">${l.i+1}</span><b>${esc(l.it.descricao)}</b>${carTags(l.c.caracteristicas.lista)}<span class="sub">na nota: ${fNum(l.it.qtd)} ${esc(l.it.unidade || "")}</span></div>
-        <div class="rev-item">→ ${novo ? "<b>Item novo:</b> " : ""}<b>${esc(nome)}</b>${carTags(novo ? l.c.caracteristicas.lista : (r ? r.ci.lista : []))}<span class="sub">entra: <b>+${fNum(qtd)} ${esc(un)}</b>${it ? ` · estoque ${fNum(it.qtd)} → ${fNum((Number(it.qtd)||0) + qtd)}` : ""}${avisos.length ? ` · <span class="rev-aviso">${esc(avisos.join(" · "))}</span>` : ""}</span></div></li>`;
+        <div class="rev-item">→ ${novo ? "<b>Item novo:</b> " : ""}<b>${esc(nome)}</b>${carTags(novo ? l.c.caracteristicas.lista : (r ? r.ci.lista : []))}<span class="sub">entra: <b>+${fNum(qtd)} ${esc(un)}</b> · estoque ${it ? `${fNum(antes)} → <b>${fNum(depois)}</b>` : `novo: 0 → <b>${fNum(qtd)}</b>`}${avisos.length ? ` · <span class="rev-aviso">${esc(avisos.join(" · "))}</span>` : ""}</span></div></li>`;
     }).join("")}</ol>`;
     $("#lt-rev").hidden = false; $("#lt-voltar").hidden = false; revisando = true;
     $("#lt-rev").scrollIntoView({block: "nearest"});
@@ -2676,12 +2688,17 @@ function abrirLote(){
             const novo = itensArr().filter(i => i.nome === nome).sort((a,b) => String(b.criadoEm).localeCompare(String(a.criadoEm)))[0];
             if (!novo) throw {message:"O item novo não apareceu na lista. Atualize a página."};
             itemId = novo.id;
+            // se a entrada falhar depois daqui, a nova tentativa usa o item já cadastrado (não cadastra outro)
+            f.l.sel = itemId; f.l.novoCriado = true;
+            const se = $("[data-k=item]", f.el); se.add(new Option(nome + " (item novo, já cadastrado)", itemId)); se.value = itemId;
+            const nm = $(".lote-nome", f.el); if (nm) nm.hidden = true;
           }
-          const mov = {tipo:"entrada", itemId, qtd:f.qtd, data, fornecedor, nf:numero, valorUnit: f.valor ? pQtd(f.valor) : "", responsavel:receb, obs:`Na nota: ${f.it.descricao}${extraObs}`};
+          const mov = {tipo:"entrada", itemId, qtd:f.qtd, data, fornecedor, nf:numero, valorUnit: f.valor ? pQtd(f.valor) : "", responsavel:receb, obs:`Na nota: ${f.it.descricao}${extraObs}`.slice(0, 300)}; // a planilha guarda até 300 letras
           if (ids.length) mov.nfFotos = ids.join(",");
           await api("registrar", {mov});
+          proprias[assinaturaMov(mov)] = (proprias[assinaturaMov(mov)] || 0) + 1;
           const itR = S.itens.get(itemId) || {};
-          registrados.push({itemId, nome: itR.nome || f.nome || nomeDeNota(f.it.descricao), codigo: itR.codigo || "", unidade: itR.unidade || "", estoque: itR.qtd, qtd: f.qtd, valor: mov.valorUnit, novo: f.sel === "__novo", descricao: f.it.descricao});
+          registrados.push({itemId, nome: itR.nome || f.nome || nomeDeNota(f.it.descricao), codigo: itR.codigo || "", unidade: itR.unidade || "", estoque: itR.qtd, qtd: f.qtd, valor: mov.valorUnit, novo: f.sel === "__novo" || !!f.l.novoCriado, descricao: f.it.descricao});
           // memória: só a escolha de uma pessoa vira "Escolhido antes"; exceções confirmadas não viram regra
           if (!f.excecao) {
             const chave = chaveProduto(fornecedor, f.it), velha = mapa[chave];
