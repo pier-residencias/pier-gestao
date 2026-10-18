@@ -371,6 +371,44 @@ td.mono{white-space:nowrap}
 .lote-top .pill{margin-left:6px;vertical-align:1px}
 .lote-campos .lote-nome{grid-column:1/-1;order:5}
 .lote-campos .lote-nome[hidden]{display:none}
+/* conferência da nota: o que precisa de atenção fica marcado na borda da linha */
+.lote-item.st-confira,.lote-item.st-escolha{border-left:4px solid var(--warn)}
+.lote-item.st-medida{border-left:4px solid var(--crit)}
+.lote-item.off.st-confira,.lote-item.off.st-escolha,.lote-item.off.st-medida{border-left-color:var(--line)}
+.lote-n{display:inline-grid;place-items:center;min-width:22px;height:22px;margin-right:6px;border-radius:11px;background:var(--surface-2);font-size:.75rem;font-weight:700;color:var(--muted)}
+.car-lista{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.car{font-size:.75rem;font-weight:600;padding:1px 7px;border-radius:4px;background:var(--info-bg);color:var(--info);white-space:nowrap}
+.car.sec{background:var(--grey-bg);color:var(--muted);font-weight:500}
+.lote-estoque{margin:0;font-size:.88rem;display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center}
+.lote-estoque .car-lista{margin-top:0}
+.lote-aviso{border-radius:6px;padding:8px 10px;font-size:.88rem;margin:0}
+.lote-aviso.crit{background:var(--crit-bg)}
+.lote-aviso.warn{background:var(--warn-bg)}
+.lote-alerta{display:grid;gap:6px}
+.lote-alerta:empty{display:none}
+.lote-conf{display:flex;gap:8px;align-items:center;margin-top:6px;font-weight:600;cursor:pointer}
+.lote-conf input{accent-color:var(--accent);width:18px;height:18px}
+.lote-memo{margin:0;font-size:.84rem;color:var(--muted)}
+.lote-memo.aviso{color:var(--warn)}
+.lote-resumo{margin:0 0 12px;font-size:.92rem}
+.txt-warn{color:var(--warn)}
+.lote-pend{margin:0;padding:10px 14px 10px 30px;border-radius:8px;background:var(--warn-bg);font-size:.88rem;display:grid;gap:2px}
+.lote-pend[hidden]{display:none}
+.lote-rep ul{margin:6px 0 8px;padding-left:20px}
+.lote-rep .actions{margin-top:8px}
+.rep-conf{margin-top:10px}
+.rep-campos{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:10px;margin-top:8px}
+.rep-campos[hidden]{display:none}
+@media (max-width:560px){ .rep-campos{grid-template-columns:minmax(0,1fr)} }
+.lote-rev{border:1px solid var(--accent);border-radius:8px;padding:12px 14px;background:var(--accent-soft)}
+.lote-rev[hidden]{display:none}
+.lote-rev h4{margin:0 0 8px;font-size:1rem}
+.lote-rev ol{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.lote-rev li{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4px 14px;padding-top:8px;border-top:1px solid var(--line)}
+.lote-rev li:first-child{border-top:0;padding-top:0}
+.lote-rev .sub{display:block;font-size:.82rem;color:var(--muted)}
+.rev-aviso{color:var(--crit);font-weight:600}
+@media (max-width:560px){ .lote-rev li{grid-template-columns:minmax(0,1fr)} }
 
 /* Resumo da nota finalizada */
 .resumo-nota{display:grid;gap:14px;border-left:5px solid var(--ok)}
