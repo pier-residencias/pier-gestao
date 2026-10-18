@@ -1,0 +1,80 @@
+
+1. Associação das linhas na tela (estoque E1)
+ok     U1.1  "FITA CREPE 48X50M" → Já cadastrado / t2 · medidas lidas: 48 mm, 50 m
+ok     U1.2  "PARAFUSO 8MM" → Item novo · será cadastrado / __novo · medidas lidas: 8 mm
+ok     U1.3  "DISJUNTOR 32A" → Item novo · será cadastrado / __novo · medidas lidas: 32 A
+ok     U1.4  "LAMPADA LED 15W" → Item novo · será cadastrado / __novo · medidas lidas: 15 W
+ok     U1.5  "LAMP LED BULBO 12W" → Já cadastrado / t6 · medidas lidas: 12 W
+ok     U1.6  "FITA CREPE" → Confira o item / (nada) · medidas lidas: nenhuma
+ok     U1.7  "REGISTRO 1/2"" → Item novo · será cadastrado / __novo · medidas lidas: 1/2"
+ok     U1.8  "CABO FLEX 2,5MM²" → Já cadastrado / t7 · medidas lidas: 2,5 mm²
+ok     U1.9  parafuso 6 mm aparece na lista marcado "medida diferente", sem estar selecionado
+ok     U1.10 conferência da linha mostra o material e a medida no estoque: "No estoque: Fita crepe 48mm 48 mm · 10 rolo agora"
+ok     U1.11 linha "Confira" sem pré-seleção bloqueia o Finalizar: Linha 6: escolha o material do estoque.
+
+2. Escolha manual com medida diferente (R-8)
+ok     U2.1  parafuso 8 mm → "Parafuso 6mm": Medida diferente; "No estoque: Parafuso 6mm 6 mm · 10 un agoraMedida diferente: 8 mm na nota, 6 mm no estoque. Escolha outro material ou co"
+ok     U2.2  pendência criada: "Linha 2: medida diferente — escolha outro material ou confirme."
+ok     U2.3  com "Confirmo: o material é este mesmo", a pendência da linha 2 sai
+ok     U2.4  voltar para "item novo" desfaz o conflito
+
+3. Confira resolvido, revisão final e registro
+ok     U3.1  sem pendências depois da escolha; botão "Finalizar"
+ok     U3.2  revisão mostra produto da nota, medidas, material, unidade e quantidade: "1FITA CREPE 48X50M48 mm50 mna nota: 4 RL → Fita crepe 48mm48 mmentra: +4 rolo · estoque 10 → 14"
+ok     U3.3  item novo na revisão: "2PARAFUSO 8MM8 mmna nota: 50 UN → Item novo: Parafuso 8mm8 mmentra: +50 un"
+ok     U3.4  botão de confirmação: "Confirmar e registrar 8 entradas e cadastrar 4 itens novos"
+ok     U3.5  alterar uma quantidade fecha a revisão (precisa revisar de novo)
+ok     U3.6  8 entradas gravadas no simulador; saldos: fita 48 mm 10→14, LED 12 W 10→20, fita 24 mm 10→13, cabo 10→110
+ok     U3.7  4 itens novos cadastrados com o nome da nota
+ok     T32   pedidos "registrar" com os mesmos campos de antes: data,fornecedor,itemId,nf,nfFotos,obs,qtd,responsavel,tipo,valorUnit; observação só "Na nota: …"
+ok     T32b  ações enviadas na finalização: nfEnviar, registrar, salvarItem (as mesmas de antes: anexo da nota, item novo e entradas)
+ok     U3.8  memória nova: automática para "Já cadastrado" sem mudança, "pessoa" para o "Confira" resolvido; a memória antiga não é escrita
+ok     U3.9  cada lembrança guarda material, data e medida; nenhum usuário, sessão ou senha
+
+4. Duas linhas da nota no mesmo material (T22)
+ok     T22.1 as duas linhas apontam para a fita 24 mm e as duas avisam
+ok     T22.2 Finalizar bloqueado: "Linha 2: mesmo material da linha 1 — troque ou confirme."
+ok     T22.3 "São o mesmo material" libera
+ok     T22.4 trocar o material de uma das linhas também tira o aviso (e mostra a medida diferente da troca)
+ok     T22.5 registradas as duas (10+2+3 = 15) e a exceção confirmada não vira memória
+
+5. Memória local (T16–T21)
+ok     T16   memória antiga errada (48 mm → 24 mm) ignorada: "Escolha anterior ignorada: medida diferente."; escolhido t2
+ok     T17   memória nova de pessoa, compatível: Escolhido antes · "Escolhido antes em 02/10/2026 neste computador. Esquecer esta escolha"
+ok     T18   memória automática: sugerida no topo da lista, sem pré-seleção
+ok     T19   memória para material excluído ignorada; regra escolhe o parafuso 6 mm (Já cadastrado)
+ok     T16b  memória antiga certa nunca vira "Escolhido antes": só dica, a regra decide
+ok     T21a  "Esquecer esta escolha" apaga só aquela lembrança; a linha volta para as regras; memória antiga intacta
+ok     T21b  "Escolhas lembradas neste computador (4)"; lista com 2 lembranças novas; "Esquecer todas" apaga as novas e mantém as antigas sem a segunda confirmação
+ok     T21c  com a caixa "Apagar também as escolhas antigas", a memória antiga sai; o link some
+
+6. Notas repetidas (T23–T30)
+ok     T23   nota lançada no mês atual: bloco vermelho e Finalizar bloqueado
+ok     T23b  a linha que já entrou vem desmarcada; a outra continua marcada
+ok     T27a  bloqueado com número errado, com motivo curto e sem a caixa marcada; liberado com tudo certo
+ok     T27b  só a linha marcada entrou, com o motivo na observação: "Na nota: LUVA DE RASPA · Nota já lançada antes, confirmado: segunda entrega da mesma nota"
+ok     T24   nota de 2026-07 achada pela leitura extra (meses pedidos: 2026-07, 2026-08, 2026-09)
+ok     T24b  a leitura extra não troca o mês que a tela mostra
+ok     T25   mesmo número de outro fornecedor: aviso amarelo, sem bloqueio
+ok     T26   nota com entrada estornada: sem bloqueio, linha marcada
+ok     T28a  falha simulada na 3ª: "2 de 5 registradas. Corrija o item marcado e clique de novo para registrar o que falta."
+ok     T28b  página recarregada: linhas 1 e 2 vêm desmarcadas ("Já lançada"), 3 a 5 marcadas; nota bloqueada até confirmar
+ok     T28c  cada uma das 5 linhas entrou exatamente uma vez ({"t9":1,"t10":1,"t14":1,"t11":1,"t12":1})
+ok     T29a  falha na leitura: aviso vermelho e Finalizar bloqueado
+ok     T29b  "Tentar de novo" com a leitura funcionando libera
+ok     T30a  sem número: Finalizar bloqueado
+ok     T30b  com o número digitado, confere a repetição e libera
+
+7. Perfil sem permissão de cadastrar item, desempenho e tela de celular
+ok     U7.1  sem permissão de cadastrar: "Escolha o item", sem pré-seleção do parafuso 6 mm
+ok     T33   no navegador: 30 linhas × 300 materiais em 37 ms (limite 200 ms)
+ok     U7.2  celular (390 px): sem rolagem lateral (390 px)
+
+8. Regressão: demais recursos do site
+ok     R1    abas abertas sem erro: painel, itens, historico, emprestimos, dashboard, registrar
+ok     R2    saída comum pelo formulário: luva 10 → 9
+ok     R3    entrada sem nota usa o formulário normal: água sanitária 10 → 12
+ok     R4    nenhum erro de JavaScript em todos os testes
+ok     T35   nenhuma chamada a endereço externo (bloqueadas: 0)
+
+62 ok · 0 falhas

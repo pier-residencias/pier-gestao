@@ -1,0 +1,96 @@
+Arquivo testado: nfe.js (regras novas)
+
+6.1 Identificação e associação
+ok     T01   E2 "FITA CREPE 24X50M" → ok / Fita crepe 24mm
+ok     T02   E2 "FITA CREPE 48X50M" → novo / item novo
+ok     T03   E2 "FITA CREPE 18X50M" → novo / item novo
+ok     T04   E1 "FITA CREPE 48X50M" → ok / Fita crepe 48mm
+ok     T05   E1 "PARAFUSO 8MM" → novo / item novo
+ok     T06   E1 "PARAF SEXT 6 MM" → ok / Parafuso 6mm
+ok     T07   E1 "DISJUNTOR 32A" → novo / item novo
+ok     T08   E1 "DISJ DIN 20A CURVA C" → ok / Disjuntor 20A
+ok     T09   E1 "LAMPADA LED 15W" → novo / item novo
+ok     T10   E1 "LAMP LED BULBO 12W" → ok / Lâmpada LED 12W
+ok     T11   E1 "LAMPADA LED 9 W" → ok / Lâmpada LED 9W
+ok     T12a  E1 "CABO FLEX 4MM2" → novo / item novo
+ok     T12b  E1 "CABO FLEX 2,5MM²" → ok / Cabo flexível 2,5mm²
+ok     T13   E3 "FITA CREPE 24X50M" → confira / (nada selecionado)
+ok     T14   E1 "REGISTRO 1/2"" → novo / item novo
+ok     T15   E1 "FITA CREPE 2,4CM" → ok / Fita crepe 24mm
+
+Mesmo produto com medida escrita de outro jeito
+ok     D01   "FITA CREPE 24MM X 50M" → ok / Fita crepe 24mm
+ok     D02   "FITA CREPE 24 MM" → ok / Fita crepe 24mm
+ok     D03   "FITA CREPE 48MMX50M" → ok / Fita crepe 48mm
+ok     D04   "FITA CREPE 4,8CM X 50M" → ok / Fita crepe 48mm
+ok     D05   "LAMPADA LED 12 W BIVOLT" → ok / Lâmpada LED 12W
+ok     D06   "LAMPADA LED 9W 6500K E27" → ok / Lâmpada LED 9W
+ok     D07   "DISJUNTOR DIN 20 A" → ok / Disjuntor 20A
+ok     D08   "PARAFUSO 6 MM" → ok / Parafuso 6mm
+ok     D09   "REGISTRO 3/4 POL" → ok / Registro 3/4"
+ok     D10   "REGISTRO 3/4"" → ok / Registro 3/4"
+ok     D11   "CABO FLEXIVEL 2,5 MM2" → ok / Cabo flexível 2,5mm²
+ok     D12   "CABO FLEXIVEL 2,5MM 100M" → ok / Cabo flexível 2,5mm²
+ok     D13   "SILICONE INCOLOR 280 G" → ok / Silicone incolor 280g
+ok     D14   "AGUA SANITARIA 1 LITRO" → ok / Água sanitária 1L
+ok     D15   "AGUA SANITARIA 1000ML" → ok / Água sanitária 1L
+ok     D16   "BUCHA NYLON 8 MM" → ok / Bucha 8mm
+ok     D17   "LUVA DE RASPA" → ok / Luva de raspa
+ok     D18   "VASSOURA PIACAVA" → ok / Vassoura de piaçava
+ok     D19   "LAMP. LED 9W" → ok / Lâmpada LED 9W
+ok     D20   "FITA CREPE 24X50 M" → ok / Fita crepe 24mm
+ok     D-ERR nenhuma escolha automática errada (0)
+ok     D-90  pelo menos 90% viram "Já cadastrado" (100%)
+
+Sem medida identificável ou leitura incompleta
+ok     S01   "FITA CREPE" → confira / (nada selecionado)
+ok     S02   "LAMPADA LED" → confira / (nada selecionado)
+ok     S03   "F1TA CREP3 24X5OM" → confira / (nada selecionado)
+ok     S04   "DISJUNTOR" → confira / (nada selecionado)
+ok     S05   "PARAFUSO" → confira / (nada selecionado)
+ok     S06   "SILICONE" → confira / (nada selecionado)
+
+Leitura das características
+ok     C01   "FITA CREPE 24X50M" → medida:24 mm*, medida:50 m
+ok     C02   "Fita crepe 24mm" → medida:24 mm*
+ok     C03   "FITA CREPE 2,4CM" → medida:24 mm*
+ok     C04   "FITA CREPE 48MMX50M" → medida:48 mm*, medida:50 m
+ok     C05   "PARAFUSO 8MM" → medida:8 mm*
+ok     C06   "PARAF SEXT 6 MM" → medida:6 mm*
+ok     C07   "DISJUNTOR 32A" → corrente:32 A*
+ok     C08   "Disjuntor C16" → corrente:16 A*
+ok     C09   "LAMPADA LED 15W" → potencia:15 W*
+ok     C10   "LAMPADA LED 12 W BIVOLT" → potencia:12 W*, tensao:127/220 V
+ok     C11   "LAMPADA 9W 220V" → potencia:9 W*, tensao:220 V
+ok     C12   "CABO FLEX 4MM2" → secao:4 mm²*
+ok     C13   "Cabo flexível 2,5mm²" → secao:2,5 mm²*
+ok     C14   "CABO FLEXIVEL 2,5MM 100M" → secao:2,5 mm²*, medida:100 m
+ok     C15   "REGISTRO 1/2"" → pol:1/2"*
+ok     C16   "Registro geral 2 1/2"" → pol:2 1/2"*
+ok     C17   "REGISTRO 3/4 POL" → pol:3/4"*
+ok     C18   "Registro 2"" → pol:2"*
+ok     C19   "AGUA SANITARIA 1 LITRO" → volume:1 L*
+ok     C20   "AGUA SANITARIA 1000ML" → volume:1 L*
+ok     C21   "SILICONE INCOLOR 280 G" → massa:280 g*
+ok     C22   "CIMENTO 50KG" → massa:50 kg*
+ok     C23   "Caixinha 4x2" → medida:4*, medida:2
+ok     C24   "RALO 15X15CM" → medida:150 mm*, medida:150 mm
+ok     C25   "Trena 30m" → medida:30 m*
+ok     C26   "MANGUEIRA 1/2 50M" → pol:1/2"*, medida:50 m
+ok     C27   "Adaptador 60 x 2"" → pol:2"*
+ok     C28   "LUVA DE RASPA" → (nenhuma)
+ok     C29   "COLA BRANCA" → (nenhuma)
+
+6.2 Memória local (regras de uso)
+ok     T16   memória antiga 48 mm → fita 24 mm: ignorada ("medida diferente"), escolha Fita crepe 48mm
+ok     T17   memória v2 de pessoa, compatível → lembrado / Fita crepe 24mm
+ok     T18   memória v2 automática → confira, sem pré-seleção, sugerida no topo
+ok     T19   memória v2 para material excluído → ignorada ("o material foi excluído ou é de outro setor"), ok / Fita crepe 24mm
+ok     T20   material renomeado de 24 para 48 mm → lembrança cai ("medida diferente")
+ok     T16b  memória antiga correta → nunca "lembrado"; a regra decide (ok)
+ok     T16c  memória antiga aponta outro material compatível → "Confira" sem pré-seleção (confira)
+ok     R4a   código do fornecedor igual → ok / Lâmpada LED 12W
+ok     R4b   código igual mas potência diferente → não associa (novo)
+ok     T33   30 linhas × 300 materiais em 135 ms (limite 200 ms no Node; no navegador é medido no teste de tela)
+
+83 ok · 0 falhas

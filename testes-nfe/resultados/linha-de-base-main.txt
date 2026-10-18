@@ -1,0 +1,53 @@
+Arquivo testado: nfe.js da main (58f3964) (regra antiga — linha de base)
+
+6.1 Identificação e associação
+ok     T01   E2 "FITA CREPE 24X50M" → ok / Fita crepe 24mm
+FALHOU T02   E2 "FITA CREPE 48X50M" → confira / Fita crepe 24mm  → esperado novo / item novo
+FALHOU T03   E2 "FITA CREPE 18X50M" → confira / Fita crepe 24mm  → esperado novo / item novo
+ok     T04   E1 "FITA CREPE 48X50M" → ok / Fita crepe 48mm
+FALHOU T05   E1 "PARAFUSO 8MM" → ok / Parafuso 6mm  → esperado novo / item novo
+ok     T06   E1 "PARAF SEXT 6 MM" → ok / Parafuso 6mm
+FALHOU T07   E1 "DISJUNTOR 32A" → ok / Disjuntor 20A  → esperado novo / item novo
+ok     T08   E1 "DISJ DIN 20A CURVA C" → ok / Disjuntor 20A
+FALHOU T09   E1 "LAMPADA LED 15W" → confira / Lâmpada LED 9W  → esperado novo / item novo
+FALHOU T10   E1 "LAMP LED BULBO 12W" → confira / Lâmpada LED 12W  → esperado ok / Lâmpada LED 12W
+ok     T11   E1 "LAMPADA LED 9 W" → ok / Lâmpada LED 9W
+FALHOU T12a  E1 "CABO FLEX 4MM2" → ok / Cabo flexível 2,5mm²  → esperado novo / item novo
+ok     T12b  E1 "CABO FLEX 2,5MM²" → ok / Cabo flexível 2,5mm²
+FALHOU T13   E3 "FITA CREPE 24X50M" → ok / Fita crepe  → esperado confira / (nada selecionado)
+ok     T14   E1 "REGISTRO 1/2"" → novo / item novo
+FALHOU T15   E1 "FITA CREPE 2,4CM" → confira / Fita crepe 24mm  → esperado ok / Fita crepe 24mm
+
+Mesmo produto com medida escrita de outro jeito
+ok     D01   "FITA CREPE 24MM X 50M" → ok / Fita crepe 24mm
+ok     D02   "FITA CREPE 24 MM" → ok / Fita crepe 24mm
+ok     D03   "FITA CREPE 48MMX50M" → ok / Fita crepe 48mm
+FALHOU D04   "FITA CREPE 4,8CM X 50M" → novo / item novo  → esperado Fita crepe 48mm ou "Confira" sem pré-seleção
+ok     D05   "LAMPADA LED 12 W BIVOLT" → confira / Lâmpada LED 12W
+ok     D06   "LAMPADA LED 9W 6500K E27" → ok / Lâmpada LED 9W
+ok     D07   "DISJUNTOR DIN 20 A" → ok / Disjuntor 20A
+ok     D08   "PARAFUSO 6 MM" → ok / Parafuso 6mm
+ok     D09   "REGISTRO 3/4 POL" → ok / Registro 3/4"
+ok     D10   "REGISTRO 3/4"" → ok / Registro 3/4"
+ok     D11   "CABO FLEXIVEL 2,5 MM2" → ok / Cabo flexível 2,5mm²
+ok     D12   "CABO FLEXIVEL 2,5MM 100M" → ok / Cabo flexível 2,5mm²
+ok     D13   "SILICONE INCOLOR 280 G" → ok / Silicone incolor 280g
+ok     D14   "AGUA SANITARIA 1 LITRO" → ok / Água sanitária 1L
+ok     D15   "AGUA SANITARIA 1000ML" → ok / Água sanitária 1L
+ok     D16   "BUCHA NYLON 8 MM" → ok / Bucha 8mm
+ok     D17   "LUVA DE RASPA" → ok / Luva de raspa
+ok     D18   "VASSOURA PIACAVA" → ok / Vassoura de piaçava
+ok     D19   "LAMP. LED 9W" → ok / Lâmpada LED 9W
+ok     D20   "FITA CREPE 24X50 M" → ok / Fita crepe 24mm
+ok     D-ERR nenhuma escolha automática errada (0)
+ok     D-90  pelo menos 90% viram "Já cadastrado" (90%)
+
+Sem medida identificável ou leitura incompleta
+FALHOU S01   "FITA CREPE" → confira / Fita crepe 24mm  → esperado confira
+FALHOU S02   "LAMPADA LED" → confira / Lâmpada LED 9W  → esperado confira
+ok     S03   "F1TA CREP3 24X5OM" → novo / item novo
+FALHOU S04   "DISJUNTOR" → novo / item novo  → esperado confira
+FALHOU S05   "PARAFUSO" → novo / item novo  → esperado confira
+FALHOU S06   "SILICONE" → novo / item novo  → esperado confira ou ok
+
+29 ok · 15 falhas

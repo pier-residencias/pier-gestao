@@ -1,0 +1,12 @@
+ok     T31a  trecho de leitura (308 linhas: montarLinhas, lerDanfe, foto, sugerir, parecido, cobertura) idêntico ao da main
+ok     T31b  todas as funções antigas continuam exportadas: montarLinhas, lerDanfe, lerFotoDanfe, numerosDaLinha, descricaoDaLinha, regiaoProdutos, sugerir, parecido, cobertura
+ok     T31c  lerDanfe: mesmo resultado (665 caracteres)
+ok     T31d  lerFotoDanfe: mesmo resultado (521 caracteres)
+ok     T31e  numerosDaLinha: mesmo resultado (216 caracteres)
+ok     T31f  descricaoDaLinha: mesmo resultado (218 caracteres)
+ok     T31g  montarLinhas: mesmo resultado (33 caracteres)
+ok     T31h  parecido/cobertura: mesmo resultado (62 caracteres)
+ok     T31i  sugerir (usado para copiar a categoria do item novo): mesmo resultado (38 caracteres)
+ok     T31j  PDF fictício lido: nota 12345, 4 itens, descrição quebrada em duas linhas juntada
+
+10 ok · 0 falhas
