@@ -114,7 +114,10 @@ function criarAmbiente(cenario) {
   const U = sheets.Usuarios, HU = U.rows[0], cu = n => HU.indexOf(n);
   const conta = (u, nome, p, perfil) => { const r = new Array(HU.length).fill(""); r[cu("Usuário")] = u; r[cu("Nome")] = nome; r[cu("Senha")] = p; r[cu("Perfil")] = perfil; r[cu("Ativo")] = "Sim"; return r; };
   U.rows.splice(1);
-  U.rows.push(conta("teste.adm", "Pessoa de Teste Adm", "Teste#Adm2026", "Administração"), conta("teste.manut", "Pessoa de Teste Manut", "Teste#Man2026", "Manutenção"));
+  U.rows.push(conta("teste.adm", "Pessoa de Teste Adm", "Teste#Adm2026", "Administração"), conta("teste.manut", "Pessoa de Teste Manut", "Teste#Man2026", "Manutenção"),
+    conta("teste.saida", "Pessoa de Teste Saida", "Teste#Sai2026", "Teste Somente Saída"));
+  // perfil fictício só de saída (para o teste de permissões), gravado pela própria função do Codigo.gs
+  ctx.salvarPerfil({ nome: "Teste Somente Saída", perms: { painel: true, itens_ver: true, historico_ver: true, registrar_saida: true, setor_manutencao: true } });
   ctx.autorizar(); // converte as senhas de teste em hash e confere as abas
   // materiais fictícios do cenário
   const I = sheets.Itens, HI = I.rows[0], ci = n => HI.indexOf(n);
@@ -141,6 +144,7 @@ function doPost(corpo) {
     const n = pedidos.filter(p => p.acao === "registrar").length;
     if (n === falhas.registrarNa) return JSON.stringify({ ok: false, erro: "Falha simulada no registro (teste)." });
   }
+  if (falhas.nfEnviar && req.acao === "nfEnviar") return JSON.stringify({ ok: false, erro: "Falha simulada no envio da nota (teste)." });
   if (falhas.leituraExtra && req.acao === "dados" && Array.isArray(req.meses) && req.meses.length && !req.meses.includes(amb.ctx.hoje().slice(0, 7)))
     return JSON.stringify({ ok: false, erro: "Falha simulada na leitura (teste)." });
   return amb.ctx.doPost({ postData: { contents: corpo } }).s;
@@ -175,7 +179,13 @@ if (require.main === module) {
       try {
         if (q.method === "GET") out = amb.ctx.doGet().s;
         else if (q.method === "POST" && q.url.startsWith("/controle")) out = JSON.stringify(controle(JSON.parse(b || "{}")));
-        else if (q.method === "POST") out = doPost(b);
+        else if (q.method === "POST") {
+          // atraso simulado só na leitura extra (meses fora do mês atual), para testar o limite de tempo da tela
+          let req = {}; try { req = JSON.parse(b); } catch (e) {}
+          const extra = req.acao === "dados" && Array.isArray(req.meses) && req.meses.length && !req.meses.includes(amb.ctx.hoje().slice(0, 7));
+          if (falhas.atrasoLeitura && extra) { const espera = falhas.atrasoLeitura; return setTimeout(() => { s.writeHead(200, { "content-type": "application/json" }); s.end(doPost(b)); }, espera); }
+          out = doPost(b);
+        }
         else { s.writeHead(204); return s.end(); }
       } catch (e) { out = JSON.stringify({ ok: false, erro: "simulador: " + e.message }); }
       s.writeHead(200, { "content-type": "application/json" }); s.end(out);

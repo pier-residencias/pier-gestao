@@ -15,6 +15,7 @@ Google, a planilha oficial, a homologação ou qualquer endereço da internet.
 | `simulador.js` | Apps Script simulado: roda o `apps-script/Codigo.gs` desta branch sobre uma planilha falsa em memória. |
 | `notas.js` | Gera PDFs de DANFE fictícios. |
 | `tela.test.js` | O site no Chromium, com o simulador, as notas fictícias e a rede travada para qualquer outro endereço. |
+| `compatibilidade.js` | Aplica o código desta branch em cópias locais temporárias da `liberacao-inventario` e da `otimizacao-consulta`, roda as três suítes e apaga as cópias (nada é enviado). |
 | `resultados/` | Saída da última execução, a linha de base da regra antiga e as capturas de tela. |
 
 ## Como rodar
@@ -27,4 +28,5 @@ node testes-nfe/funcoes.test.js                 # regras novas
 node testes-nfe/funcoes.test.js caminho/nfe.js  # mesma matriz com um nfe.js antigo (linha de base)
 node testes-nfe/regressao.test.js               # compara com git show origin/main:nfe.js
 node testes-nfe/tela.test.js                    # sobe o simulador e o site sozinho (portas 8795 e 8796)
+node testes-nfe/compatibilidade.js              # T34 em cópias locais temporárias
 ```

@@ -45,6 +45,7 @@ const controle = async c => (await (await fetch(`http://127.0.0.1:${P_SIM}/contr
     opc = opc || {};
     if (pagina) await pagina.context().close();
     const ctx = await browser.newContext({ viewport: opc.viewport || { width: 1280, height: 900 } });
+    if (opc.relogio) await ctx.clock.install();
     if (opc.memoria) await ctx.addInitScript(m => { if (!sessionStorage.getItem("mem-ok")) { Object.keys(m).forEach(k => localStorage.setItem(k, m[k])); sessionStorage.setItem("mem-ok", "1"); } }, opc.memoria);
     await ctx.route("**/*", async route => {
       const u = route.request().url();
@@ -74,6 +75,7 @@ const controle = async c => (await (await fetch(`http://127.0.0.1:${P_SIM}/contr
     await p.selectOption("#l-setor", "Manutenção");
     await p.fill("#l-usuario", usuario || "teste.adm"); await p.fill("#l-senha", senha || "Teste#Adm2026");
     await p.click("#l-entrar");
+    await p.waitForSelector("#login", { state: "hidden", timeout: 20000 });
     await p.waitForSelector('[data-tab="registrar"]:not([hidden])', { timeout: 20000 });
   }
   async function abrirNota(p, nota) {
@@ -93,7 +95,8 @@ const controle = async c => (await (await fetch(`http://127.0.0.1:${P_SIM}/contr
       classes: el.className, car: [...el.querySelectorAll(".lote-top .car")].map(c => c.textContent),
       opcoes: [...sel.querySelectorAll('optgroup[label="Mais parecidos"] option')].map(o => o.value + "=" + o.textContent) };
   }, i);
-  const pend = p => p.evaluate(() => [...document.querySelectorAll("#lt-pend li")].map(li => li.textContent));
+  const mensagens = new Set();
+  const pend = async p => { const l = await p.evaluate(() => [...document.querySelectorAll("#lt-pend li")].map(li => li.textContent)); l.forEach(m => mensagens.add(m.replace(/\d+/g, "N"))); return l; };
   const botao = p => p.evaluate(() => ({ texto: document.querySelector("#lt-ok").textContent, desab: document.querySelector("#lt-ok").disabled }));
   async function finalizarEConfirmar(p) {
     await p.click("#lt-ok");
@@ -366,6 +369,186 @@ const controle = async c => (await (await fetch(`http://127.0.0.1:${P_SIM}/contr
     await p.screenshot({ path: path.join(SAIDA, "07-celular.png"), fullPage: true });
     ver(largura.doc <= largura.tela + 1, "U7.2", `celular (390 px): sem rolagem lateral (${largura.doc} px)`);
 
+
+    // ================= 9. revisão A3 =================
+    titulo("9. Revisão A3: cancelamentos, tentativas após falha, limites e especificações");
+    const notaC = { numero: 8001, data: HOJE, itens: [{ desc: "FITA CREPE 24X50M", un: "RL", qtd: 2, vu: 9 }, { desc: "FITA CREPE 24MM X 50M", un: "RL", qtd: 3, vu: 9.5 }, { desc: "PARAFUSO 8MM", un: "UN", qtd: 20, vu: 0.2 }] };
+    await controle({ cmd: "reiniciar", cenario: "E1" });
+    p = await novaPagina(); await entrar(p);
+    const base = (await pedidos()).length, movs0 = (await estado()).movs.length;
+    await abrirNota(p, notaC);
+    await p.click("#lt-no");
+    const fechou1 = await p.locator("#modal").isHidden();
+    await p.click("#m-nf-ler"); await p.waitForSelector("#f-lote"); await p.keyboard.press("Escape");
+    const fechou2 = await p.locator("#modal").isHidden();
+    await p.click("#m-nf-ler"); await p.waitForSelector("#f-lote"); await p.mouse.click(5, 5);
+    const fechou3 = await p.locator("#modal").isHidden();
+    await p.click("#m-nf-ler"); await p.waitForSelector("#f-lote");
+    await p.check('#f-lote .lote-item[data-i="1"] [data-k=mesmo]');
+    await p.click("#lt-ok"); await p.waitForSelector("#lt-rev:not([hidden])");
+    await p.click("#lt-voltar");
+    const voltou = await p.locator("#lt-rev").isHidden() && (await botao(p)).texto === "Finalizar";
+    await p.click("#lt-no");
+    const semGravar = (await pedidos()).slice(base).filter(x => ["registrar", "salvarItem", "nfEnviar"].includes(x.acao)).length === 0 && (await estado()).movs.length === movs0;
+    const memVazia = await p.evaluate(() => localStorage.getItem("nf-mapa-v2") === null);
+    ver(fechou1 && fechou2 && fechou3 && voltou && semGravar && memVazia, "A3.1", "Cancelar, Esc, clique fora e \"Voltar e corrigir\": nada gravado na planilha, nada enviado, memória intacta");
+    // fechar com a conferência de repetição ainda em andamento
+    await controle({ cmd: "falhar", falhas: { atrasoLeitura: 3000 } });
+    p = await novaPagina(); await entrar(p);
+    await p.click('[data-tab="registrar"]'); await p.click('[data-tipo="entrada"]');
+    await p.setInputFiles("#m-nf-arq", { name: "nota-ficticia-8002.pdf", mimeType: "application/pdf", buffer: await gerarNota({ numero: 8002, data: mesMenos(2) + "-03", itens: notaC.itens.slice(0, 1) }) });
+    await p.waitForSelector("#f-lote");
+    const conferindo = /Conferindo/.test(await p.textContent("#lt-rep"));
+    await p.click("#lt-no"); await p.waitForTimeout(3800);
+    ver(conferindo && await p.locator("#modal").isHidden() && (await pedidos()).slice(base).filter(x => ["registrar", "salvarItem"].includes(x.acao)).length === 0 && !errosPagina.length, "A3.2", "fechar durante \"Conferindo…\": a resposta que chega depois é ignorada, sem erro e sem gravação");
+    await controle({ cmd: "falhar", falhas: {} });
+    // nota repetida: "Fechar sem lançar" não grava
+    await controle({ cmd: "semear", movs: [{ itemId: "t1", qtd: 2, data: HOJE, fornecedor: FORNECEDOR, nf: "8003", obs: "Na nota: FITA CREPE 24X50M" }] });
+    p = await novaPagina(); await entrar(p);
+    await abrirNota(p, { numero: 8003, data: HOJE, itens: notaC.itens.slice(0, 1) });
+    await p.click("#lt-rep-fechar");
+    ver(await p.locator("#modal").isHidden() && (await pedidos()).slice(base).filter(x => x.acao === "registrar").length === 0, "A3.3", "nota repetida → \"Fechar sem lançar\": nada gravado");
+
+    // clique duplo na confirmação: cada linha entra uma vez só
+    await controle({ cmd: "reiniciar", cenario: "E1" });
+    p = await novaPagina(); await entrar(p);
+    await abrirNota(p, { numero: 8100, data: HOJE, itens: [{ desc: "LUVA DE RASPA", un: "PAR", qtd: 1, vu: 7 }, { desc: "VASSOURA PIACAVA", un: "UN", qtd: 1, vu: 15 }, { desc: "BUCHA NYLON 8 MM", un: "UN", qtd: 10, vu: 0.1 }] });
+    await p.click("#lt-ok"); await p.waitForSelector("#lt-rev:not([hidden])");
+    const b0 = (await pedidos()).length;
+    await p.evaluate(() => { const b = document.querySelector("#lt-ok"); b.click(); b.click(); document.querySelector("#f-lote").requestSubmit(); });
+    await p.waitForSelector("#m-resumo:not([hidden])", { timeout: 60000 });
+    ver((await pedidos()).slice(b0).filter(x => x.acao === "registrar").length === 3 && (await estado()).movs.filter(m => String(m.nf) === "8100").length === 3, "A3.4", "clique duplo / envio repetido em \"Confirmar e registrar\": 3 linhas, 3 entradas (nenhuma em dobro)");
+    // "Lançar outra nota" volta à tela de registro limpa
+    await p.click("#rs-outra");
+    ver(await p.locator("#f-mov").isVisible() && (await p.inputValue("#m-nf")) === "", "A3.5", "\"Lançar outra nota\" volta para o formulário limpo");
+
+    // confirmação de medida diferente vale só para o material confirmado
+    await controle({ cmd: "reiniciar", cenario: "E1" });
+    p = await novaPagina(); await entrar(p);
+    await abrirNota(p, notaC);
+    await p.selectOption('#f-lote .lote-item[data-i="2"] [data-k=item]', "t3");
+    await p.check('#f-lote .lote-item[data-i="2"] [data-k=confConflito]');
+    const okConf = !(await pend(p)).some(x => /Linha 3: medida/.test(x));
+    await p.selectOption('#f-lote .lote-item[data-i="2"] [data-k=item]', "t1");
+    const pedeDeNovo = (await pend(p)).some(x => /Linha 3: medida diferente/.test(x)) && !(await p.isChecked('#f-lote .lote-item[data-i="2"] [data-k=confConflito]'));
+    ver(okConf && pedeDeNovo, "A3.6", "trocar para outro material com medida diferente exige nova confirmação (a anterior não vale)");
+    // saldo previsto acumulado
+    await p.selectOption('#f-lote .lote-item[data-i="2"] [data-k=item]', "__novo");
+    await p.check('#f-lote .lote-item[data-i="1"] [data-k=mesmo]');
+    await p.click("#lt-ok"); await p.waitForSelector("#lt-rev:not([hidden])");
+    const revC = await p.evaluate(() => [...document.querySelectorAll("#lt-rev li")].map(li => li.textContent.replace(/\s+/g, " ").trim()));
+    ver(/estoque 10 → 12/.test(revC[0]) && /estoque 12 → 15/.test(revC[1]) && /mesmo material de outra linha/.test(revC[1]) && /estoque novo: 0 → 20/.test(revC[2]), "A3.7", `saldo previsto acumulado: "${(revC[0].match(/estoque [^·]*/) || [""])[0]}" e "${(revC[1].match(/estoque [^·]*/) || [""])[0]}"; item novo "${(revC[2].match(/estoque [^·]*/) || [""])[0]}"`);
+    await p.screenshot({ path: path.join(SAIDA, "09-revisao-saldo-acumulado.png") });
+    await p.locator("#lt-rev").screenshot({ path: path.join(SAIDA, "09b-revisao-detalhe.png") });
+
+    // falha depois de cadastrar o item novo: a nova tentativa não cadastra outro
+    await controle({ cmd: "reiniciar", cenario: "E1" });
+    await controle({ cmd: "falhar", falhas: { registrarNa: 1 } });
+    p = await novaPagina(); await entrar(p);
+    await abrirNota(p, { numero: 8200, data: HOJE, itens: [{ desc: "PARAFUSO 8MM", un: "UN", qtd: 20, vu: 0.2 }, { desc: "LUVA DE RASPA", un: "PAR", qtd: 1, vu: 7 }] });
+    await p.click("#lt-ok"); await p.waitForSelector("#lt-rev:not([hidden])"); await p.click("#lt-ok");
+    await p.waitForFunction(() => /registradas\. Corrija/.test(document.querySelector("#lt-msg").textContent), null, { timeout: 60000 });
+    const msgF = await p.textContent("#lt-msg");
+    await controle({ cmd: "falhar", falhas: {} });
+    await finalizarEConfirmar(p);
+    const st8200 = await estado();
+    ver(/^0 de 2 registradas/.test(msgF) && st8200.itens.filter(i => i.nome === "Parafuso 8mm").length === 1 && st8200.movs.filter(m => String(m.nf) === "8200").length === 2, "A3.8", `falha logo depois de cadastrar o item novo ("${msgF.slice(0, 22)}…"): na nova tentativa, 1 item "Parafuso 8mm" só e 2 entradas`);
+    const resumo8200 = await p.textContent("#m-resumo");
+    ver(/1 item novo cadastrado/.test(resumo8200), "A3.9", "o resumo final ainda conta o item novo criado na primeira tentativa");
+
+    // falha no envio do anexo: nenhuma entrada é gravada; a nova tentativa funciona
+    await controle({ cmd: "reiniciar", cenario: "E1" });
+    await controle({ cmd: "falhar", falhas: { nfEnviar: true } });
+    p = await novaPagina(); await entrar(p);
+    await abrirNota(p, { numero: 8300, data: HOJE, itens: [{ desc: "LUVA DE RASPA", un: "PAR", qtd: 1, vu: 7 }] });
+    await p.click("#lt-ok"); await p.waitForSelector("#lt-rev:not([hidden])"); await p.click("#lt-ok");
+    await p.waitForFunction(() => /Falha simulada no envio/.test(document.querySelector("#lt-msg").textContent), null, { timeout: 30000 });
+    const nada = (await pedidos()).filter(x => x.acao === "registrar").length === 0 && !(await botao(p)).desab;
+    await controle({ cmd: "falhar", falhas: {} });
+    await finalizarEConfirmar(p);
+    ver(nada && (await estado()).movs.filter(m => String(m.nf) === "8300").length === 1, "A3.10", "falha no envio da nota: a mensagem aparece, nada é registrado; a nova tentativa registra 1 entrada");
+
+    // depois de uma falha no meio, mudar a data reconfere a nota sem contar as entradas da própria tela
+    await controle({ cmd: "reiniciar", cenario: "E1" });
+    await controle({ cmd: "falhar", falhas: { registrarNa: 2 } });
+    p = await novaPagina(); await entrar(p);
+    await abrirNota(p, { numero: 8400, data: HOJE, itens: [{ desc: "LUVA DE RASPA", un: "PAR", qtd: 1, vu: 7 }, { desc: "VASSOURA PIACAVA", un: "UN", qtd: 1, vu: 15 }, { desc: "BUCHA NYLON 8 MM", un: "UN", qtd: 10, vu: 0.1 }] });
+    await p.click("#lt-ok"); await p.waitForSelector("#lt-rev:not([hidden])"); await p.click("#lt-ok");
+    await p.waitForFunction(() => /registradas\. Corrija/.test(document.querySelector("#lt-msg").textContent), null, { timeout: 60000 });
+    await controle({ cmd: "falhar", falhas: {} });
+    await p.fill("#lt-data", mesMenos(1) + "-28"); await p.locator("#lt-data").dispatchEvent("change");
+    await p.waitForFunction(() => !/Conferindo/.test(document.querySelector("#lt-rep").textContent), null, { timeout: 30000 });
+    const repProprio = await p.textContent("#lt-rep");
+    ver(!/já foi lançada/.test(repProprio) && !(await botao(p)).desab, "A3.11", "a entrada que a própria tela acabou de gravar não conta como nota repetida");
+    await finalizarEConfirmar(p);
+    ver((await estado()).movs.filter(m => String(m.nf) === "8400").length === 3, "A3.12", "as 3 linhas entraram, cada uma uma vez");
+
+    // limite de tempo da leitura extra (relógio do navegador adiantado; sem esperar 45 s de verdade)
+    await controle({ cmd: "reiniciar", cenario: "E1" });
+    await controle({ cmd: "falhar", falhas: { atrasoLeitura: 15000 } });
+    p = await novaPagina({ relogio: true }); await entrar(p);
+    await p.click('[data-tab="registrar"]'); await p.click('[data-tipo="entrada"]');
+    await p.setInputFiles("#m-nf-arq", { name: "nota-ficticia-8500.pdf", mimeType: "application/pdf", buffer: await gerarNota({ numero: 8500, data: mesMenos(2) + "-03", itens: [{ desc: "LUVA DE RASPA", un: "PAR", qtd: 1, vu: 7 }] }) });
+    await p.waitForSelector("#f-lote");
+    await p.waitForFunction(() => /Conferindo/.test(document.querySelector("#lt-rep").textContent));
+    const pConf = await pend(p);
+    await p.clock.fastForward(46000);
+    await p.waitForFunction(() => /Não foi possível conferir/.test(document.querySelector("#lt-rep").textContent), null, { timeout: 10000 });
+    const pFalha = await pend(p);
+    ver(pConf.some(x => /Aguarde: conferindo/.test(x)) && pFalha.some(x => /Não foi possível conferir/.test(x)) && /demorou demais/.test(await p.textContent("#lt-rep")) && (await botao(p)).desab, "A3.13", "sem resposta em 45 s: \"A planilha demorou demais para responder\", Finalizar bloqueado com \"Tentar de novo\"");
+    await controle({ cmd: "falhar", falhas: {} });
+    await p.waitForTimeout(15500);
+
+    // mensagens de quantidade, valor e nenhuma linha marcada
+    await controle({ cmd: "reiniciar", cenario: "E1" });
+    p = await novaPagina(); await entrar(p);
+    await abrirNota(p, { numero: 8550, data: HOJE, itens: [{ desc: "LUVA DE RASPA", un: "PAR", qtd: 1, vu: 7 }, { desc: "VASSOURA PIACAVA", un: "UN", qtd: 1, vu: 15 }] });
+    await p.fill('#f-lote .lote-item[data-i="0"] [data-k=qtd]', "0");
+    await p.fill('#f-lote .lote-item[data-i="1"] [data-k=valor]', "abc");
+    const pQV = await pend(p);
+    await p.uncheck('#f-lote .lote-item[data-i="0"] [data-k=usar]'); await p.uncheck('#f-lote .lote-item[data-i="1"] [data-k=usar]');
+    const pNada = await pend(p), bNada = await botao(p);
+    ver(pQV.includes("Linha 1: quantidade inválida.") && pQV.includes("Linha 2: valor inválido.") && pNada.includes("Nenhuma linha marcada.") && bNada.desab && bNada.texto === "Nenhum item marcado", "A3.19", "quantidade inválida, valor inválido e nenhuma linha marcada travam o Finalizar com a mensagem certa");
+
+    // permissões: perfil sem entrada não vê a entrada nem as escolhas lembradas
+    await controle({ cmd: "reiniciar", cenario: "E1" });
+    p = await novaPagina({ memoria: { "nf-mapa": JSON.stringify({ "x|y": "t1" }) } }); await entrar(p, "teste.saida", "Teste#Sai2026");
+    await p.click('[data-tab="registrar"]');
+    ver(await p.locator('[data-tipo="entrada"]').isHidden() && await p.locator('[data-tipo="saida"]').isVisible() && await p.locator("#m-nf-mem").isHidden(), "A3.14", "perfil só de saída: sem botão de entrada e sem o link de escolhas lembradas");
+
+    // especificação diferente (grão, modelo) e marca 3M na tela
+    await controle({ cmd: "reiniciar", cenario: "E4" });
+    p = await novaPagina(); await entrar(p);
+    await abrirNota(p, { numero: 8600, data: HOJE, itens: [{ desc: "LIXA D AGUA GRAO 80", un: "FL", qtd: 10, vu: 2 }, { desc: "FITA ISOLANTE 3M 19MM X 20M", un: "RL", qtd: 2, vu: 12 }, { desc: "TRENA 3M", un: "UN", qtd: 1, vu: 20 }] });
+    e = await estadoLinha(p, 0);
+    ver(e.sel === "w5" && e.opcoes.some(o => /^w4=.*confira o número/.test(o)), "A3.15", "lixa grão 80 → \"Lixa d'água 80\"; a de 120 aparece marcada \"confira o número\"");
+    await p.selectOption('#f-lote .lote-item[data-i="0"] [data-k=item]', "w4");
+    e = await estadoLinha(p, 0);
+    ver(/Confira a especificação: a nota tem 80 e o material tem 120/.test(e.alerta), "A3.16", `escolher a lixa 120 mostra: "${(e.alerta.match(/Confira a especificação[^.]*\)/) || [""])[0]}"`);
+    e = await estadoLinha(p, 1);
+    const e2 = await estadoLinha(p, 2);
+    ver(e.sel === "w1" && e.car.join(",") === "19 mm,20 m" && e2.sel === "w2" && e2.car.join(",") === "3 m", "A3.17", `"FITA ISOLANTE 3M 19MM X 20M" → medidas ${e.car.join(", ")} (3M é a marca); "TRENA 3M" → ${e2.car.join(", ")}`);
+
+    // celular: os estados principais sem rolagem lateral
+    await controle({ cmd: "reiniciar", cenario: "E1" });
+    await controle({ cmd: "semear", movs: [{ itemId: "t9", qtd: 1, data: HOJE, fornecedor: FORNECEDOR, nf: "8700", obs: "Na nota: LUVA DE RASPA" }] });
+    p = await novaPagina({ viewport: { width: 390, height: 844 }, memoria: { "nf-mapa": JSON.stringify({ "lojaficticiademateriaistesteltda|fita crepe": "t2" }) } }); await entrar(p);
+    await abrirNota(p, { numero: 8700, data: HOJE, itens: [{ codigo: "C1", desc: "LUVA DE RASPA", un: "PAR", qtd: 1, vu: 7 }, { codigo: "C2", desc: "PARAFUSO 8MM", un: "UN", qtd: 10, vu: 0.2 }, { codigo: "C3", desc: "FITA CREPE", un: "RL", qtd: 1, vu: 9 }] });
+    const larg = async () => p.evaluate(() => Math.max(document.documentElement.scrollWidth, document.querySelector("#modal-box").scrollWidth) <= window.innerWidth + 1);
+    const l1 = await larg(); await p.screenshot({ path: path.join(SAIDA, "10-celular-repetida.png") });
+    await p.selectOption('#f-lote .lote-item[data-i="1"] [data-k=item]', "t3");
+    await p.locator('#f-lote .lote-item[data-i="1"]').scrollIntoViewIfNeeded();
+    const l2 = await larg(); await p.screenshot({ path: path.join(SAIDA, "11-celular-medida-diferente.png") });
+    await p.check('#f-lote .lote-item[data-i="1"] [data-k=confConflito]');
+    await p.selectOption('#f-lote .lote-item[data-i="2"] [data-k=item]', "t2");
+    await p.check("#lt-rep-ok"); await p.fill("#lt-rep-num", "8700"); await p.fill("#lt-rep-mot", "teste de tela no celular");
+    await p.click("#lt-ok"); await p.waitForSelector("#lt-rev:not([hidden])");
+    const l3 = await larg(); await p.locator("#lt-rev").screenshot({ path: path.join(SAIDA, "12-celular-revisao.png") });
+    await p.click("#lt-no"); await p.click("#m-nf-mem"); await p.waitForSelector("#mem-todas");
+    const l4 = await larg(); await p.screenshot({ path: path.join(SAIDA, "13-celular-escolhas-lembradas.png") });
+    ver(l1 && l2 && l3 && l4, "A3.18", "celular (390 px): nota repetida, medida diferente, revisão final e escolhas lembradas sem rolagem lateral");
+    await p.click("#mem-fechar");
+
     // ================= 8. demais recursos do site =================
     titulo("8. Regressão: demais recursos do site");
     await controle({ cmd: "reiniciar", cenario: "E1" });
@@ -390,6 +573,7 @@ const controle = async c => (await (await fetch(`http://127.0.0.1:${P_SIM}/contr
     await p.waitForTimeout(1500);
     ver(await p.locator("#f-lote").count() === 0 && (await qtdItem("t12")) === 12, "R3", `entrada sem nota usa o formulário normal: água sanitária 10 → ${await qtdItem("t12")}`);
     ver(!errosPagina.length, "R4", `nenhum erro de JavaScript em todos os testes${errosPagina.length ? ": " + errosPagina.slice(0, 3).join(" | ") : ""}`);
+    log.push("\nMensagens de pendência mostradas ao colaborador (números trocados por N):\n  - " + [...mensagens].sort().join("\n  - "));
     ver(!externos.length, "T35", `nenhuma chamada a endereço externo (bloqueadas: ${externos.length})${externos.length ? ": " + externos.slice(0, 3).join(", ") : ""}`);
   } catch (err) {
     falhas++; const l = "ERRO NO TESTE: " + (err && err.stack || err); log.push(l); console.log(l);

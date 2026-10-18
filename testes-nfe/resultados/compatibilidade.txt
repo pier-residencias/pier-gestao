@@ -1,0 +1,17 @@
+
+=== liberacao-inventario (0041062): aplicação com conflito; conflitos: index.html
+    Apps Script da cópia no simulador: "2026-10-16 inventário com aprovação da Administração"
+    funções   123 ok · 0 falhas
+    regressão 10 ok · 0 falhas
+    tela      81 ok · 0 falhas
+
+=== otimizacao-consulta (97634d2): aplicação com conflito; conflitos: index.html
+    Apps Script da cópia no simulador: "2026-10-17 inventário com aprovação da Administração + consulta otimizada (fase 1)"
+    funções   123 ok · 0 falhas
+    regressão 10 ok · 0 falhas
+    tela      81 ok · 0 falhas
+
+Branches no GitHub antes e depois: liberacao-inventario 0041062, otimizacao-consulta 97634d2 — inalteradas
+Cópias temporárias apagadas: sim
+
+Compatibilidade: tudo ok

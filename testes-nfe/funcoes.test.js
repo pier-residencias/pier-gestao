@@ -64,6 +64,27 @@ const taxa = acertos / D.ESCRITA_DIFERENTE.length;
 ver(erradosAuto === 0, "D-ERR", `nenhuma escolha automática errada (${erradosAuto})`);
 ver(taxa >= 0.9, "D-90", `pelo menos 90% viram "Já cadastrado" (${Math.round(taxa * 100)}%)`);
 
+// ---- grafias, marcas e especificações (A3) ----
+if (NOVA) {
+  linhas.push("\nGrafias de medidas, marcas e especificações");
+  D.GRAFIAS.forEach(c => {
+    const r = classificar(c.desc, c.estoque);
+    const okSt = c.st.includes(r.status), okSel = c.sel.includes(r.sel), okNunca = !c.nunca || !c.nunca.includes(r.sel);
+    const okConf = !c.conflito || c.conflito.every(id => { const x = r.candidatos.find(k => k.it.id === id); return !x || x.car === "conflito"; });
+    ver(okSt && okSel && okNunca && okConf && !conflitoPreSelecionado(r), c.id, `${c.estoque} "${c.desc}" → ${r.status} / ${nomeDe(c.estoque, r.sel)}`, `esperado ${c.st.join(" ou ")} / ${c.sel.map(s => nomeDe(c.estoque, s)).join(" ou ")}${okConf ? "" : "; medida diferente não marcada"}`);
+  });
+  // varredura: em TODO estoque fictício e TODA descrição de teste, nada com conflito ou número diferente vira automático
+  const descs = [].concat(D.MATRIZ, D.ESCRITA_DIFERENTE, D.GRAFIAS, D.SEM_MEDIDA).map(c => c.desc).concat(D.CARACTERISTICAS.map(c => c[0]));
+  let auto = 0, ruins = [];
+  Object.keys(D.ESTOQUES).forEach(est => descs.forEach(d => {
+    const r = L.classificar({ descricao: d }, D.ESTOQUES[est], { podeNovo: true });
+    if (r.status !== "ok") return; auto++;
+    const c = r.candidatos.find(k => k.it.id === r.sel);
+    if (!c || c.car === "conflito" || c.car === "incompleto" || c.numDif) ruins.push(`${est}: "${d}" → ${c ? c.it.nome : r.sel}`);
+  }));
+  ver(!ruins.length, "VARR", `varredura de ${descs.length} descrições × ${Object.keys(D.ESTOQUES).length} estoques: ${auto} escolhas automáticas, nenhuma com medida diferente, incompleta ou número diferente`, ruins.slice(0, 5).join(" | "));
+}
+
 // ---- sem medida ou leitura incompleta ----
 linhas.push("\nSem medida identificável ou leitura incompleta");
 D.SEM_MEDIDA.forEach(c => {

@@ -28,6 +28,20 @@ const E1 = [
 const E2 = [item("u1", "Fita crepe 24mm", "rolo"), item("u2", "Luva de raspa", "par")];
 // E3: material sem medida no nome
 const E3 = [item("v1", "Fita crepe", "rolo"), item("v2", "Luva de raspa", "par")];
+// E4: marcas, grão, rosca e tensão (revisão A3)
+const E4 = [
+  item("w1", "Fita isolante 3M 19mm x 20m", "rolo"),
+  item("w2", "Trena 3m", "un"),
+  item("w3", "Trena 5m", "un"),
+  item("w4", "Lixa d'água 120", "folha"),
+  item("w5", "Lixa d'água 80", "folha"),
+  item("w6", "Parafuso M8x40", "un"),
+  item("w7", "Parafuso M8x60", "un"),
+  item("w8", "Lâmpada LED 9W 127V", "un"),
+  item("w9", "Lâmpada LED 9W 220V", "un"),
+  item("w10", "Esponja dupla face 3M", "un"),
+  item("w11", "Registro 1/2\"", "un")
+];
 
 // esperado: st = status aceito(s); sel = material aceito(s) ("" = nada pré-selecionado, "__novo" = item novo)
 // nunca = materiais que não podem ser pré-selecionados de jeito nenhum
@@ -75,6 +89,30 @@ const ESCRITA_DIFERENTE = [
 ];
 
 // sem medida identificável ou leitura incompleta: nunca escolha automática errada
+// grafias de medidas, marcas e especificações (revisão A3): nunca associar automaticamente o que não bate
+const GRAFIAS = [
+  { id: "G01", estoque: "E4", desc: "FITA ISOLANTE 3M 19MM X 20M", st: ["ok"], sel: ["w1"] },
+  { id: "G02", estoque: "E4", desc: "FITA ISOLANTE 19MMX20M 3M IMPERIAL", st: ["ok"], sel: ["w1"] },
+  { id: "G03", estoque: "E4", desc: "FITA ISOLANTE 3M 18MM X 20M", st: ["novo"], sel: ["__novo"], conflito: ["w1"] },
+  { id: "G04", estoque: "E4", desc: "TRENA 3M", st: ["ok"], sel: ["w2"], conflito: ["w3"] },
+  { id: "G05", estoque: "E4", desc: "TRENA 5 M", st: ["ok"], sel: ["w3"], conflito: ["w2"] },
+  { id: "G06", estoque: "E4", desc: "TRENA 8M", st: ["novo"], sel: ["__novo"], conflito: ["w2", "w3"] },
+  { id: "G07", estoque: "E4", desc: "LIXA D AGUA GRAO 80", st: ["ok"], sel: ["w5"] },
+  { id: "G08", estoque: "E4", desc: "LIXA DAGUA 100", st: ["confira", "novo"], sel: ["", "__novo"], nunca: ["w4", "w5"] },
+  { id: "G09", estoque: "E4", desc: "PARAFUSO SEXT M8X40", st: ["ok"], sel: ["w6"], conflito: ["w7"] },
+  { id: "G10", estoque: "E4", desc: "PARAFUSO M8X50", st: ["novo"], sel: ["__novo"], conflito: ["w6", "w7"] },
+  { id: "G11", estoque: "E4", desc: "LAMPADA LED 9W 220V", st: ["ok"], sel: ["w9"], conflito: ["w8"] },
+  { id: "G12", estoque: "E4", desc: "LAMPADA LED 9W BIVOLT", st: ["confira"], sel: [""] },
+  { id: "G13", estoque: "E4", desc: "ESPONJA DUPLA FACE 3M", st: ["ok"], sel: ["w10"] },
+  { id: "G14", estoque: "E4", desc: "REGISTRO ½\"", st: ["ok"], sel: ["w11"] },
+  { id: "G15", estoque: "E4", desc: "REGISTRO 1/2 POLEGADA", st: ["ok"], sel: ["w11"] },
+  { id: "G16", estoque: "E4", desc: "REGISTRO 3/4\"", st: ["novo"], sel: ["__novo"], conflito: ["w11"] },
+  { id: "G17", estoque: "E1", desc: "FITA CREPE 24 X 50 M", st: ["ok"], sel: ["t1"], conflito: ["t2"] },
+  { id: "G18", estoque: "E1", desc: "FITA CREPE 48MM 3M", st: ["ok"], sel: ["t2"], conflito: ["t1"] },
+  { id: "G19", estoque: "E1", desc: "FITA CREPE 3M", st: ["confira"], sel: [""] },
+  { id: "G20", estoque: "E1", desc: "LAMPADA LED 9W/127V", st: ["ok"], sel: ["t5"], conflito: ["t6"] }
+];
+
 const SEM_MEDIDA = [
   { id: "S01", estoque: "E1", desc: "FITA CREPE", st: ["confira"], sel: [""] },
   { id: "S02", estoque: "E1", desc: "LAMPADA LED", st: ["confira"], sel: [""] },
@@ -113,8 +151,27 @@ const CARACTERISTICAS = [
   ["Trena 30m", ["medida:30 m*"]],
   ["MANGUEIRA 1/2 50M", ["pol:1/2\"*", "medida:50 m"]],
   ["Adaptador 60 x 2\"", ["pol:2\"*"]],
+  ["FITA ISOLANTE 3M 19MM X 20M", ["medida:19 mm*", "medida:20 m"]],
+  ["FITA DUPLA FACE 3M 12MM X 2M", ["medida:12 mm*", "medida:2 m"]],
+  ["FITA 3M VHB 19MM", ["medida:19 mm*"]],
+  ["ESPONJA 3M SCOTCH-BRITE", []],
+  ["PROTETOR AURICULAR 3M", []],
+  ["LIXA 3M 120", []],
+  ["TRENA 3M", ["medida:3 m*"]],
+  ["MANGUEIRA 3M", ["medida:3 m*"]],
+  ["FITA METRICA 3M", ["medida:3 m*"]],
+  ["REGISTRO ½\"", ["pol:1/2\"*"]],
+  ["ADAPTADOR 1 ¼", ["pol:1 1/4\"*"]],
+  ["PARAFUSO SEXT M8X40", ["medida:8 mm*", "medida:40 mm"]],
+  ["PORCA M10", ["medida:10 mm*"]],
+  ["REFLETOR LED 1.000W", ["potencia:1000 W*"]],
+  ["MOTOR 1,5KW", ["potencia:1500 W*"]],
+  ["TINTA ACRILICA 18L", ["volume:18 L*"]],
+  ["TINTA 3,6 LT", ["volume:3,6 L*"]],
+  ["LAMPADA 9W/127V", ["potencia:9 W*", "tensao:127 V"]],
+  ["DISJUNTOR DIN C 25", ["corrente:25 A*"]],
   ["LUVA DE RASPA", []],
   ["COLA BRANCA", []]
 ];
 
-module.exports = { ESTOQUES: { E1, E2, E3 }, MATRIZ, ESCRITA_DIFERENTE, SEM_MEDIDA, CARACTERISTICAS, item };
+module.exports = { ESTOQUES: { E1, E2, E3, E4 }, MATRIZ, ESCRITA_DIFERENTE, GRAFIAS, SEM_MEDIDA, CARACTERISTICAS, item };

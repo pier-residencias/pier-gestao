@@ -42,6 +42,29 @@ ok     D20   "FITA CREPE 24X50 M" → ok / Fita crepe 24mm
 ok     D-ERR nenhuma escolha automática errada (0)
 ok     D-90  pelo menos 90% viram "Já cadastrado" (100%)
 
+Grafias de medidas, marcas e especificações
+ok     G01   E4 "FITA ISOLANTE 3M 19MM X 20M" → ok / Fita isolante 3M 19mm x 20m
+ok     G02   E4 "FITA ISOLANTE 19MMX20M 3M IMPERIAL" → ok / Fita isolante 3M 19mm x 20m
+ok     G03   E4 "FITA ISOLANTE 3M 18MM X 20M" → novo / item novo
+ok     G04   E4 "TRENA 3M" → ok / Trena 3m
+ok     G05   E4 "TRENA 5 M" → ok / Trena 5m
+ok     G06   E4 "TRENA 8M" → novo / item novo
+ok     G07   E4 "LIXA D AGUA GRAO 80" → ok / Lixa d'água 80
+ok     G08   E4 "LIXA DAGUA 100" → novo / item novo
+ok     G09   E4 "PARAFUSO SEXT M8X40" → ok / Parafuso M8x40
+ok     G10   E4 "PARAFUSO M8X50" → novo / item novo
+ok     G11   E4 "LAMPADA LED 9W 220V" → ok / Lâmpada LED 9W 220V
+ok     G12   E4 "LAMPADA LED 9W BIVOLT" → confira / (nada selecionado)
+ok     G13   E4 "ESPONJA DUPLA FACE 3M" → ok / Esponja dupla face 3M
+ok     G14   E4 "REGISTRO ½"" → ok / Registro 1/2"
+ok     G15   E4 "REGISTRO 1/2 POLEGADA" → ok / Registro 1/2"
+ok     G16   E4 "REGISTRO 3/4"" → novo / item novo
+ok     G17   E1 "FITA CREPE 24 X 50 M" → ok / Fita crepe 24mm
+ok     G18   E1 "FITA CREPE 48MM 3M" → ok / Fita crepe 48mm
+ok     G19   E1 "FITA CREPE 3M" → confira / (nada selecionado)
+ok     G20   E1 "LAMPADA LED 9W/127V" → ok / Lâmpada LED 9W
+ok     VARR  varredura de 110 descrições × 4 estoques: 82 escolhas automáticas, nenhuma com medida diferente, incompleta ou número diferente
+
 Sem medida identificável ou leitura incompleta
 ok     S01   "FITA CREPE" → confira / (nada selecionado)
 ok     S02   "LAMPADA LED" → confira / (nada selecionado)
@@ -78,8 +101,27 @@ ok     C24   "RALO 15X15CM" → medida:150 mm*, medida:150 mm
 ok     C25   "Trena 30m" → medida:30 m*
 ok     C26   "MANGUEIRA 1/2 50M" → pol:1/2"*, medida:50 m
 ok     C27   "Adaptador 60 x 2"" → pol:2"*
-ok     C28   "LUVA DE RASPA" → (nenhuma)
-ok     C29   "COLA BRANCA" → (nenhuma)
+ok     C28   "FITA ISOLANTE 3M 19MM X 20M" → medida:19 mm*, medida:20 m
+ok     C29   "FITA DUPLA FACE 3M 12MM X 2M" → medida:12 mm*, medida:2 m
+ok     C30   "FITA 3M VHB 19MM" → medida:19 mm*
+ok     C31   "ESPONJA 3M SCOTCH-BRITE" → (nenhuma)
+ok     C32   "PROTETOR AURICULAR 3M" → (nenhuma)
+ok     C33   "LIXA 3M 120" → (nenhuma)
+ok     C34   "TRENA 3M" → medida:3 m*
+ok     C35   "MANGUEIRA 3M" → medida:3 m*
+ok     C36   "FITA METRICA 3M" → medida:3 m*
+ok     C37   "REGISTRO ½"" → pol:1/2"*
+ok     C38   "ADAPTADOR 1 ¼" → pol:1 1/4"*
+ok     C39   "PARAFUSO SEXT M8X40" → medida:8 mm*, medida:40 mm
+ok     C40   "PORCA M10" → medida:10 mm*
+ok     C41   "REFLETOR LED 1.000W" → potencia:1000 W*
+ok     C42   "MOTOR 1,5KW" → potencia:1500 W*
+ok     C43   "TINTA ACRILICA 18L" → volume:18 L*
+ok     C44   "TINTA 3,6 LT" → volume:3,6 L*
+ok     C45   "LAMPADA 9W/127V" → potencia:9 W*, tensao:127 V
+ok     C46   "DISJUNTOR DIN C 25" → corrente:25 A*
+ok     C47   "LUVA DE RASPA" → (nenhuma)
+ok     C48   "COLA BRANCA" → (nenhuma)
 
 6.2 Memória local (regras de uso)
 ok     T16   memória antiga 48 mm → fita 24 mm: ignorada ("medida diferente"), escolha Fita crepe 48mm
@@ -91,6 +133,6 @@ ok     T16b  memória antiga correta → nunca "lembrado"; a regra decide (ok)
 ok     T16c  memória antiga aponta outro material compatível → "Confira" sem pré-seleção (confira)
 ok     R4a   código do fornecedor igual → ok / Lâmpada LED 12W
 ok     R4b   código igual mas potência diferente → não associa (novo)
-ok     T33   30 linhas × 300 materiais em 135 ms (limite 200 ms no Node; no navegador é medido no teste de tela)
+ok     T33   30 linhas × 300 materiais em 71 ms (limite 200 ms no Node; no navegador é medido no teste de tela)
 
-83 ok · 0 falhas
+123 ok · 0 falhas

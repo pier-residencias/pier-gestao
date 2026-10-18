@@ -21,7 +21,7 @@ ok     U2.4  voltar para "item novo" desfaz o conflito
 3. Confira resolvido, revisão final e registro
 ok     U3.1  sem pendências depois da escolha; botão "Finalizar"
 ok     U3.2  revisão mostra produto da nota, medidas, material, unidade e quantidade: "1FITA CREPE 48X50M48 mm50 mna nota: 4 RL → Fita crepe 48mm48 mmentra: +4 rolo · estoque 10 → 14"
-ok     U3.3  item novo na revisão: "2PARAFUSO 8MM8 mmna nota: 50 UN → Item novo: Parafuso 8mm8 mmentra: +50 un"
+ok     U3.3  item novo na revisão: "2PARAFUSO 8MM8 mmna nota: 50 UN → Item novo: Parafuso 8mm8 mmentra: +50 un · estoque novo: 0 → 50"
 ok     U3.4  botão de confirmação: "Confirmar e registrar 8 entradas e cadastrar 4 itens novos"
 ok     U3.5  alterar uma quantidade fecha a revisão (precisa revisar de novo)
 ok     U3.6  8 entradas gravadas no simulador; saldos: fita 48 mm 10→14, LED 12 W 10→20, fita 24 mm 10→13, cabo 10→110
@@ -67,14 +67,48 @@ ok     T30b  com o número digitado, confere a repetição e libera
 
 7. Perfil sem permissão de cadastrar item, desempenho e tela de celular
 ok     U7.1  sem permissão de cadastrar: "Escolha o item", sem pré-seleção do parafuso 6 mm
-ok     T33   no navegador: 30 linhas × 300 materiais em 37 ms (limite 200 ms)
+ok     T33   no navegador: 30 linhas × 300 materiais em 38 ms (limite 200 ms)
 ok     U7.2  celular (390 px): sem rolagem lateral (390 px)
+
+9. Revisão A3: cancelamentos, tentativas após falha, limites e especificações
+ok     A3.1  Cancelar, Esc, clique fora e "Voltar e corrigir": nada gravado na planilha, nada enviado, memória intacta
+ok     A3.2  fechar durante "Conferindo…": a resposta que chega depois é ignorada, sem erro e sem gravação
+ok     A3.3  nota repetida → "Fechar sem lançar": nada gravado
+ok     A3.4  clique duplo / envio repetido em "Confirmar e registrar": 3 linhas, 3 entradas (nenhuma em dobro)
+ok     A3.5  "Lançar outra nota" volta para o formulário limpo
+ok     A3.6  trocar para outro material com medida diferente exige nova confirmação (a anterior não vale)
+ok     A3.7  saldo previsto acumulado: "estoque 10 → 12" e "estoque 12 → 15 "; item novo "estoque novo: 0 → 20"
+ok     A3.8  falha logo depois de cadastrar o item novo ("0 de 2 registradas. Co…"): na nova tentativa, 1 item "Parafuso 8mm" só e 2 entradas
+ok     A3.9  o resumo final ainda conta o item novo criado na primeira tentativa
+ok     A3.10 falha no envio da nota: a mensagem aparece, nada é registrado; a nova tentativa registra 1 entrada
+ok     A3.11 a entrada que a própria tela acabou de gravar não conta como nota repetida
+ok     A3.12 as 3 linhas entraram, cada uma uma vez
+ok     A3.13 sem resposta em 45 s: "A planilha demorou demais para responder", Finalizar bloqueado com "Tentar de novo"
+ok     A3.19 quantidade inválida, valor inválido e nenhuma linha marcada travam o Finalizar com a mensagem certa
+ok     A3.14 perfil só de saída: sem botão de entrada e sem o link de escolhas lembradas
+ok     A3.15 lixa grão 80 → "Lixa d'água 80"; a de 120 aparece marcada "confira o número"
+ok     A3.16 escolher a lixa 120 mostra: "Confira a especificação: a nota tem 80 e o material tem 120 (grão, modelo ou referência)"
+ok     A3.17 "FITA ISOLANTE 3M 19MM X 20M" → medidas 19 mm, 20 m (3M é a marca); "TRENA 3M" → 3 m
+ok     A3.18 celular (390 px): nota repetida, medida diferente, revisão final e escolhas lembradas sem rolagem lateral
 
 8. Regressão: demais recursos do site
 ok     R1    abas abertas sem erro: painel, itens, historico, emprestimos, dashboard, registrar
 ok     R2    saída comum pelo formulário: luva 10 → 9
 ok     R3    entrada sem nota usa o formulário normal: água sanitária 10 → 12
 ok     R4    nenhum erro de JavaScript em todos os testes
+
+Mensagens de pendência mostradas ao colaborador (números trocados por N):
+  - Aguarde: conferindo se a nota já foi lançada…
+  - Esta nota já foi lançada: confirme a nova entrega ou feche sem lançar.
+  - Informe o número da nota fiscal.
+  - Linha N: escolha o material do estoque.
+  - Linha N: medida diferente — escolha outro material ou confirme.
+  - Linha N: mesmo material da linha N e N — troque ou confirme.
+  - Linha N: mesmo material da linha N — troque ou confirme.
+  - Linha N: quantidade inválida.
+  - Linha N: valor inválido.
+  - Nenhuma linha marcada.
+  - Não foi possível conferir se a nota já foi lançada: tente de novo ou confirme.
 ok     T35   nenhuma chamada a endereço externo (bloqueadas: 0)
 
-62 ok · 0 falhas
+81 ok · 0 falhas
