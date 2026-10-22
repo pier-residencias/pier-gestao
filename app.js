@@ -2600,10 +2600,12 @@ $("#ac-resumo").addEventListener("click", e => {
 });
 
 // ---------- controle de pendências (menu Administração) ----------
+// "nome" é o texto gravado na coluna Seção da planilha (não mudar sem migrar os dados); "rotulo" é o que a tela mostra.
+// As antigas seções "aguardando entrega" e "aguardando síndico" foram unificadas em "Cotações e compras":
+// um item que ainda traga um desses nomes aparece aqui, e não em "Outras demandas".
 const PD_SECOES = [
-  {nome:"Cotações e compras – aguardando entrega", email:"COTAÇÕES E COMPRAS – AGUARDANDO ENTREGA"},
-  {nome:"Cotações e compras – a cotar", email:"COTAÇÕES E COMPRAS – A COTAR"},
-  {nome:"Cotações e compras – aguardando síndico", email:"COTAÇÕES E COMPRAS – AGUARDANDO SÍNDICO"},
+  {nome:"Cotações e compras – a cotar", rotulo:"Cotações e compras", email:"COTAÇÕES E COMPRAS",
+   antigas:["Cotações e compras – aguardando entrega", "Cotações e compras – aguardando síndico"]},
   {nome:"Governança / administração", email:"GOVERNANÇA / ADMINISTRAÇÃO"},
   {nome:"Manutenção / limpeza / jardinagem", email:"MANUTENÇÃO / LIMPEZA / JARDINAGEM"},
   {nome:"Outras demandas da administração", email:"OUTRAS DEMANDAS DA ADMINISTRAÇÃO"}
@@ -2622,7 +2624,8 @@ const pdNova = p => p.origem === "Síndico" && !p.vistaEm;
 const PD = { novas:false, rows:new Map(), secs:new Map(), timers:new Map(), fila:Promise.resolve(), salvando:0, q:"", st:"", crit:"", cst:false, resp:"", hide:false, late:false, carregando:false };
 try { const f = JSON.parse(localStorage.getItem("pd-filtros")||"{}"); ["q","st","crit","resp","hide"].forEach(k => { if (k in f) PD[k] = f[k]; }); } catch(e){}
 const pdGuardarFiltros = () => { try { localStorage.setItem("pd-filtros", JSON.stringify({q:PD.q, st:PD.st, crit:PD.crit, resp:PD.resp, hide:PD.hide})); } catch(e){} };
-const pdSecaoDe = p => PD_SECOES.some(s => s.nome === p.secao) ? p.secao : PD_OUTRAS;
+const pdRotulo = s => s.rotulo || s.nome;
+const pdSecaoDe = p => { const s = PD_SECOES.find(s => s.nome === p.secao || (s.antigas||[]).includes(p.secao)); return s ? s.nome : PD_OUTRAS; };
 const pdAtrasada = p => p.prazo && p.status !== "Concluído" && p.prazo < hoje();
 // prazo de pendência pontual fica bloqueado depois de definido (a tarefa constante usa o prazo como próxima execução)
 const pdPrazoFixo = p => !!(p && p.prazo && !pdConst(p));
@@ -2710,9 +2713,10 @@ function pdResumo(){
   const all = pdLista(), pont = all.filter(p => !pdConst(p)), n = s => pont.filter(p => p.status === s).length;
   const feitas = n("Concluído"), atrasadas = all.filter(pdAtrasada).length, constantes = all.length - pont.length;
   const itens = [
+    // sem os contadores "aguardando entrega", "aguardando síndico" e "a cotar" (pedido de 22/10/2026);
+    // essas situações continuam no filtro "Todas as situações" e na própria pendência
     {l:"pendências", v:pont.length, st:""}, {l:"em andamento", v:n("Em andamento"), st:"Em andamento"},
-    {l:"aguardando entrega", v:n("Aguardando entrega"), st:"Aguardando entrega"}, {l:"aguardando síndico", v:n("Aguardando síndico"), st:"Aguardando síndico"},
-    {l:"a cotar", v:n("A cotar"), st:"A cotar"}, {l:"pendentes", v:n("Pendente"), st:"Pendente"},
+    {l:"pendentes", v:n("Pendente"), st:"Pendente"},
     {l:"concluídas", v:feitas, st:"Concluído"}, {l:"atrasadas", v:atrasadas, st:"", late:true}
   ];
   const altas = all.filter(p => p.criticidade === "Alta" && p.status !== "Concluído").length;
@@ -2851,7 +2855,7 @@ function pdConfirmar(id){
 function pdSecao(s){
   const list = pdEl("div", {class:"pd-list"}), cnt = pdEl("span", {class:"cnt"}), bar = pdEl("i");
   const add = pdEl("button", {class:"btn small", type:"button", text:"+ Adicionar item"});
-  const sec = pdEl("section", {class:"pd-sec"}, [pdEl("div", {class:"sh"}, [pdEl("h3", {text:s.nome}), cnt, pdEl("span", {class:"sbar", "aria-hidden":"true"}, [bar]), add]), list]);
+  const sec = pdEl("section", {class:"pd-sec"}, [pdEl("div", {class:"sh"}, [pdEl("h3", {text:pdRotulo(s)}), cnt, pdEl("span", {class:"sbar", "aria-hidden":"true"}, [bar]), add]), list]);
   add.onclick = () => pdNovo(s.nome);
   const o = {sec, list, cnt, bar, vazio:pdEl("div", {class:"empty"})}; PD.secs.set(s.nome, o); return o;
 }
@@ -2922,7 +2926,7 @@ function pdAbrirForm(o){
     ${pai ? `<p class="hint" style="margin:-6px 0 12px">Subitem de <b>${esc(pai.numero||"")} · ${esc(pai.titulo)}</b></p>` : ""}
     <form class="form-pend" id="f-pend" novalidate autocomplete="off">
       ${ehSub ? "" : `<div class="field full"><label for="np-sec">Seção <span class="req">*</span></label>
-        <select class="input" id="np-sec"><option value="">Escolha a seção</option>${PD_SECOES.map(s => `<option ${s.nome===v.secao?"selected":""}>${esc(s.nome)}</option>`).join("")}</select>
+        <select class="input" id="np-sec"><option value="">Escolha a seção</option>${PD_SECOES.map(s => `<option value="${esc(s.nome)}" ${s.nome===v.secao || (s.antigas||[]).includes(v.secao)?"selected":""}>${esc(pdRotulo(s))}</option>`).join("")}</select>
         ${ed && pdFilhos(ed).length ? `<span class="hint">Se mudar a seção, os subitens vão junto.</span>` : ""}</div>`}
       <div class="field full"><label for="np-tit">${ehSub ? "Subitem" : "Pendência"} <span class="req">*</span></label>
         <textarea class="input" id="np-tit" rows="2" placeholder="Ex.: Trocar a fechadura da porta do salão de festas">${esc(v.titulo||"")}</textarea></div>
