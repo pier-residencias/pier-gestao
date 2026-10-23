@@ -219,7 +219,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-10-22 pendências e senha própria';
+const VERSAO = '2026-10-23 cotações';
 
 function doGet() {
   return json({ ok: true, app: 'Pier Gestão', versao: VERSAO });

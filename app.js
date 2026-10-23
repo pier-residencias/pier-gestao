@@ -4107,8 +4107,166 @@ async function ctIA(tipo, extra){
   } catch(e){ toast(e.message, true); }
 }
 
+// ---- importar um mapa de cotação já feito na planilha do Pier (.xlsx) ----
+// Procura os campos pelos nomes (Finalidade, Dados do Fornecedor, Item, Preço Unit.), não por posição fixa,
+// para aceitar mapas com mais fornecedores ou mais itens. Os preços entram como estão na planilha.
+const CT_IMP_CAMPOS = {"empresa":"empresa", "cnpj":"cnpj", "telefone":"telefone", "e-mail":"email", "email":"email", "contato":"contato",
+  "marca / modelo ofertado":"modelo", "marca/modelo":"modelo", "modelo":"modelo", "prazo de entrega":"prazo", "prazo":"prazo",
+  "condicao de pagamento":"pagamento", "pagamento":"pagamento", "validade da proposta":"validade", "validade":"validade", "garantia":"garantia",
+  "atende a especificacao?":"atende", "instalacao inclusa?":"instalacao", "frete (r$)":"frete", "frete":"frete", "desconto (r$)":"desconto", "desconto":"desconto", "observacao":"obs"};
+const ctRot = v => norm(String(v === undefined || v === null ? "" : v)).replace(/\s+/g, " ").replace(/:\s*$/, "").trim();
+function ctDataIso(v){
+  if (v instanceof Date && !isNaN(v)) return `${v.getFullYear()}-${String(v.getMonth()+1).padStart(2,"0")}-${String(v.getDate()).padStart(2,"0")}`;
+  if (typeof v === "number" && v > 20000 && v < 80000) { const d = new Date(Date.UTC(1899, 11, 30) + v * 864e5); return d.toISOString().slice(0, 10); }
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.exec(String(v || "").trim());
+  if (m) return `${m[3].length === 2 ? "20" + m[3] : m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`;
+  return /^\d{4}-\d{2}-\d{2}/.test(String(v || "")) ? String(v).slice(0, 10) : "";
+}
+// leitor de .xlsx do próprio site (zip + XML), sem biblioteca externa: valores das células de cada aba
+async function xlsxLer(buf){
+  const u8 = new Uint8Array(buf), dv = new DataView(buf), td = new TextDecoder();
+  let fim = -1; for (let i = u8.length - 22; i >= Math.max(0, u8.length - 65600); i--) if (dv.getUint32(i, true) === 0x06054b50) { fim = i; break; }
+  if (fim < 0) throw {message:"Este arquivo não é uma planilha .xlsx válida."};
+  const arqs = {}; let p = dv.getUint32(fim + 16, true);
+  for (let k = 0, n = dv.getUint16(fim + 10, true); k < n; k++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) break;
+    const ln = dv.getUint16(p + 28, true), le = dv.getUint16(p + 30, true), lc = dv.getUint16(p + 32, true);
+    arqs[td.decode(u8.subarray(p + 46, p + 46 + ln))] = {metodo: dv.getUint16(p + 10, true), tam: dv.getUint32(p + 20, true), off: dv.getUint32(p + 42, true)};
+    p += 46 + ln + le + lc;
+  }
+  const ler = async nome => {
+    const a = arqs[nome]; if (!a) return null;
+    const ini = a.off + 30 + dv.getUint16(a.off + 26, true) + dv.getUint16(a.off + 28, true), d = u8.subarray(ini, ini + a.tam);
+    if (a.metodo === 0) return td.decode(d);
+    if (a.metodo !== 8 || typeof DecompressionStream === "undefined") throw {semLeitor:true};
+    return await new Response(new Blob([d]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).text();
+  };
+  const xml = t => new DOMParser().parseFromString(t || "<x/>", "application/xml");
+  const filhos = (el, nome) => [...el.getElementsByTagName("*")].filter(e => e.localName === nome);
+  const wb = xml(await ler("xl/workbook.xml")), rels = xml(await ler("xl/_rels/workbook.xml.rels"));
+  const alvo = {}; filhos(rels, "Relationship").forEach(r => { alvo[r.getAttribute("Id")] = r.getAttribute("Target"); });
+  const ss = xml(await ler("xl/sharedStrings.xml"));
+  const textos = filhos(ss, "si").map(si => filhos(si, "t").map(t => t.textContent).join(""));
+  const col = ref => { let n = 0; for (const ch of ref.replace(/\d+$/, "")) n = n * 26 + ch.charCodeAt(0) - 64; return n - 1; };
+  const abas = [];
+  for (const sh of filhos(wb, "sheet")) {
+    const rid = [...sh.attributes].find(a => a.localName === "id" && a.name !== "sheetId");
+    let caminho = alvo[rid ? rid.value : ""] || ""; caminho = caminho.startsWith("/") ? caminho.slice(1) : "xl/" + caminho.replace(/^\.\//, "");
+    const doc = xml(await ler(caminho)), cel = new Map(); let r1 = 0, c1 = 0;
+    filhos(doc, "c").forEach(c => {
+      const ref = c.getAttribute("r"); if (!ref) return;
+      const r = Number(/\d+$/.exec(ref)[0]) - 1, k = col(ref), t = c.getAttribute("t");
+      const v = filhos(c, "v")[0];
+      let val;
+      if (t === "s") val = v ? textos[Number(v.textContent)] : undefined;
+      else if (t === "inlineStr") val = filhos(c, "t").map(x => x.textContent).join("");
+      else if (t === "str" || t === "e") val = v ? v.textContent : undefined;
+      else if (t === "b") val = v ? v.textContent === "1" : undefined;
+      else val = v && v.textContent !== "" ? Number(v.textContent) : undefined;
+      if (val === undefined || val === "") return;
+      cel.set(r + "," + k, val); r1 = Math.max(r1, r); c1 = Math.max(c1, k);
+    });
+    abas.push({nome: sh.getAttribute("name"), folha: {val: (r, c) => cel.get(r + "," + c), r0: 0, r1, c0: 0, c1}});
+  }
+  return abas;
+}
+// mesma "folha" a partir da biblioteca de planilhas (só para navegadores antigos, sem leitor de zip)
+function xlsxFolhaSheetJS(ws){
+  if (!ws || !ws["!ref"]) return null;
+  const R = XLSX.utils.decode_range(ws["!ref"]);
+  return {val: (r, c) => { const x = ws[XLSX.utils.encode_cell({r, c})]; return x ? x.v : undefined; }, r0: R.s.r, r1: R.e.r, c0: R.s.c, c1: R.e.c};
+}
+function ctLerMapa(F){
+  if (!F) return null;
+  const R = {s:{r:F.r0, c:F.c0}, e:{r:F.r1, c:F.c1}};
+  const val = (r, c) => F.val(r, c);
+  const vazio = v => v === undefined || v === null || String(v).trim() === "";
+  const achar = (rotulo, de) => { for (let r = de || R.s.r; r <= R.e.r; r++) for (let c = R.s.c; c <= Math.min(R.e.c, R.s.c + 3); c++) if (ctRot(val(r, c)) === rotulo) return {r, c}; return null; };
+  const direita = p => { if (!p) return ""; for (let c = p.c + 1; c <= R.e.c; c++) if (!vazio(val(p.r, c))) return val(p.r, c); return ""; };
+  const hd = achar("dados do fornecedor"); if (!hd) return null;
+  // colunas dos fornecedores: cabeçalhos preenchidos à direita de "Dados do Fornecedor"
+  const cols = []; for (let c = hd.c + 1; c <= R.e.c; c++) if (!vazio(val(hd.r, c))) cols.push(c);
+  if (!cols.length) return null;
+  const forn = cols.map(c => Object.assign(ctFornVazio(), {empresa: String(val(hd.r, c)).trim()}));
+  const hi = achar("item", hd.r + 1);
+  const fimForn = hi ? hi.r : R.e.r;
+  for (let r = hd.r + 1; r < fimForn; r++) {
+    const k = CT_IMP_CAMPOS[ctRot(val(r, hd.c))]; if (!k) continue;
+    cols.forEach((c, i) => {
+      const v = val(r, c); if (vazio(v)) return;
+      if (k === "frete" || k === "desconto") forn[i][k] = typeof v === "number" ? v : ctNum(v);
+      else if (k === "atende") forn[i][k] = ["Sim","Não","Parcial"].find(o => norm(o) === norm(v)) || "";
+      else if (k === "instalacao") forn[i][k] = ["Sim","Não"].find(o => norm(o) === norm(v)) || "";
+      else forn[i][k] = String(v).trim().slice(0, k === "pagamento" ? 160 : 120);
+    });
+  }
+  // itens: a coluna do preço unitário de cada fornecedor fica embaixo do nome dele (linha de "Preço Unit.")
+  const itens = [];
+  let fimItens = R.e.r;
+  if (hi) {
+    const sub = hi.r + 1;
+    const colU = cols.map(c => { for (let k = c; k <= Math.min(R.e.c, c + 1); k++) if (/unit/.test(ctRot(val(sub, k)))) return k; return c; });
+    const cDesc = hi.c + 1, cUn = hi.c + 2, cQ = hi.c + 3;
+    for (let r = sub + 1; r <= R.e.r; r++) {
+      if (/^valor total/.test(ctRot(val(r, hi.c)))) { fimItens = r; break; }
+      const desc = val(r, cDesc); if (vazio(desc)) continue;
+      const q = val(r, cQ);
+      itens.push({descricao: String(desc).trim().slice(0, 300), unid: vazio(val(r, cUn)) ? "un." : String(val(r, cUn)).trim().slice(0, 12),
+        quant: typeof q === "number" ? q : ctNum(q), precos: colU.map(c => { const v = val(r, c); return vazio(v) ? null : typeof v === "number" ? v : ctNum(v); }), ref:null, refFonte:""});
+    }
+  }
+  // observações depois do total (menos a legenda do modelo em branco)
+  const obs = [];
+  for (let r = fimItens + 1; r <= R.e.r; r++) {
+    const a = val(r, R.s.c), b = val(r, R.s.c + 1);
+    if (/^legenda/.test(ctRot(a))) break;
+    const t = [vazio(a) ? "" : String(a).trim(), vazio(b) ? "" : String(b).trim()].filter(Boolean).join(" ");
+    if (t) obs.push(t);
+  }
+  const usados = forn.filter((f, i) => itens.some(it => it.precos[i] !== null));
+  if (!itens.length || !usados.length) return null;
+  return { finalidade: String(direita(achar("finalidade da cotacao")) || "").trim().slice(0, 160), data: ctDataIso(direita(achar("data da cotacao"))) || hoje(),
+    solicitante: String(direita(achar("solicitante / responsavel")) || "").trim().slice(0, 80),
+    dados: { especificacao: "", fornecedores: forn, itens, observacoes: obs.join("\n").slice(0, 3000), recomendacao: {fornecedor:-1, justificativa:""} } };
+}
+async function ctImportar(file){
+  if (!file) return;
+  if (!/\.xlsx?$/i.test(file.name)) { toast("Escolha a planilha do mapa de cotação (.xlsx).", true); return; }
+  toast("Lendo a planilha…");
+  try {
+    const buf = await file.arrayBuffer();
+    let abas;
+    try { abas = await xlsxLer(buf); }
+    catch(e){
+      if (!e || !e.semLeitor) throw e;
+      await carregarXLSX();
+      const wb = XLSX.read(buf, {type:"array"});
+      abas = wb.SheetNames.map(n => ({nome:n, folha:xlsxFolhaSheetJS(wb.Sheets[n])}));
+    }
+    const mapas = abas.map(a => ({aba:a.nome, m:ctLerMapa(a.folha)})).filter(x => x.m);
+    if (!mapas.length) { toast("Não encontrei um mapa de cotação preenchido nesta planilha (com fornecedores e preços).", true); return; }
+    const usar = x => {
+      const c = ctVazia();
+      Object.assign(c, {finalidade: x.m.finalidade || x.aba, data: x.m.data, solicitante: x.m.solicitante || S.nome || ""});
+      c.dados = x.m.dados;
+      ctAbrir(c); CT.sujo = true; renderCotEditor();
+      const nf = c.dados.fornecedores.length, ni = c.dados.itens.length;
+      toast(`Planilha importada (aba ${x.aba}): ${nf} fornecedor${nf===1?"":"es"} e ${ni} ite${ni===1?"m":"ns"}. Os preços entraram como estão na planilha (frete já somado não foi separado). Confira, anexe os orçamentos e salve.`);
+    };
+    if (mapas.length === 1) { usar(mapas[0]); return; }
+    $("#modal-box").innerHTML = `<h3>Qual aba importar?</h3><p class="hint" style="margin:-6px 0 12px">A planilha tem ${mapas.length} mapas preenchidos.</p>
+      <div class="actions" style="flex-direction:column;align-items:stretch">${mapas.map((x, i) => `<button type="button" class="btn" data-aba="${i}"><b>${esc(x.aba)}</b> · ${esc(x.m.finalidade || "")} · ${x.m.dados.fornecedores.length} fornecedores</button>`).join("")}
+      <button type="button" class="btn" id="ct-imp-x">Cancelar</button></div>`;
+    $("#modal").hidden = false;
+    $("#ct-imp-x").onclick = fecharModal;
+    $$("#modal-box [data-aba]").forEach(b => b.onclick = () => { fecharModal(); usar(mapas[+b.dataset.aba]); });
+  } catch(e){ toast(e.message || "Não foi possível ler a planilha.", true); }
+}
+
 if (TEM_ADM && $("#t-cotacoes")) {
   $("#ct-nova").addEventListener("click", () => ctNova());
+  $("#ct-importar").addEventListener("click", () => $("#ct-imp-arq").click());
+  $("#ct-imp-arq").addEventListener("change", e => { const f = e.target.files[0]; e.target.value = ""; ctImportar(f); });
   $("#ct-q").addEventListener("input", e => { CT.q = e.target.value; renderCot(); });
   $("#ct-fs").addEventListener("change", e => { CT.st = e.target.value; renderCot(); });
   $("#ct-resumo").addEventListener("click", e => { const b = e.target.closest("[data-ctst]"); if (!b) return; CT.st = CT.st === b.dataset.ctst ? "" : b.dataset.ctst; renderCot(); });
