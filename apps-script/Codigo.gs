@@ -64,7 +64,8 @@ const ABAS = {
       ['iniciadaEm', 'Iniciada em'], ['concluidaEm', 'Concluída em'], ['concluidaPor', 'Concluída por'],
       ['solucao', 'O que foi feito'], ['motivoCancelamento', 'Motivo do cancelamento'],
       ['fotosAntes', 'Fotos antes'], ['fotosDepois', 'Fotos depois'], ['andamento', 'Andamento'],
-      ['atualizadoEm', 'Atualizado em']
+      ['atualizadoEm', 'Atualizado em'],
+      ['setor', 'Setor'], ['pendencia', 'Pendência de origem']
     ],
     num: []
   },
@@ -109,7 +110,8 @@ const ABAS = {
       ['criadaEm', 'Incluída em'], ['prazoAtualizado', 'Atualização de prazo'],
       ['aprovacao', 'Aprovação'], ['aprovGerente', 'Aprovada pelo gerente'], ['aprovSindico', 'Aprovada pelo síndico'],
       ['conclPedida', 'Conclusão pedida'], ['conclData', 'Data de conclusão informada'],
-      ['conclGerente', 'Conclusão aprovada pelo gerente'], ['conclSindico', 'Conclusão aprovada pelo síndico']
+      ['conclGerente', 'Conclusão aprovada pelo gerente'], ['conclSindico', 'Conclusão aprovada pelo síndico'],
+      ['os', 'OS gerada'], ['osId', 'ID da OS']
     ],
     num: ['ordem']
   },
@@ -135,6 +137,11 @@ const ABAS = {
 
 // setores do estoque: cada item pertence a um; o perfil define quais cada pessoa vê
 const SETORES = [['Manutenção', 'setor_manutencao', 'MAN-'], ['Limpeza', 'setor_limpeza', 'LIM-']];
+// setor da OS: Manutenção (inclui jardinagem) ou Limpeza; OS antiga, sem setor, é da Manutenção
+function osSetor(o) { return texto(o && o.setor) === 'Limpeza' ? 'Limpeza' : 'Manutenção'; }
+function osExigirSetor(o, conta) {
+  if (conta && setoresDe(conta).indexOf(osSetor(o)) < 0) throw falha('Esta OS é do setor ' + osSetor(o) + '. Seu perfil não tem acesso a ele.');
+}
 function setorDe(it) { const s = texto(it && it.setor); return SETORES.some(x => x[0] === s) ? s : 'Manutenção'; }
 function setoresDe(conta) {
   const p = (conta && conta.perms) || {};
@@ -505,7 +512,9 @@ function dadosOsDem(ms, conta, todas, limpa) {
     const lista = linhas(tabela('os')).filter(o =>
       o.status === OS_STATUS.aberta || o.status === OS_STATUS.andamento ||
       String(o.concluidaEm || o.atualizadoEm).slice(0, 10) >= corte ||
-      ms.indexOf(String(o.abertaEm).slice(0, 7)) >= 0);
+      ms.indexOf(String(o.abertaEm).slice(0, 7)) >= 0)
+      .filter(o => setoresDe(conta).indexOf(osSetor(o)) >= 0)
+      .map(o => Object.assign(o, { setor: osSetor(o) }));
     out.os = comMateriais(lista.map(limpa), todas);
   }
   if (p.dem_ver || p.dem_executar || p.dem_delegar) {
@@ -1102,8 +1111,11 @@ function osCampos(v) {
   };
 }
 
-function osAbrir(v, conta) {
+function osAbrir(v, conta, origem) {
   const campos = osCampos(v);
+  // a OS é do setor do ambiente em que foi aberta (ou do escolhido ao criar a partir de uma pendência)
+  const setor = v.setor === 'Limpeza' ? 'Limpeza' : 'Manutenção';
+  if (!origem && setoresDe(conta).indexOf(setor) < 0) throw falha('Seu perfil não tem acesso às OS do setor ' + setor + '.');
   let resp = null;
   if (v.responsavelUsuario) {
     if (!conta.perms.os_gerenciar) throw falha('Só quem gerencia OS pode escolher o responsável.');
@@ -1118,12 +1130,13 @@ function osAbrir(v, conta) {
   gravar(t, Object.assign({
     id, numero, status: OS_STATUS.aberta, abertaEm: agora(), abertaPor: conta.nome, abertaPorUsuario: conta.usuario,
     responsavel: resp ? (resp.nome || resp.usuario) : '', responsavelUsuario: resp ? resp.usuario : '',
-    andamento: and, atualizadoEm: agora()
+    andamento: and, atualizadoEm: agora(), setor, pendencia: (origem && origem.pendencia) || ''
   }, campos));
   return { texto: numero + ' aberta.', numero, id };
 }
 
 function osDireitos(o, conta) {
+  osExigirSetor(o, conta); // cada setor só mexe nas próprias OS
   const p = conta.perms;
   const ger = !!p.os_gerenciar;
   const livre = !o.responsavelUsuario;
@@ -1794,7 +1807,8 @@ const PEND_CRITICIDADE = ['Baixa', 'Média', 'Alta'];
 const PEND_STATUS = ['Pendente', 'A cotar', 'Em andamento', 'Aguardando entrega', 'Aguardando síndico', 'Concluído'];
 // 2: prazo inicial (só o síndico altera depois de definido), atualização de prazo, data de conclusão obrigatória,
 //    aprovação do gerente e do síndico na inclusão e na conclusão, aviso por e-mail ao incluir
-const PEND_VERSAO = 2;
+// 3: criar OS para a equipe (Manutenção, inclusive jardinagem, ou Limpeza) a partir da pendência
+const PEND_VERSAO = 3;
 const pendAguardando = p => !!p && (p.aprovacao === 'Aguardando gerente' || p.aprovacao === 'Aguardando síndico');
 const pendConclPendente = p => !!p && !!String(p.conclPedida || '').trim() && p.status !== 'Concluído';
 const pendRotuloSecao = s => String(s || '').indexOf('Cotações e compras') === 0 ? 'Cotações e compras' : String(s || '');
@@ -1882,6 +1896,8 @@ const PEND_INICIAIS = [
 function pendLista() {
   const t = tabela('pend');
   let lista = linhas(t);
+  const osPorId = {};
+  if (lista.some(p => p.osId)) linhas(tabela('os')).forEach(o => { osPorId[o.id] = o; });
   if (!lista.length && pendSemear(t)) lista = linhas(t);
   if (pendNumerarSemNumero(t, lista)) lista = linhas(t);
   return lista
@@ -1892,7 +1908,8 @@ function pendLista() {
       concluidoEm: p.concluidoEm, prazoDefinidoEm: p.prazoDefinidoEm, prazoDefinidoPor: p.prazoDefinidoPor,
       criadaEm: p.criadaEm, prazoAtualizado: p.prazoAtualizado, aprovacao: p.aprovacao, aprovGerente: p.aprovGerente,
       aprovSindico: p.aprovSindico, conclPedida: p.conclPedida, conclData: p.conclData, conclGerente: p.conclGerente,
-      conclSindico: p.conclSindico }))
+      conclSindico: p.conclSindico, os: p.os, osId: p.osId,
+      osStatus: p.osId && osPorId[p.osId] ? osPorId[p.osId].status : '', osSetor: p.osId && osPorId[p.osId] ? osSetor(osPorId[p.osId]) : '' }))
     .sort((a, b) => (Number(a.ordem) || 1e9) - (Number(b.ordem) || 1e9));
 }
 
@@ -1994,6 +2011,12 @@ function pendSalvar(v, conta) {
   }
   // aprovações: primeiro o gerente, depois o síndico (o síndico pode aprovar em nome do gerente; o gerente não aprova pelo síndico)
   if (atual && (v.aprovar || v.recusarConclusao)) return pendAprovar(t, atual, v, conta, obj);
+  // criar uma OS para a equipe a partir de uma pendência já existente
+  if (atual && v.criarOS) {
+    const r = pendCriarOS(atual, v.criarOS, conta);
+    gravar(t, Object.assign(obj, { os: r.numero, osId: r.id }), atual._row);
+    return r.numero + ' aberta para a equipe de ' + r.setor + '.';
+  }
   // tarefa constante: registra a execução e agenda a próxima
   if (atual && v.feito) {
     if (atual.tipo !== 'Constante') throw falha('Só tarefas constantes têm execução registrada.');
@@ -2108,8 +2131,11 @@ function pendSalvar(v, conta) {
       criticidade: obj.criticidade || pai.criticidade || '', tipo: obj.tipo || '', frequencia: obj.frequencia || '',
       ordem: depois ? (fim + Number(depois.ordem)) / 2 : fim + 1
     });
+    const osSub = v.criarOS ? pendCriarOS(obj, v.criarOS, conta) : null;
+    if (osSub) Object.assign(obj, { os: osSub.numero, osId: osSub.id });
     gravar(t, obj);
-    return 'Subitem ' + (numero || '') + ' adicionado. Aguarda aprovação do gerente e do síndico.' + pendAvisarCriacao(obj, conta, pai);
+    return 'Subitem ' + (numero || '') + ' adicionado. Aguarda aprovação do gerente e do síndico.'
+      + (osSub ? ' ' + osSub.numero + ' aberta para a equipe de ' + osSub.setor + '.' : '') + pendAvisarCriacao(obj, conta, pai);
   }
   const secao = PEND_SECOES.indexOf(v.secao) >= 0 ? v.secao : PEND_SECOES[PEND_SECOES.length - 1];
   const daSecao = todas.filter(p => p.secao === secao);
@@ -2123,8 +2149,11 @@ function pendSalvar(v, conta) {
     criticidade: obj.criticidade || '', tipo: obj.tipo || '', frequencia: obj.frequencia || '',
     ordem: Math.max.apply(null, [base].concat(daSecao.map(p => Number(p.ordem) || 0))) + 1
   });
+  const osNova = v.criarOS ? pendCriarOS(obj, v.criarOS, conta) : null;
+  if (osNova) Object.assign(obj, { os: osNova.numero, osId: osNova.id });
   gravar(t, obj);
-  return (obj.tipo === 'Constante' ? 'Tarefa constante ' : 'Pendência ') + obj.numero + ' adicionada. Aguarda aprovação do gerente e do síndico.' + pendAvisarCriacao(obj, conta, null);
+  return (obj.tipo === 'Constante' ? 'Tarefa constante ' : 'Pendência ') + obj.numero + ' adicionada. Aguarda aprovação do gerente e do síndico.'
+    + (osNova ? ' ' + osNova.numero + ' aberta para a equipe de ' + osNova.setor + '.' : '') + pendAvisarCriacao(obj, conta, null);
 }
 
 // mensagem de retorno de uma alteração
@@ -2138,6 +2167,27 @@ function pendMsgAtualizacao(v, obj, atual, constFinal, pedidoConclusao, prazoPel
   if ('concluidoEm' in v && obj.concluidoEm) return 'Concluída em ' + dm(obj.concluidoEm) + '.';
   if ('responsavel' in v && Object.keys(v).length <= 2) return 'Responsável: ' + (obj.responsavel || 'nenhum') + '.';
   return obj.status && 'status' in v ? 'Situação: ' + obj.status + '.' : 'criticidade' in v && Object.keys(v).length <= 2 ? 'Criticidade: ' + (obj.criticidade || 'sem definição') + '.' : 'Salvo.';
+}
+
+// abre a OS da equipe (Manutenção, inclusive jardinagem, ou Limpeza) ligada à pendência
+function pendCriarOS(p, os, conta) {
+  if (p.osId) {
+    const ja = linhas(tabela('os')).find(o => o.id === p.osId);
+    if (ja && ja.status !== OS_STATUS.cancelada) throw falha('Esta pendência já tem a ' + ja.numero + ' (' + String(ja.status).toLowerCase() + ').');
+  }
+  const setor = os.setor === 'Limpeza' ? 'Limpeza' : 'Manutenção';
+  const prioridade = OS_PRIORIDADES.indexOf(os.prioridade) >= 0 ? os.prioridade
+    : ({ 'Alta': 'Alta', 'Média': 'Normal', 'Baixa': 'Baixa' })[p.criticidade] || 'Normal';
+  const prazo = /^\d{4}-\d{2}-\d{2}$/.test(String(os.prazo || '')) ? String(os.prazo)
+    : (p.tipo !== 'Constante' && p.prazoAtualizado) || p.prazo || '';
+  const ref = 'Gerada a partir da pendência ' + (p.numero ? 'nº ' + p.numero + ' ' : '') + '(' + pendRotuloSecao(p.secao) + ') do Controle de pendências.';
+  const r = osAbrir({
+    titulo: String(p.titulo || '').slice(0, 120), local: os.local, prioridade, prazo,
+    categoria: texto(os.categoria, 40), setor,
+    descricao: [texto(os.descricao, 2500) || String(p.obs || '').trim(), ref].filter(Boolean).join('\n\n'),
+    solicitante: conta.nome + ' (Controle de pendências)'
+  }, conta, { pendencia: p.id });
+  return { numero: r.numero, id: r.id, setor };
 }
 
 function pendAprovar(t, atual, v, conta, obj) {
@@ -2187,7 +2237,7 @@ function pendAprovar(t, atual, v, conta, obj) {
 // Os endereços ficam na aba "Emails" da planilha (coluna "Para": Gerente, Síndico ou o nome do responsável; coluna "E-mail").
 const EMAILS_ABA = 'Emails';
 const EMAILS_INICIAIS = [
-  ['Gerente', 'Recebe o aviso de toda pendência nova'], ['Síndico', 'Recebe o aviso de toda pendência nova'],
+  ['Gerente', 'Recebe quando for o responsável (Gerência)'], ['Síndico', 'Recebe quando for o responsável'],
   ['Supervisor', 'Recebe quando for o responsável'], ['Auxiliar', 'Recebe quando for o responsável'],
   ['Manutenção', 'Recebe quando for o responsável'], ['Limpeza', 'Recebe quando for o responsável'],
   ['Jardinagem', 'Recebe quando for o responsável'], ['Piscina', 'Recebe quando for o responsável'],
@@ -2225,8 +2275,7 @@ function lerEmails() {
 function pendAvisarResponsavel(p, conta) {
   try {
     const resp = String(p.responsavel || '').trim();
-    const dest = [];
-    (lerEmails()[chaveNome(resp)] || []).forEach(e => { if (dest.indexOf(e.toLowerCase()) < 0) dest.push(e.toLowerCase()); });
+    const dest = emailsDoSetor(resp);
     if (!dest.length) return ' Nenhum e-mail cadastrado na aba Emails para ' + resp + '.';
     const dt = d => d ? String(d).slice(0, 10).split('-').reverse().join('/') : '';
     const corpo = [
@@ -2252,14 +2301,21 @@ function pendAvisarResponsavel(p, conta) {
   }
 }
 
-// envia para o Gerente, o Síndico e o responsável; uma falha no e-mail nunca desfaz a inclusão
+// e-mails de um setor na aba Emails ("Gerência" usa a linha "Gerente" se não tiver linha própria)
+function emailsDoSetor(resp) {
+  const mapa = lerEmails(), k = chaveNome(resp), dest = [];
+  (mapa[k] || (k === 'gerencia' ? mapa.gerente : null) || []).forEach(e => { if (dest.indexOf(e.toLowerCase()) < 0) dest.push(e.toLowerCase()); });
+  return dest;
+}
+
+// pendência nova: o aviso vai SÓ para o setor responsável escolhido; sem responsável, não sai e-mail.
+// Uma falha no e-mail nunca desfaz a inclusão.
 function pendAvisarCriacao(p, conta, pai) {
   try {
-    const mapa = lerEmails(), dest = [];
-    const somar = nome => (mapa[chaveNome(nome)] || []).forEach(e => { if (dest.indexOf(e.toLowerCase()) < 0) dest.push(e.toLowerCase()); });
-    somar('Gerente'); somar('Síndico');
-    if (String(p.responsavel || '').trim()) somar(p.responsavel);
-    if (!dest.length) return ' Nenhum e-mail cadastrado na aba Emails para o aviso.';
+    const resp = String(p.responsavel || '').trim();
+    if (!resp) return '';
+    const dest = emailsDoSetor(resp);
+    if (!dest.length) return ' Nenhum e-mail cadastrado na aba Emails para ' + resp + '.';
     const dt = d => d ? String(d).slice(0, 10).split('-').reverse().join('/') : '';
     const nome = (pai ? 'novo subitem' : 'nova pendência') + (p.numero ? ' nº ' + p.numero : '');
     const corpo = [
@@ -2281,7 +2337,7 @@ function pendAvisarCriacao(p, conta, pai) {
       'Mensagem automática do Pier Gestão. Não responda este e-mail.'
     ].filter((l, i, a) => l !== '' || (i > 0 && a[i - 1] !== '')).join('\n');
     MailApp.sendEmail({ to: dest.join(','), subject: 'Pier Gestão – ' + nome + ': ' + String(p.titulo).slice(0, 80), body: corpo, name: 'Pier Gestão' });
-    return ' Aviso enviado por e-mail (' + dest.length + ' destinatário' + (dest.length === 1 ? '' : 's') + ').';
+    return ' Aviso enviado por e-mail para ' + resp + ' (' + dest.length + ' destinatário' + (dest.length === 1 ? '' : 's') + ').';
   } catch (e) {
     Logger.log('Aviso por e-mail da pendência não enviado: ' + e.message);
     return ' O aviso por e-mail não foi enviado (' + String(e.message).slice(0, 120) + ').';
