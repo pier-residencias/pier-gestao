@@ -219,7 +219,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-10-23 conclusão';
+const VERSAO = '2026-10-23 rápido';
 
 function doGet() {
   return json({ ok: true, app: 'Pier Gestão', versao: VERSAO });
@@ -266,7 +266,11 @@ function doPost(e) {
     if (req.acao === 'entrar' || req.acao === 'dados') gerarPreventivasSePreciso();
     if (req.acao === 'entrar') {
       if (req.registro) registrarAcesso(conta, conta.usuario, req.registro);
-      return json(Object.assign(base, token ? { token, sessaoHoras: Math.round(SEG.sessaoInativa / 36e5), senhaProvisoria: !!conta.senhaProvisoria } : {}));
+      // a entrada já devolve os dados (e as pendências, se pedidas e permitidas): o site abre com uma ida só à planilha
+      const junto = {};
+      if (req.comDados) junto.dados = dados(req.meses, conta);
+      if (req.comPend && conta.perms.pendencias) { junto.pendencias = pendLista(); junto.pendVersao = PEND_VERSAO; }
+      return json(Object.assign(base, token ? { token, sessaoHoras: Math.round(SEG.sessaoInativa / 36e5), senhaProvisoria: !!conta.senhaProvisoria } : {}, junto));
     }
     if (req.acao === 'sair') { encerrarSessao(req.token); auditar(conta, 'Saiu do sistema', ''); return json({ ok: true }); }
     if (req.acao === 'visao') { registrarVisao(conta, req); return json({ ok: true }); }

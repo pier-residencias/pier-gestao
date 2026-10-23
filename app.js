@@ -94,9 +94,15 @@ async function api(acao, extra){
   if (r.perms) { S.perms = r.perms; aplicarPermissoes(); }
   if (r.perfil) S.perfil = r.perfil;
   if (r.nome) S.nome = r.nome;
-  if (r.dados) { S.mesesCarregados = meses; aplicar(r.dados); }
+  // na entrada, os dados que vêm junto são aplicados depois de escolhido o setor (entradaDados)
+  if (r.dados && acao !== "entrar") { S.mesesCarregados = meses; aplicar(r.dados); }
+  if (r.dados) r._meses = meses;
   return r;
 }
+// Apps Script novo: a entrada já traz os dados e as pendências (uma ida só à planilha). Com o antigo, busca como antes.
+function entradaPend(r){ if (r && Array.isArray(r.pendencias)) { PD.versao = Number(r.pendVersao) || 0; S.pend = r.pendencias; PD.recebidoEm = Date.now(); } }
+function entradaDados(r){ if (r && r.dados) { S.mesesCarregados = r._meses; aplicar(r.dados); renderSync(); } else atualizar(); }
+const pedirPend = adm => adm || S.tab === "pendencias";
 function aplicar(d){
   S.itens = new Map((d.itens||[]).map(i => [i.id, i]));
   S.empTodos = d.emprestimos || [];
@@ -196,7 +202,8 @@ $("#f-login").addEventListener("submit", async ev => {
   const setorEscolhido = $("#l-setor").value;
   $("#l-senha").value = "";
   try {
-    const rEntrar = await api("entrar", {usuario, senha, registro:{motivo:"login", entrada:setorEscolhido, aparelho:aparelho()}});
+    const rEntrar = await api("entrar", {usuario, senha, registro:{motivo:"login", entrada:setorEscolhido, aparelho:aparelho()}, comDados:true, comPend:pedirPend(setorEscolhido === "Administração")});
+    entradaPend(rEntrar);
     // senha provisória (criada pela Administração): convida a pessoa a criar a própria; a senha digitada fica só na memória desta janela
     const convidar = () => { if (rEntrar && rEntrar.senhaProvisoria) setTimeout(() => abrirMinhaSenha({provisoria:true, atual:senha}), 400); };
     const permitidos = setoresDasPerms(S.perms);
@@ -213,7 +220,7 @@ $("#f-login").addEventListener("submit", async ev => {
       let salvo = ""; try { salvo = localStorage.getItem("estoque-setor") || ""; } catch(e){}
       S.setor = permitidos.includes(salvo) ? salvo : permitidos[0]; S.setores = permitidos;
       S.adm = true; aplicarPermissoes();
-      guardar(); $("#login").hidden = true; renderMe(); setTab(aba); atualizar(); convidar();
+      guardar(); $("#login").hidden = true; renderMe(); setTab(aba); entradaDados(rEntrar); convidar();
       return;
     }
     if (!setoresReais().length) {
@@ -231,7 +238,7 @@ $("#f-login").addEventListener("submit", async ev => {
     }
     S.setor = setorEscolhido; S.setores = permitidos; S.adm = false; aplicarPermissoes();
     try { localStorage.setItem("estoque-setor", setorEscolhido); } catch(e){}
-    guardar(); $("#login").hidden = true; renderMe(); setTab(podeAba(S.tab) ? S.tab : primeiraAba()); atualizar(); convidar();
+    guardar(); $("#login").hidden = true; renderMe(); setTab(podeAba(S.tab) ? S.tab : primeiraAba()); entradaDados(rEntrar); convidar();
   } catch(e){ S.token = ""; msg.className = "hint err"; msg.textContent = e.message; $("#l-senha").focus(); }
   finally { btn.disabled = false; }
 });
@@ -2951,6 +2958,8 @@ const pdAuto = t => { t.style.height = "auto"; t.style.height = t.scrollHeight +
 
 async function carregarPend(){
   if (!TEM_ADM || !can("pendencias") || PD.carregando) return;
+  // acabou de chegar junto com a entrada: não busca de novo
+  if (PD.recebidoEm && Date.now() - PD.recebidoEm < 10000 && S.pend) { PD.recebidoEm = 0; renderPend(); return; }
   PD.carregando = true;
   try { const r = await api("pendencias"); PD.versao = Number(r.pendVersao) || 0; if (!PD.salvando) S.pend = r.pendencias || []; renderPend(); }
   catch(e){ if (!S.pend) $("#pd-body").innerHTML = `<div class="notice crit">${esc(e.message)}</div>`; toast(e.message, true); }
@@ -4323,7 +4332,7 @@ if (sess && sess.senha) apagarSessao(); // versão antiga guardava a senha no ap
 if (sess && sess.token && sess.usuario) {
   S.usuario = sess.usuario || ""; S.token = sess.token;
   try { S.setor = localStorage.getItem("estoque-setor") || S.setor; S.adm = localStorage.getItem("estoque-entrada") === "Administração"; } catch(e){}
-  api("entrar", {registro:{motivo:"retorno", entrada:S.adm ? "Administração" : S.setor, aparelho:aparelho()}}).then(() => { if (S.adm && !(TEM_ADM && podeAdm())) S.adm = false; if (!S.adm && !setoresReais().length && TEM_ADM && podeAdm()) S.adm = true; aplicarPermissoes(); renderMe(); setTab(podeAba(S.tab) ? S.tab : primeiraAba()); atualizar(); }).catch(e => { if (S.token) mostrarLogin(e.message); });
+  api("entrar", {registro:{motivo:"retorno", entrada:S.adm ? "Administração" : S.setor, aparelho:aparelho()}, comDados:true, comPend:pedirPend(S.adm)}).then(r => { entradaPend(r); if (S.adm && !(TEM_ADM && podeAdm())) S.adm = false; if (!S.adm && !setoresReais().length && TEM_ADM && podeAdm()) S.adm = true; aplicarPermissoes(); renderMe(); setTab(podeAba(S.tab) ? S.tab : primeiraAba()); entradaDados(r); }).catch(e => { if (S.token) mostrarLogin(e.message); });
 } else {
   mostrarLogin("");
 }
