@@ -105,7 +105,11 @@ const ABAS = {
       ['criadaPor', 'Incluída por'], ['origem', 'Origem'], ['vistaEm', 'Vista em'], ['vistaPor', 'Vista por'],
       ['criticidade', 'Criticidade'], ['tipo', 'Tipo'], ['frequencia', 'Frequência'], ['ultimaVez', 'Última execução'],
       ['execucoes', 'Execuções'], ['pai', 'Subitem de'],
-      ['concluidoEm', 'Concluída em'], ['prazoDefinidoEm', 'Prazo definido em'], ['prazoDefinidoPor', 'Prazo definido por']
+      ['concluidoEm', 'Concluída em'], ['prazoDefinidoEm', 'Prazo definido em'], ['prazoDefinidoPor', 'Prazo definido por'],
+      ['criadaEm', 'Incluída em'], ['prazoAtualizado', 'Atualização de prazo'],
+      ['aprovacao', 'Aprovação'], ['aprovGerente', 'Aprovada pelo gerente'], ['aprovSindico', 'Aprovada pelo síndico'],
+      ['conclPedida', 'Conclusão pedida'], ['conclData', 'Data de conclusão informada'],
+      ['conclGerente', 'Conclusão aprovada pelo gerente'], ['conclSindico', 'Conclusão aprovada pelo síndico']
     ],
     num: ['ordem']
   },
@@ -247,7 +251,7 @@ function doPost(e) {
     if (req.acao === 'dados') return json(Object.assign(base, { dados: dados(req.meses, conta) }));
     if (req.acao === 'relatorio') { pode('dashboard'); return json(Object.assign(base, { relatorio: relatorio(req.de, req.ate, conta) })); }
     if (req.acao === 'usuarios') { pode('usuarios'); return json(Object.assign(base, { equipe: equipe() })); }
-    if (req.acao === 'pendencias') { pode('pendencias'); return json(Object.assign(base, { pendencias: pendLista() })); }
+    if (req.acao === 'pendencias') { pode('pendencias'); return json(Object.assign(base, { pendencias: pendLista(), pendVersao: PEND_VERSAO })); }
     if (req.acao === 'nfVer') { algum(['historico_ver', 'registrar_entrada', 'dashboard']); const f = verArquivo(req.fotoId, pastaNF()); auditar(conta, 'Abriu nota fiscal', f.nome); delete f.nome; return json(Object.assign(base, { foto: f })); }
     if (req.acao === 'nfEnviar') { pode('registrar_entrada'); return json(Object.assign(base, { arquivo: nfEnviar(req, conta) })); }
     if (req.acao === 'osFotoVer') { algum(['os_ver', 'os_abrir', 'os_atender', 'os_gerenciar']); const f = verFoto(req.fotoId); delete f.nome; return json(Object.assign(base, { foto: f })); }
@@ -285,7 +289,7 @@ function doPost(e) {
     } finally {
       lock.releaseLock();
     }
-    if (extra.pendencias) return json(Object.assign(base, { msg, pendencias: pendLista() }));
+    if (extra.pendencias) return json(Object.assign(base, { msg, pendencias: pendLista(), pendVersao: PEND_VERSAO }));
     if (extra.equipe) return json(Object.assign(base, { msg }, extra));
     return json(Object.assign(base, { msg, dados: dados(req.meses, conta) }, extra));
   } catch (err) {
@@ -1766,11 +1770,13 @@ function autorizar() {
   abaPerfis();
   tabela('itens');
   tabela('audit');
-  const limpeza = garantirLimpeza() + garantirSindico();
+  const limpeza = garantirLimpeza() + garantirSindico() + garantirGerente();
+  abaEmails();
+  Logger.log('E-mail: ' + MailApp.getRemainingDailyQuota() + ' envios disponíveis hoje (a permissão de enviar e-mail fica autorizada).');
   const senhas = migrarSenhas();
   protegerAbas();
   const arquivos = verificarArquivos();
-  Logger.log('Pronto: pastas de fotos e de notas fiscais, abas OS, Demandas, Preventivas e Pendencias, setores e permissões verificadas.' + limpeza);
+  Logger.log('Pronto: pastas de fotos e de notas fiscais, abas OS, Demandas, Preventivas, Pendencias e Emails, setores e permissões verificadas.' + limpeza);
   Logger.log('Segurança: ' + senhas + ' ' + arquivos);
 }
 
@@ -1786,6 +1792,12 @@ const PEND_SECOES = [
 ];
 const PEND_CRITICIDADE = ['Baixa', 'Média', 'Alta'];
 const PEND_STATUS = ['Pendente', 'A cotar', 'Em andamento', 'Aguardando entrega', 'Aguardando síndico', 'Concluído'];
+// 2: prazo inicial (só o síndico altera depois de definido), atualização de prazo, data de conclusão obrigatória,
+//    aprovação do gerente e do síndico na inclusão e na conclusão, aviso por e-mail ao incluir
+const PEND_VERSAO = 2;
+const pendAguardando = p => !!p && (p.aprovacao === 'Aguardando gerente' || p.aprovacao === 'Aguardando síndico');
+const pendConclPendente = p => !!p && !!String(p.conclPedida || '').trim() && p.status !== 'Concluído';
+const pendRotuloSecao = s => String(s || '').indexOf('Cotações e compras') === 0 ? 'Cotações e compras' : String(s || '');
 
 // Lista do Sr. Fernando (e-mail de 13/10/2026), com os status do relatório de 14/10.
 // Entra na aba Pendencias uma única vez, na primeira vez que a aba é aberta.
@@ -1877,7 +1889,10 @@ function pendLista() {
       prazo: p.prazo, obs: p.obs, ordem: p.ordem, atualizadoEm: p.atualizadoEm, atualizadoPor: p.atualizadoPor,
       criadaPor: p.criadaPor, origem: p.origem, vistaEm: p.vistaEm, vistaPor: p.vistaPor, criticidade: p.criticidade,
       tipo: p.tipo, frequencia: p.frequencia, ultimaVez: p.ultimaVez, execucoes: p.execucoes, pai: p.pai,
-      concluidoEm: p.concluidoEm, prazoDefinidoEm: p.prazoDefinidoEm, prazoDefinidoPor: p.prazoDefinidoPor }))
+      concluidoEm: p.concluidoEm, prazoDefinidoEm: p.prazoDefinidoEm, prazoDefinidoPor: p.prazoDefinidoPor,
+      criadaEm: p.criadaEm, prazoAtualizado: p.prazoAtualizado, aprovacao: p.aprovacao, aprovGerente: p.aprovGerente,
+      aprovSindico: p.aprovSindico, conclPedida: p.conclPedida, conclData: p.conclData, conclGerente: p.conclGerente,
+      conclSindico: p.conclSindico }))
     .sort((a, b) => (Number(a.ordem) || 1e9) - (Number(b.ordem) || 1e9));
 }
 
@@ -1966,8 +1981,9 @@ function pendSalvar(v, conta) {
   const id = texto(v.id, 40);
   const atual = id ? todas.find(p => p.id === id) : null;
   if (id && !atual) throw falha('Esta pendência não existe mais. Atualize a tela.');
-  const sindico = ehSindico(conta);
+  const sindico = ehSindico(conta), gerente = ehGerente(conta);
   const obj = { atualizadoEm: agora(), atualizadoPor: conta.nome };
+  let pedidoConclusao = false, prazoPeloSindico = false;
   // o que o síndico inclui fica destacado para a administração até alguém da equipe dar ciente ou mexer nele
   if (atual && atual.origem === 'Síndico' && !atual.vistaEm && !sindico) { obj.vistaEm = agora(); obj.vistaPor = conta.nome; }
   if (atual && v.ciente) {
@@ -1976,6 +1992,8 @@ function pendSalvar(v, conta) {
     gravar(t, { vistaEm: obj.vistaEm, vistaPor: obj.vistaPor }, atual._row);
     return 'Ciente registrado.';
   }
+  // aprovações: primeiro o gerente, depois o síndico (o síndico pode aprovar em nome do gerente; o gerente não aprova pelo síndico)
+  if (atual && (v.aprovar || v.recusarConclusao)) return pendAprovar(t, atual, v, conta, obj);
   // tarefa constante: registra a execução e agenda a próxima
   if (atual && v.feito) {
     if (atual.tipo !== 'Constante') throw falha('Só tarefas constantes têm execução registrada.');
@@ -1998,7 +2016,8 @@ function pendSalvar(v, conta) {
     const prazoAntes = atual ? String(atual.prazo || '').slice(0, 10) : '';
     if (atual && atual.tipo !== 'Constante' && prazoAntes && obj.prazo !== prazoAntes) {
       if (constFinal && !obj.prazo) delete obj.prazo; // virou tarefa constante: a próxima execução é calculada abaixo
-      else throw falha('O prazo desta pendência está bloqueado (' + prazoAntes.split('-').reverse().join('/') + '). Para corrigir, altere direto na aba Pendencias da planilha.');
+      else if (sindico) { obj.prazoDefinidoEm = agora(); obj.prazoDefinidoPor = conta.nome; prazoPeloSindico = true; }
+      else throw falha('O prazo inicial desta pendência está bloqueado (' + prazoAntes.split('-').reverse().join('/') + '). Só o síndico pode alterar. Para registrar uma nova data, use "Atualização de prazo".');
     }
     if (!constFinal && obj.prazo && (!atual || !prazoAntes || atual.tipo === 'Constante')) { obj.prazoDefinidoEm = agora(); obj.prazoDefinidoPor = conta.nome; }
   }
@@ -2007,6 +2026,7 @@ function pendSalvar(v, conta) {
     if (obj.concluidoEm && obj.concluidoEm > hoje()) throw falha('A data de conclusão não pode ser depois de hoje.');
   }
   if ('obs' in v) obj.obs = texto(v.obs, 1000);
+  if ('prazoAtualizado' in v) obj.prazoAtualizado = /^\d{4}-\d{2}-\d{2}$/.test(String(v.prazoAtualizado || '')) ? String(v.prazoAtualizado) : '';
   if ('tipo' in v) obj.tipo = v.tipo === 'Constante' ? 'Constante' : '';
   if ('frequencia' in v) { if (v.frequencia && !PEND_FREQ.some(f => f[0] === v.frequencia)) throw falha('Frequência inválida.'); obj.frequencia = v.frequencia || ''; }
   const tipoFinal = 'tipo' in obj ? obj.tipo : (atual ? atual.tipo : '');
@@ -2019,11 +2039,24 @@ function pendSalvar(v, conta) {
     if (atual && atual.concluidoEm) obj.concluidoEm = '';
     else delete obj.concluidoEm;
   } else {
-    // data de conclusão: entra sozinha ao concluir, some ao reabrir; preenchida à mão, conclui
+    // conclusão: exige a data e vira um pedido, que só conclui depois da aprovação do gerente e do síndico
     const stAntes = atual ? atual.status : '';
-    if (obj.concluidoEm && (obj.status || stAntes) !== 'Concluído') obj.status = 'Concluído';
-    if (obj.status === 'Concluído' && stAntes !== 'Concluído' && !('concluidoEm' in obj)) obj.concluidoEm = hoje();
-    if (obj.status && obj.status !== 'Concluído' && atual && atual.concluidoEm) obj.concluidoEm = '';
+    const quer = obj.status === 'Concluído' || (!!obj.concluidoEm && !('status' in obj));
+    if (!atual && quer) throw falha('Inclua a pendência primeiro. A conclusão é pedida depois e passa pela aprovação do gerente e do síndico.');
+    if (atual && quer && stAntes !== 'Concluído') {
+      if (pendAguardando(atual)) throw falha('Esta pendência ainda aguarda a aprovação de inclusão (gerente e síndico). A conclusão só pode ser pedida depois.');
+      if (pendConclPendente(atual)) throw falha('A conclusão desta pendência já foi pedida e aguarda aprovação.');
+      if (!obj.concluidoEm) throw falha('Informe a data de conclusão.');
+      Object.assign(obj, { conclPedida: agora() + ' · ' + conta.nome, conclData: obj.concluidoEm, conclGerente: '', conclSindico: '' });
+      delete obj.status; delete obj.concluidoEm;
+      pedidoConclusao = true;
+    } else if (atual && stAntes === 'Concluído' && obj.status && obj.status !== 'Concluído') {
+      // reaberta: limpa a conclusão para poder pedir de novo
+      Object.assign(obj, { concluidoEm: '', conclPedida: '', conclData: '', conclGerente: '', conclSindico: '' });
+    } else if (atual && stAntes === 'Concluído' && 'concluidoEm' in obj) {
+      if (!obj.concluidoEm) throw falha('A data de conclusão é obrigatória.');
+      if (!gerente && !sindico) throw falha('A data de uma pendência já concluída só pode ser corrigida pelo gerente ou pelo síndico.');
+    } else if ('concluidoEm' in obj && stAntes !== 'Concluído') delete obj.concluidoEm; // data só entra pela aprovação
   }
 
   if (atual) {
@@ -2043,15 +2076,21 @@ function pendSalvar(v, conta) {
       });
     }
     gravar(t, obj, atual._row);
-    if (obj.secao) return 'Movida para ' + obj.secao + ' como nº ' + obj.numero + '.';
+    if (obj.secao) return 'Movida para ' + pendRotuloSecao(obj.secao) + ' como nº ' + obj.numero + '.';
     const dm = d => String(d).split('-').reverse().slice(0, 2).join('/');
+    if (pedidoConclusao) return 'Conclusão pedida (' + dm(obj.conclData) + '). Falta a aprovação do gerente e do síndico.';
+    if (prazoPeloSindico) return obj.prazo ? 'Prazo inicial alterado para ' + dm(obj.prazo) + ' pelo síndico.' : 'Prazo inicial retirado pelo síndico.';
+    if ('prazoAtualizado' in v && Object.keys(v).length <= 2) return obj.prazoAtualizado ? 'Prazo atualizado para ' + dm(obj.prazoAtualizado) + '.' : 'Atualização de prazo retirada.';
     if (obj.prazoDefinidoEm && atual.tipo !== 'Constante' && !constFinal) return 'Prazo ' + dm(obj.prazo) + ' definido e bloqueado.';
     if ('concluidoEm' in v && obj.concluidoEm) return 'Concluída em ' + dm(obj.concluidoEm) + '.';
     return obj.status && 'status' in v ? 'Situação: ' + obj.status + '.' : 'criticidade' in v && Object.keys(v).length <= 2 ? 'Criticidade: ' + (obj.criticidade || 'sem definição') + '.' : 'Salvo.';
   }
 
   if (!obj.titulo) throw falha('Descreva a pendência.');
-  const comuns = { criadaPor: conta.nome, origem: sindico ? 'Síndico' : '', vistaEm: '', vistaPor: '', execucoes: '', ultimaVez: '' };
+  // toda pendência nova (inclusive a do síndico) aguarda a aprovação do gerente e, em seguida, do síndico
+  const comuns = { criadaPor: conta.nome, origem: sindico ? 'Síndico' : '', vistaEm: '', vistaPor: '', execucoes: '', ultimaVez: '',
+    criadaEm: agora(), prazoAtualizado: obj.prazoAtualizado || '', aprovacao: 'Aguardando gerente', aprovGerente: '', aprovSindico: '',
+    conclPedida: '', conclData: '', conclGerente: '', conclSindico: '' };
   // subitem de uma pendência existente
   if (v.pai) {
     const pai = todas.find(p => p.id === texto(v.pai, 40));
@@ -2071,7 +2110,7 @@ function pendSalvar(v, conta) {
       ordem: depois ? (fim + Number(depois.ordem)) / 2 : fim + 1
     });
     gravar(t, obj);
-    return 'Subitem ' + (numero || '') + ' adicionado.';
+    return 'Subitem ' + (numero || '') + ' adicionado. Aguarda aprovação do gerente e do síndico.' + pendAvisarCriacao(obj, conta, pai);
   }
   const secao = PEND_SECOES.indexOf(v.secao) >= 0 ? v.secao : PEND_SECOES[PEND_SECOES.length - 1];
   const daSecao = todas.filter(p => p.secao === secao);
@@ -2086,7 +2125,124 @@ function pendSalvar(v, conta) {
     ordem: Math.max.apply(null, [base].concat(daSecao.map(p => Number(p.ordem) || 0))) + 1
   });
   gravar(t, obj);
-  return (obj.tipo === 'Constante' ? 'Tarefa constante ' : 'Pendência ') + obj.numero + ' adicionada.';
+  return (obj.tipo === 'Constante' ? 'Tarefa constante ' : 'Pendência ') + obj.numero + ' adicionada. Aguarda aprovação do gerente e do síndico.' + pendAvisarCriacao(obj, conta, null);
+}
+
+function pendAprovar(t, atual, v, conta, obj) {
+  const sindico = ehSindico(conta), gerente = ehGerente(conta);
+  const marca = emNome => agora() + ' · ' + conta.nome + (emNome ? ' (em nome do gerente)' : '');
+  const dm = d => String(d).split('-').reverse().slice(0, 2).join('/');
+  if (v.recusarConclusao) {
+    if (!pendConclPendente(atual)) throw falha('Esta pendência não tem conclusão aguardando aprovação.');
+    if (!gerente && !sindico) throw falha('Só o gerente ou o síndico podem recusar a conclusão.');
+    Object.assign(obj, { conclPedida: '', conclData: '', conclGerente: '', conclSindico: '' });
+    gravar(t, obj, atual._row);
+    return 'Conclusão recusada. A pendência continua aberta.';
+  }
+  if (v.aprovar === 'inclusao') {
+    if (atual.aprovacao === 'Aguardando gerente') {
+      if (!gerente && !sindico) throw falha('Só o gerente (ou o síndico, em nome dele) aprova esta etapa.');
+      Object.assign(obj, { aprovacao: 'Aguardando síndico', aprovGerente: marca(!gerente) });
+      gravar(t, obj, atual._row);
+      return 'Aprovada pelo gerente' + (gerente ? '' : ' (em nome dele)') + '. Falta a aprovação do síndico.';
+    }
+    if (atual.aprovacao === 'Aguardando síndico') {
+      if (!sindico) throw falha('Só o síndico aprova esta etapa.');
+      Object.assign(obj, { aprovacao: 'Aprovada', aprovSindico: marca(false) });
+      gravar(t, obj, atual._row);
+      return 'Pendência aprovada pelo síndico. Agora ela está válida.';
+    }
+    throw falha('Esta pendência não está aguardando aprovação.');
+  }
+  if (v.aprovar === 'conclusao') {
+    if (!pendConclPendente(atual)) throw falha('Esta pendência não tem conclusão aguardando aprovação.');
+    if (!String(atual.conclGerente || '').trim()) {
+      if (!gerente && !sindico) throw falha('Só o gerente (ou o síndico, em nome dele) aprova esta etapa.');
+      Object.assign(obj, { conclGerente: marca(!gerente) });
+      gravar(t, obj, atual._row);
+      return 'Conclusão aprovada pelo gerente' + (gerente ? '' : ' (em nome dele)') + '. Falta a aprovação do síndico.';
+    }
+    if (!sindico) throw falha('Só o síndico aprova esta etapa.');
+    const dia = /^\d{4}-\d{2}-\d{2}$/.test(String(atual.conclData || '')) ? String(atual.conclData) : hoje();
+    Object.assign(obj, { conclSindico: marca(false), status: 'Concluído', concluidoEm: dia });
+    gravar(t, obj, atual._row);
+    return 'Conclusão aprovada. Pendência concluída em ' + dm(dia) + '.';
+  }
+  throw falha('Aprovação inválida.');
+}
+
+// ---------- aviso por e-mail ao incluir uma pendência ----------
+// Os endereços ficam na aba "Emails" da planilha (coluna "Para": Gerente, Síndico ou o nome do responsável; coluna "E-mail").
+const EMAILS_ABA = 'Emails';
+const EMAILS_INICIAIS = [
+  ['Gerente', 'Recebe o aviso de toda pendência nova'], ['Síndico', 'Recebe o aviso de toda pendência nova'],
+  ['Supervisor', 'Recebe quando for o responsável'], ['Auxiliar', 'Recebe quando for o responsável'],
+  ['Manutenção', 'Recebe quando for o responsável'], ['Limpeza', 'Recebe quando for o responsável'],
+  ['Jardinagem', 'Recebe quando for o responsável'], ['Piscina', 'Recebe quando for o responsável'],
+  ['Fornecedor', 'Recebe quando for o responsável']
+];
+const chaveNome = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+
+function abaEmails() {
+  const ss = SpreadsheetApp.getActive();
+  let sh = ss.getSheetByName(EMAILS_ABA);
+  if (!sh) {
+    sh = ss.insertSheet(EMAILS_ABA);
+    const vals = [['Para', 'E-mail', 'Observação']].concat(EMAILS_INICIAIS.map(x => [x[0], '', x[1]]));
+    sh.getRange(1, 1, vals.length, 3).setValues(vals);
+    sh.getRange(1, 1, 1, 3).setFontWeight('bold').setBackground('#1F2A37').setFontColor('#FFFFFF');
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+function lerEmails() {
+  const sh = abaEmails();
+  const n = sh.getLastRow();
+  const mapa = {};
+  if (n < 2) return mapa;
+  sh.getRange(2, 1, n - 1, 2).getValues().forEach(r => {
+    const k = chaveNome(r[0]); if (!k) return;
+    const lista = String(r[1] || '').split(/[,;\s]+/).map(x => x.trim()).filter(x => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x));
+    mapa[k] = (mapa[k] || []).concat(lista);
+  });
+  return mapa;
+}
+
+// envia para o Gerente, o Síndico e o responsável; uma falha no e-mail nunca desfaz a inclusão
+function pendAvisarCriacao(p, conta, pai) {
+  try {
+    const mapa = lerEmails(), dest = [];
+    const somar = nome => (mapa[chaveNome(nome)] || []).forEach(e => { if (dest.indexOf(e.toLowerCase()) < 0) dest.push(e.toLowerCase()); });
+    somar('Gerente'); somar('Síndico');
+    if (String(p.responsavel || '').trim()) somar(p.responsavel);
+    if (!dest.length) return ' Nenhum e-mail cadastrado na aba Emails para o aviso.';
+    const dt = d => d ? String(d).slice(0, 10).split('-').reverse().join('/') : '';
+    const nome = (pai ? 'novo subitem' : 'nova pendência') + (p.numero ? ' nº ' + p.numero : '');
+    const corpo = [
+      (pai ? 'Um novo subitem foi incluído' : 'Uma nova pendência foi incluída') + ' no Controle de pendências do Pier Gestão.',
+      '',
+      'Seção: ' + pendRotuloSecao(p.secao),
+      pai ? 'Subitem de: ' + (pai.numero ? pai.numero + ' – ' : '') + pai.titulo : '',
+      'Nº: ' + (p.numero || '—'),
+      'Pendência: ' + p.titulo,
+      String(p.obs || '').trim() ? 'Detalhes: ' + String(p.obs).trim() : '',
+      'Criticidade: ' + (p.criticidade || 'não definida'),
+      p.tipo === 'Constante' ? 'Tipo: tarefa constante (' + String(p.frequencia || 'Mensal').toLowerCase() + ')' : '',
+      p.prazo ? (p.tipo === 'Constante' ? 'Próxima execução: ' : 'Prazo inicial: ') + dt(p.prazo) : '',
+      'Responsável: ' + (String(p.responsavel || '').trim() || 'não definido'),
+      'Incluída por: ' + conta.nome + ' em ' + dt(p.criadaEm) + ' ' + String(p.criadaEm || '').slice(11, 16),
+      '',
+      'Aprovação: aguardando a aprovação do gerente e, em seguida, do síndico.',
+      '',
+      'Mensagem automática do Pier Gestão. Não responda este e-mail.'
+    ].filter((l, i, a) => l !== '' || (i > 0 && a[i - 1] !== '')).join('\n');
+    MailApp.sendEmail({ to: dest.join(','), subject: 'Pier Gestão – ' + nome + ': ' + String(p.titulo).slice(0, 80), body: corpo, name: 'Pier Gestão' });
+    return ' Aviso enviado por e-mail (' + dest.length + ' destinatário' + (dest.length === 1 ? '' : 's') + ').';
+  } catch (e) {
+    Logger.log('Aviso por e-mail da pendência não enviado: ' + e.message);
+    return ' O aviso por e-mail não foi enviado (' + String(e.message).slice(0, 120) + ').';
+  }
 }
 
 function pendExcluir(id) {
@@ -2369,6 +2525,18 @@ function lerAcessos(dias) {
 
 function ehSindico(conta) {
   return String((conta && conta.perfil) || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().indexOf('sindico') >= 0;
+}
+// quem tem o perfil "Gerente" aprova a primeira etapa das pendências (inclusão e conclusão)
+function ehGerente(conta) {
+  return String((conta && conta.perfil) || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().indexOf('gerente') >= 0;
+}
+
+// Perfil "Gerente": criado uma vez só, com todas as permissões menos a gestão de usuários (ajustável na tela Usuários)
+function garantirGerente() {
+  if (Object.keys(lerPerfis()).some(n => chaveNome(n).indexOf('gerente') >= 0)) return '';
+  const perms = {}; PERMISSOES.forEach(p => { if (p[0] !== 'usuarios') perms[p[0]] = true; });
+  salvarPerfil({ nome: 'Gerente', perms });
+  return ' Perfil Gerente criado.';
 }
 
 // Perfil "Síndico": só o controle de pendências, com acesso completo (criado uma vez só)

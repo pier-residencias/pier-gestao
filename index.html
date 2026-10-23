@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="estilo.css?v=20261015i">
+<link rel="stylesheet" href="estilo.css?v=20261022pend2">
 </head>
 <body>
 <div class="login" id="login" hidden>
@@ -449,16 +449,19 @@
     <div class="pd-stats" id="pd-stats"></div>
     <div class="pd-prog"><span class="track"><i id="pd-bar"></i></span><span id="pd-prog">Carregando…</span></div>
     <div class="notice warn" id="pd-aviso" hidden>Para usar criticidade, tarefas constantes, subitens, prazo bloqueado e data de conclusão, a planilha precisa do código novo do Apps Script (colar, executar <b>autorizar</b> e implantar uma nova versão).</div>
+    <div class="notice" id="pd-aviso2" hidden>Aprovação do gerente e do síndico, atualização de prazo, prazo inicial alterável pelo síndico e aviso por e-mail entram quando o Apps Script novo for instalado (colar o código, executar <b>autorizar</b> e implantar uma nova versão).</div>
     <div class="toolbar">
       <input class="input" id="pd-q" type="search" placeholder="Buscar pendência, observação ou responsável">
       <select class="input" id="pd-fs" aria-label="Filtrar por situação"></select>
       <select class="input" id="pd-fc" aria-label="Filtrar por criticidade"></select>
       <select class="input" id="pd-fr" aria-label="Filtrar por responsável"></select>
+      <select class="input" id="pd-ord" aria-label="Ordenar a lista"></select>
       <label class="pd-chk"><input type="checkbox" id="pd-hide"> Ocultar concluídas</label>
+      <button class="btn" type="button" id="pd-recolher" aria-pressed="false">Recolher todas</button>
       <button class="btn primary" type="button" id="pd-mail">Gerar texto para e-mail</button>
     </div>
     <div id="pd-body"><div class="empty">Carregando pendências…</div></div>
-    <datalist id="pd-resps"><option value="Gerência"></option><option value="Supervisor"></option><option value="Auxiliar"></option><option value="Síndico"></option><option value="Fornecedor"></option></datalist>
+    <datalist id="pd-resps"><option value="Auxiliar"></option><option value="Fornecedor"></option><option value="Gerência"></option><option value="Jardinagem"></option><option value="Limpeza"></option><option value="Manutenção"></option><option value="Piscina"></option><option value="Síndico"></option><option value="Supervisor"></option></datalist>
   </section>
 </main>
 
@@ -467,6 +470,6 @@
 
 <script src="config.js"></script>
 <script src="nfe.js?v=20261015s"></script>
-<script src="app.js?v=20261022sec2"></script>
+<script src="app.js?v=20261022pend2"></script>
 </body>
 </html>
