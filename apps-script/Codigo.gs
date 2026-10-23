@@ -219,7 +219,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-10-23 cotações';
+const VERSAO = '2026-10-23 conclusão';
 
 function doGet() {
   return json({ ok: true, app: 'Pier Gestão', versao: VERSAO });
@@ -2158,7 +2158,7 @@ function pendSalvar(v, conta) {
     if (atual && atual.concluidoEm) obj.concluidoEm = '';
     else delete obj.concluidoEm;
   } else {
-    // conclusão: exige a data e vira um pedido, que só conclui depois da aprovação do gerente e do síndico
+    // conclusão: exige a data e vira um pedido, que só conclui depois da aprovação do gerente e do síndico (em qualquer ordem)
     const stAntes = atual ? atual.status : '';
     const quer = obj.status === 'Concluído' || (!!obj.concluidoEm && !('status' in obj));
     if (!atual && quer) throw falha('Inclua a pendência primeiro. A conclusão é pedida depois e passa pela aprovação do gerente e do síndico.');
@@ -2313,18 +2313,22 @@ function pendAprovar(t, atual, v, conta, obj) {
     throw falha('Esta pendência não está aguardando aprovação.');
   }
   if (v.aprovar === 'conclusao') {
+    // conclusão: gerente e síndico aprovam cada um a sua parte, em qualquer ordem; conclui quando os dois aprovarem
     if (!pendConclPendente(atual)) throw falha('Esta pendência não tem conclusão aguardando aprovação.');
-    if (!String(atual.conclGerente || '').trim()) {
-      if (!gerente && !sindico) throw falha('Só o gerente (ou o síndico, em nome dele) aprova esta etapa.');
-      Object.assign(obj, { conclGerente: marca(!gerente) });
+    if (!gerente && !sindico) throw falha('Só o gerente e o síndico aprovam a conclusão.');
+    const temG = !!String(atual.conclGerente || '').trim(), temS = !!String(atual.conclSindico || '').trim();
+    let quem;
+    if (sindico && !temS) { obj.conclSindico = marca(false); quem = 'síndico'; }
+    else if (gerente && !temG) { obj.conclGerente = marca(false); quem = 'gerente'; }
+    else throw falha('Você já aprovou esta conclusão. Falta a aprovação do ' + (temG ? 'síndico' : 'gerente') + '.');
+    if ((temG || obj.conclGerente) && (temS || obj.conclSindico)) {
+      const dia = /^\d{4}-\d{2}-\d{2}$/.test(String(atual.conclData || '')) ? String(atual.conclData) : hoje();
+      Object.assign(obj, { status: 'Concluído', concluidoEm: dia });
       gravar(t, obj, atual._row);
-      return 'Conclusão aprovada pelo gerente' + (gerente ? '' : ' (em nome dele)') + '. Falta a aprovação do síndico.';
+      return 'Conclusão aprovada pelo ' + quem + '. Pendência concluída em ' + dm(dia) + '.';
     }
-    if (!sindico) throw falha('Só o síndico aprova esta etapa.');
-    const dia = /^\d{4}-\d{2}-\d{2}$/.test(String(atual.conclData || '')) ? String(atual.conclData) : hoje();
-    Object.assign(obj, { conclSindico: marca(false), status: 'Concluído', concluidoEm: dia });
     gravar(t, obj, atual._row);
-    return 'Conclusão aprovada. Pendência concluída em ' + dm(dia) + '.';
+    return 'Conclusão aprovada pelo ' + quem + '. Falta a aprovação do ' + (quem === 'síndico' ? 'gerente' : 'síndico') + '.';
   }
   throw falha('Aprovação inválida.');
 }
@@ -3001,7 +3005,7 @@ function lerAcessos(dias) {
 function ehSindico(conta) {
   return String((conta && conta.perfil) || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().indexOf('sindico') >= 0;
 }
-// quem tem o perfil "Gerente" aprova a primeira etapa das pendências (inclusão e conclusão)
+// quem tem o perfil "Gerente" aprova a primeira etapa da inclusão e a parte dele na conclusão das pendências
 function ehGerente(conta) {
   return String((conta && conta.perfil) || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().indexOf('gerente') >= 0;
 }

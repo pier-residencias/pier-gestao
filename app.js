@@ -2903,10 +2903,17 @@ function pdAbrirOS(id){
 }
 const pdAguardando = p => !!p && (p.aprovacao === "Aguardando gerente" || p.aprovacao === "Aguardando síndico");
 const pdConclPend = p => !!p && !!String(p.conclPedida||"").trim() && p.status !== "Concluído";
-// etapa que falta: {tipo:"inclusao"|"conclusao", etapa:"gerente"|"sindico"}
-const pdEtapa = p => pdAguardando(p) ? {tipo:"inclusao", etapa: p.aprovacao === "Aguardando gerente" ? "gerente" : "sindico"}
-  : pdConclPend(p) ? {tipo:"conclusao", etapa: String(p.conclGerente||"").trim() ? "sindico" : "gerente"} : null;
-const pdPossoAprovar = e => !!e && (e.etapa === "gerente" ? (ehGerente() || ehSindico()) : ehSindico());
+// etapa que falta: {tipo:"inclusao"|"conclusao", etapa:"gerente"|"sindico"|"ambos"}
+// inclusão: gerente e depois síndico; conclusão: gerente e síndico, cada um a sua parte, em qualquer ordem
+const pdEtapa = p => {
+  if (pdAguardando(p)) return {tipo:"inclusao", etapa: p.aprovacao === "Aguardando gerente" ? "gerente" : "sindico"};
+  if (!pdConclPend(p)) return null;
+  const g = !!String(p.conclGerente||"").trim(), s = !!String(p.conclSindico||"").trim();
+  return {tipo:"conclusao", etapa: !g && !s ? "ambos" : g ? "sindico" : "gerente"};
+};
+const pdPossoAprovar = e => !!e && (e.tipo === "conclusao"
+  ? (ehSindico() && e.etapa !== "gerente") || (ehGerente() && e.etapa !== "sindico")
+  : e.etapa === "gerente" ? (ehGerente() || ehSindico()) : ehSindico());
 const pdPrazoEf = p => (!pdConst(p) && p.prazoAtualizado) || p.prazo;
 const pdMarca = x => { x = String(x||""); const [q, ...quem] = x.split(" · "); return q ? fData(q) + (q.length > 10 ? " " + q.slice(11,16) : "") + (quem.length ? " · " + quem.join(" · ") : "") : ""; };
 // data de criação: a coluna "Incluída em" ou, nas pendências antigas, o instante guardado no próprio ID
@@ -3169,11 +3176,12 @@ function pdAtualizar(p){
 }
 // selo da aprovação que falta e os botões de quem pode aprovar esta etapa
 function pdAprovHtml(p, e){
-  const quem = e.etapa === "gerente" ? "gerente" : "síndico";
+  const quem = e.etapa === "ambos" ? "gerente e síndico" : e.etapa === "gerente" ? "gerente" : "síndico";
   const selo = e.tipo === "inclusao" ? `Aguardando aprovação do ${quem}` : `Conclusão em ${fData(p.conclData)} aguardando ${quem}`;
   let b = "";
   if (pdPossoAprovar(e)) {
-    const rot = e.etapa === "sindico" ? "Aprovar (síndico)" : ehGerente() ? "Aprovar (gerente)" : "Aprovar em nome do gerente";
+    const rot = e.tipo === "conclusao" ? (ehSindico() && e.etapa !== "gerente" ? "Aprovar conclusão (síndico)" : "Aprovar conclusão (gerente)")
+      : e.etapa === "sindico" ? "Aprovar (síndico)" : ehGerente() ? "Aprovar (gerente)" : "Aprovar em nome do gerente";
     b += `<button type="button" class="btn small primary pd-aprovar" data-aprovar="${e.tipo}" data-id="${esc(p.id)}">${rot}</button>`;
   }
   if (e.tipo === "conclusao" && (ehGerente() || ehSindico())) b += `<button type="button" class="btn small pd-recusar" data-recusar="${esc(p.id)}">Recusar conclusão</button>`;
@@ -3190,7 +3198,7 @@ function pdPedirConclusao(id, sugestao){
   const box = pdEl("div", {class:"pd-conf", "data-concl":"1"}, [pdEl("label", {for:"pdcc-"+id}, [pdEl("b", {text:"Data de conclusão"}), " (obrigatória)"]), data]);
   const sim = pdEl("button", {class:"btn small primary", type:"button", text: pdV2() ? "Pedir conclusão" : "Concluir"});
   const nao = pdEl("button", {class:"btn small", type:"button", text:"Cancelar"});
-  const dica = pdEl("span", {class:"hint", text: pdV2() ? "A pendência só fica concluída depois da aprovação do gerente e do síndico." : ""});
+  const dica = pdEl("span", {class:"hint", text: pdV2() ? "A pendência só fica concluída depois da aprovação do gerente e do síndico (em qualquer ordem)." : ""});
   sim.onclick = () => {
     const d = data.value;
     if (!d) { toast("Informe a data de conclusão.", true); data.focus(); return; }
