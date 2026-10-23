@@ -44,12 +44,15 @@ if (!TEM_ADM || !document.getElementById("t-acessos")) delete ABAS_PERM.acessos;
 // O que aparece depende de como a pessoa entrou: Manutenção (tudo do estoque, OS e demandas),
 // Limpeza (só o estoque da limpeza) ou Administração (só o menu Administração).
 const ABAS_ADM = ["pendencias","usuarios","acessos"];
-const ABAS_LIMPEZA = ["painel","registrar","itens","historico"];
+const ABAS_LIMPEZA = ["painel","registrar","itens","historico","os"];
 const TIPOS_LIMPEZA = ["saida","entrada"];
 const modo = () => S.adm ? "Administração" : S.setor;
 const abaNoModo = t => S.adm ? ABAS_ADM.includes(t) : S.setor === "Limpeza" ? ABAS_LIMPEZA.includes(t) : !ABAS_ADM.includes(t);
 const ehSindico = () => norm(S.perfil).includes("sindico");
 const ehGerente = () => norm(S.perfil).includes("gerente");
+// OS por ambiente: a Limpeza vê as OS da Limpeza; a Manutenção, as da Manutenção (inclui jardinagem e as antigas, sem setor)
+const osAmb = () => S.setor === "Limpeza" ? "Limpeza" : "Manutenção";
+const osDoAmb = o => (o.setor === "Limpeza" ? "Limpeza" : "Manutenção") === osAmb();
 const setoresReais = () => SETORES_PERM.filter(x => can(x[1])).map(x => x[0]);
 const podeAdm = () => ABAS_ADM.some(t => (ABAS_PERM[t]||[]).some(can));
 const podeAba = t => (ABAS_PERM[t]||[]).some(can) && abaNoModo(t);
@@ -103,7 +106,8 @@ function aplicar(d){
   S.locais = d.locais || {};
   renderSetorSel();
   S.movs = d.movs || [];
-  S.os = d.os || [];
+  S.osTodas = d.os || [];
+  S.os = S.osTodas.filter(osDoAmb);
   S.colab = d.colaboradores || [];
   S.dem = d.demandas || [];
   S.prev = d.preventivas || [];
@@ -323,6 +327,7 @@ function mudarSetor(x){
   if (x === S.setor || !S.setores.includes(x)) return;
   S.setor = x; try { localStorage.setItem("estoque-setor", x); } catch(e){}
   S.emprestimos = S.empTodos.filter(doSetor);
+  S.os = (S.osTodas || []).filter(osDoAmb);
   S.picked = null; S.iStatus = ""; syncChips("#i-status","s",S.iStatus); $("#i-cat").value = "";
   renderSetorSel(); renderAll(); renderSugestoes();
 }
@@ -1279,6 +1284,7 @@ function novaOS(){
     ev.preventDefault();
     const msg = $("#os-msg"), v = lerCamposOS(msg); if (!v) return;
     if ($("#os-resp") && $("#os-resp").value) v.responsavelUsuario = $("#os-resp").value;
+    v.setor = osAmb();
     const arquivos = [...$("#os-fotos").files].slice(0, 8);
     const r = await enviar($("#os-ok"), msg, "osAbrir", {os:v});
     if (!r) return;
@@ -2640,6 +2646,52 @@ const pdRespOpcoes = atual => {
 const PD_ORD = [["","Número (padrão)"],["alfa","Ordem alfabética (A–Z)"],["crit","Criticidade (alta primeiro)"],["venc","Vencimento (mais próximo primeiro)"],["novas","Data de criação (mais recentes)"],["antigas","Data de criação (mais antigas)"]];
 // versão 2 do Apps Script: aprovações, atualização de prazo, prazo inicial alterável pelo síndico e aviso por e-mail
 const pdV2 = () => PD.versao >= 2;
+// versão 3: criar OS para a equipe a partir da pendência
+const pdV3 = () => PD.versao >= 3;
+const PD_OS_PRIO = ["Urgente","Alta","Normal","Baixa"];
+// sugestão da OS a partir do responsável e da criticidade da pendência
+const pdOSPadrao = (resp, crit) => ({
+  setor: resp === "Limpeza" ? "Limpeza" : "Manutenção",
+  categoria: ({Jardinagem:"Jardinagem", Piscina:"Piscina", Limpeza:"Limpeza"})[resp] || "",
+  prioridade: ({Alta:"Alta", "Média":"Normal", Baixa:"Baixa"})[crit] || "Normal"
+});
+// campos da OS (equipe, categoria, local, prioridade, prazo); "cls" marca os campos para mostrar/esconder juntos
+function pdCamposOS(d, cls){
+  return `<div class="field ${cls}"><label for="no-setor">Equipe</label><select class="input" id="no-setor"><option value="Manutenção" ${d.setor!=="Limpeza"?"selected":""}>Manutenção (inclui jardinagem)</option><option value="Limpeza" ${d.setor==="Limpeza"?"selected":""}>Limpeza</option></select></div>
+    <div class="field ${cls}"><label for="no-cat">Categoria</label><select class="input" id="no-cat"><option value="">Escolha</option>${OS_CATEGORIAS.map(c => `<option ${c===d.categoria?"selected":""}>${esc(c)}</option>`).join("")}</select></div>
+    <div class="field full ${cls}"><label for="no-local">Local do serviço <span class="req">*</span></label><input class="input" id="no-local" placeholder="Ex.: Piscina, Bloco 3, Garagem" value="${esc(d.local||"")}"></div>
+    <div class="field ${cls}"><label for="no-prio">Prioridade da OS</label><select class="input" id="no-prio">${PD_OS_PRIO.map(x => `<option ${x===d.prioridade?"selected":""}>${x}</option>`).join("")}</select></div>
+    <div class="field ${cls}"><label for="no-prazo">Prazo da OS</label><input class="input" id="no-prazo" type="date" value="${esc(d.prazo||"")}"><span class="hint">Em branco: o prazo da pendência ou o padrão da prioridade.</span></div>`;
+}
+function pdLerOS(msg){
+  const local = $("#no-local").value.trim();
+  if (!local) { msg.className = "hint err"; msg.textContent = "Informe o local do serviço da OS."; $("#no-local").focus(); return null; }
+  return {setor:$("#no-setor").value, categoria:$("#no-cat").value, local, prioridade:$("#no-prio").value, prazo:$("#no-prazo").value};
+}
+// criar OS a partir de uma pendência já existente
+function pdAbrirOS(id){
+  const p = pdAchar(id); if (!p) return;
+  const d = Object.assign(pdOSPadrao(String(p.responsavel||"").trim(), p.criticidade), {prazo: pdPrazoEf(p) || ""});
+  $("#modal-box").innerHTML = `<h3>Criar OS para a equipe</h3>
+    <p class="hint" style="margin:-6px 0 12px">Pendência <b>${esc(p.numero||"")} · ${esc(p.titulo||"")}</b>. A OS aparece na tela de OS do ambiente da equipe.</p>
+    <form class="form-pend" id="f-pdos" novalidate autocomplete="off">
+      ${pdCamposOS(d, "")}
+      <div class="field full"><label for="no-desc">Descrição para a equipe</label><textarea class="input" id="no-desc" rows="3">${esc(p.obs||"")}</textarea></div>
+      <div class="full actions"><button class="btn primary" type="submit" id="no-ok">Criar OS</button><button class="btn" type="button" id="no-no">Cancelar</button><span class="hint" id="no-msg"></span></div>
+    </form>`;
+  $("#modal").hidden = false; $("#no-local").focus();
+  $("#no-no").onclick = fecharModal;
+  $("#f-pdos").addEventListener("submit", ev => {
+    ev.preventDefault();
+    const msg = $("#no-msg"), os = pdLerOS(msg); if (!os) return;
+    os.descricao = $("#no-desc").value.trim();
+    const ok = $("#no-ok"); ok.disabled = true; msg.className = "hint"; msg.innerHTML = `<span class="spin" aria-hidden="true"></span> Criando a OS…`;
+    pdEnviar("pendSalvar", {pend:{id, criarOS:os}}).then(res => {
+      if (!res) { ok.disabled = false; msg.className = "hint err"; msg.textContent = "Não foi possível criar a OS. Tente de novo."; return; }
+      fecharModal();
+    });
+  });
+}
 const pdAguardando = p => !!p && (p.aprovacao === "Aguardando gerente" || p.aprovacao === "Aguardando síndico");
 const pdConclPend = p => !!p && !!String(p.conclPedida||"").trim() && p.status !== "Concluído";
 // etapa que falta: {tipo:"inclusao"|"conclusao", etapa:"gerente"|"sindico"}
@@ -2886,15 +2938,16 @@ function pdAtualizar(p){
   const quando = p.atualizadoEm ? `Atualizado em ${fData(p.atualizadoEm)} ${String(p.atualizadoEm).slice(11,16)}${p.atualizadoPor ? " por "+p.atualizadoPor : ""}` : "";
   const fimPrazo = !cst && p.status === "Concluído" && p.concluidoEm && p.prazo ? pdDias(p.prazo, p.concluidoEm) : null;
   const etapa = pdV2() ? pdEtapa(p) : null;
-  const assinatura = [nova, p.criadaPor, quando, ehSindico(), ehGerente(), cst, p.ultimaVez, sub, pdTemNovos(), fimPrazo, etapa && etapa.tipo, etapa && etapa.etapa, p.conclData].join("|");
+  const assinatura = [nova, p.criadaPor, quando, ehSindico(), ehGerente(), cst, p.ultimaVez, sub, pdTemNovos(), fimPrazo, etapa && etapa.tipo, etapa && etapa.etapa, p.conclData, p.os, p.osStatus, pdV3()].join("|");
   if (f.meta.dataset.a !== assinatura) {
     f.meta.dataset.a = assinatura;
     f.meta.innerHTML = (nova ? `<span class="pd-nova-pill">Nova do síndico</span>${ehSindico() ? "" : `<button type="button" class="btn small pd-ciente" data-ciente="${esc(p.id)}">Ciente</button>`}` : "")
       + (etapa ? pdAprovHtml(p, etapa) : "")
+      + (p.os ? `<span class="pd-ospill ${p.osStatus === "Concluída" ? "ok" : p.osStatus === "Cancelada" ? "canc" : ""}" title="OS criada a partir desta pendência">${esc(p.os)}${p.osSetor ? " · " + esc(p.osSetor) : ""}${p.osStatus ? " · " + esc(p.osStatus) : ""}</span>` : "")
       + (fimPrazo !== null ? `<span class="pd-fim ${fimPrazo > 0 ? "atraso" : "ok"}">${fimPrazo > 0 ? `Concluída ${fimPrazo} dia${fimPrazo===1?"":"s"} após o prazo` : "Concluída no prazo"}</span>` : "")
       + (cst ? `<span class="pd-ult">Última execução: <b>${p.ultimaVez ? fDia(p.ultimaVez) : "ainda não registrada"}</b></span>` : "")
       + `<span>${p.criadaPor && p.criadaPor !== "undefined" && p.origem && p.origem !== "undefined" ? "Incluída por " + esc(p.criadaPor) + " · " : ""}${esc(quando)}</span>`
-      + (pdTemNovos() ? `<span class="pd-acoes">${sub ? "" : `<button type="button" class="link" data-sub="${esc(p.id)}">+ subitem</button>`}<button type="button" class="link" data-editar="${esc(p.id)}">editar</button></span>` : "");
+      + (pdTemNovos() ? `<span class="pd-acoes">${sub ? "" : `<button type="button" class="link" data-sub="${esc(p.id)}">+ subitem</button>`}<button type="button" class="link" data-editar="${esc(p.id)}">editar</button>${pdV3() && (!p.os || p.osStatus === "Cancelada") ? `<button type="button" class="link" data-os="${esc(p.id)}">+ OS</button>` : ""}</span>` : "");
   }
   r.el.classList.toggle("nova", nova);
   r.el.classList.toggle("done", p.status === "Concluído" && !cst);
@@ -3080,10 +3133,11 @@ function pdAbrirForm(o){
       ${pdV2() ? `<div class="field" id="np-prazo2-box"><label for="np-prazo2">Atualização de prazo</label><input class="input" id="np-prazo2" type="date" value="${esc((ed && ed.prazoAtualizado)||"")}"><span class="hint">Nova data combinada. Pode ser alterada a qualquer momento.</span></div>` : ""}
       ${ed && pdTemConcl() ? `<div class="field" id="np-concl-box"><label for="np-concl">Concluída em</label><input class="input" id="np-concl" type="date" max="${hoje()}" value="${esc(ed.concluidoEm||(pdConclPend(ed) ? ed.conclData : "")||"")}" ${pdV2() && (pdConclPend(ed) || (ed.status === "Concluído" && !(ehGerente() || ehSindico()))) ? "disabled" : ""}><span class="hint">Obrigatória ao marcar como Concluído.${pdV2() ? " A conclusão passa pela aprovação do gerente e do síndico." : ""}</span></div>` : ""}
       <div class="field"><label for="np-resp">Responsável</label><select class="input" id="np-resp">${pdRespOpcoes(v.responsavel)}</select></div>
+      ${!ed && pdV3() ? `<div class="field full"><label class="pd-chk pd-chk-os"><input type="checkbox" id="np-os"> Criar também uma OS para a equipe (Manutenção ou Limpeza)</label></div>${pdCamposOS(pdOSPadrao(v.responsavel, v.criticidade), "np-osf")}` : ""}
       ${ed && pdV2() ? pdAprovInfo(ed) : ""}
       ${execs.length ? `<div class="field full"><span class="lbl-campo">Últimas execuções</span><ul class="pd-execs">${execs.slice(0,8).map(x => `<li><b>${fData(x.slice(0,10))}</b> ${esc(x.slice(11))}</li>`).join("")}</ul></div>` : ""}
       ${ehSindico() && !ed ? `<p class="hint full">A administração recebe a pendência destacada como "Nova do síndico".</p>` : ""}
-      ${!ed && pdV2() ? `<p class="hint full">A pendência nova fica aguardando a aprovação do gerente e, em seguida, do síndico. Gerente, síndico e responsável recebem um aviso por e-mail.</p>` : ""}
+      ${!ed && pdV2() ? `<p class="hint full">A pendência nova fica aguardando a aprovação do gerente e, em seguida, do síndico. O setor escolhido em Responsável recebe um aviso por e-mail (sem responsável, não sai e-mail).</p>` : ""}
       <div class="full actions"><button class="btn primary" type="submit" id="np-ok">${ed ? "Salvar alterações" : pai ? "Incluir subitem" : "Incluir pendência"}</button><button class="btn" type="button" id="np-no">Cancelar</button><span class="hint" id="np-msg"></span></div>
     </form>`;
   $("#modal").hidden = false;
@@ -3101,6 +3155,15 @@ function pdAbrirForm(o){
   };
   $$('input[name="np-tipo"]').forEach(r => r.addEventListener("change", ajustaTipo));
   ajustaTipo();
+  if ($("#np-os")) {
+    const mostrar = () => $$(".np-osf").forEach(e => e.hidden = !$("#np-os").checked);
+    $("#np-os").addEventListener("change", () => { mostrar(); if ($("#np-os").checked) $("#no-local").focus(); });
+    mostrar();
+    // a sugestão de equipe, categoria e prioridade acompanha o responsável e a criticidade, até a pessoa mexer nesses campos
+    let mexeu = false; ["#no-setor","#no-cat","#no-prio"].forEach(s => $(s).addEventListener("change", () => { mexeu = true; }));
+    const sugerir = () => { if (mexeu) return; const d = pdOSPadrao($("#np-resp").value, $("#np-crit").value); $("#no-setor").value = d.setor; $("#no-cat").value = d.categoria; $("#no-prio").value = d.prioridade; };
+    $("#np-resp").addEventListener("change", sugerir); $("#np-crit").addEventListener("change", sugerir);
+  }
   ($("#np-sec") && !$("#np-sec").value ? $("#np-sec") : $("#np-tit")).focus();
   $("#np-no").onclick = fecharModal;
   ["#np-sec","#np-tit","#np-crit"].forEach(s => { const e = $(s); if (e) e.addEventListener("input", () => { const m = $("#np-msg"); if (m.classList.contains("err")) { m.textContent = ""; m.className = "hint"; } }); });
@@ -3131,7 +3194,10 @@ function pdAbrirForm(o){
       Object.keys(dados).forEach(k => { if (String(dados[k] ?? "") !== String(ed[k] ?? "")) pend[k] = dados[k]; });
       if (!ehSub && secao !== ed.secao) pend.secao = secao;
       if (Object.keys(pend).length === 1) { fecharModal(); return; }
-    } else pend = Object.assign(pai ? {pai: pai.id} : {secao}, dados);
+    } else {
+      pend = Object.assign(pai ? {pai: pai.id} : {secao}, dados);
+      if ($("#np-os") && $("#np-os").checked) { const os = pdLerOS(msg); if (!os) return; pend.criarOS = os; }
+    }
     const antes = new Set((S.pend||[]).map(p => p.id));
     const ok = $("#np-ok"); ok.disabled = true; msg.className = "hint"; msg.innerHTML = `<span class="spin" aria-hidden="true"></span> Salvando…`;
     pdEnviar("pendSalvar", {pend}).then(res => {
@@ -3170,6 +3236,7 @@ function pdTextoEmail(){
       if (!pdConst(p) && p.prazoAtualizado && p.status !== "Concluído") x.push("prazo atualizado " + fData(p.prazoAtualizado).slice(0,5));
       if (pdAguardando(p)) x.push("aguardando aprovação do " + (p.aprovacao === "Aguardando gerente" ? "gerente" : "síndico"));
       if (pdConclPend(p)) x.push("conclusão em " + fData(p.conclData).slice(0,5) + " aguardando aprovação");
+      if (p.os) x.push(p.os + (p.osStatus ? " " + String(p.osStatus).toLowerCase() : ""));
       if (!pdConst(p) && p.status === "Concluído" && p.concluidoEm) x.push("concluída em " + fData(p.concluidoEm).slice(0,5));
       if (String(p.responsavel||"").trim()) x.push("resp.: " + String(p.responsavel).trim());
       if (x.length) ln += " (" + x.join("; ") + ")";
@@ -3183,7 +3250,8 @@ function pdTextoEmail(){
 if (TEM_ADM) {
 $("#pd-nova").addEventListener("click", () => pdAbrirNova());
 $("#pd-body").addEventListener("click", e => {
-  const b = e.target.closest("[data-ciente],[data-feito],[data-sub],[data-editar],[data-aprovar],[data-recusar]"); if (!b) return;
+  const b = e.target.closest("[data-ciente],[data-feito],[data-sub],[data-editar],[data-aprovar],[data-recusar],[data-os]"); if (!b) return;
+  if (b.dataset.os) { pdAbrirOS(b.dataset.os); return; }
   if (b.dataset.aprovar) { b.disabled = true; pdEnviar("pendSalvar", {pend:{id:b.dataset.id, aprovar:b.dataset.aprovar}}); }
   else if (b.dataset.recusar) { b.disabled = true; pdEnviar("pendSalvar", {pend:{id:b.dataset.recusar, recusarConclusao:true}}); }
   else if (b.dataset.ciente) { b.disabled = true; pdEnviar("pendSalvar", {pend:{id:b.dataset.ciente, ciente:true}}); }
