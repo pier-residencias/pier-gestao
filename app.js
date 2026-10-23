@@ -35,15 +35,16 @@ const SETORES_PERM = [["Manutenção","setor_manutencao"],["Limpeza","setor_limp
 const setoresDasPerms = p => { const l = SETORES_PERM.filter(x => p && p[x[1]]).map(x => x[0]); return l.length ? l : ["Manutenção"]; };
 const doSetor = x => setorDe(x) === S.setor;
 const can = p => !!(S.perms && S.perms[p]);
-const ABAS_PERM = {painel:["painel"], demandas:["dem_ver","dem_executar","dem_delegar"], os:["os_ver","os_abrir","os_atender","os_gerenciar"], registrar:["registrar_saida","registrar_entrada","registrar_troca","registrar_emprestimo"], itens:["itens_ver"], historico:["historico_ver"], emprestimos:["devolver","registrar_emprestimo"], dashboard:["dashboard"], usuarios:["usuarios"], pendencias:["pendencias"], cotacoes:["pendencias"], acessos:["acessos"]};
+const ABAS_PERM = {painel:["painel"], demandas:["dem_ver","dem_executar","dem_delegar"], os:["os_ver","os_abrir","os_atender","os_gerenciar"], registrar:["registrar_saida","registrar_entrada","registrar_troca","registrar_emprestimo"], itens:["itens_ver"], historico:["historico_ver"], emprestimos:["devolver","registrar_emprestimo"], dashboard:["dashboard"], usuarios:["usuarios"], pendencias:["pendencias"], pdpainel:["pendencias"], cotacoes:["pendencias"], acessos:["acessos"]};
 // Se o navegador ainda estiver com a página antiga guardada, o menu Administração não existe nela:
 // o resto do sistema continua funcionando normalmente.
 const TEM_ADM = !!(document.getElementById("tab-adm") && document.getElementById("adm-menu") && document.getElementById("t-pendencias"));
 if (!TEM_ADM) delete ABAS_PERM.pendencias;
+if (!TEM_ADM || !document.getElementById("t-pdpainel")) delete ABAS_PERM.pdpainel;
 if (!TEM_ADM || !document.getElementById("t-acessos")) delete ABAS_PERM.acessos;
 // O que aparece depende de como a pessoa entrou: Manutenção (tudo do estoque, OS e demandas),
 // Limpeza (só o estoque da limpeza) ou Administração (só o menu Administração).
-const ABAS_ADM = ["pendencias","cotacoes","usuarios","acessos"];
+const ABAS_ADM = ["pendencias","pdpainel","cotacoes","usuarios","acessos"];
 const ABAS_LIMPEZA = ["painel","registrar","itens","historico","os"];
 const TIPOS_LIMPEZA = ["saida","entrada"];
 const modo = () => S.adm ? "Administração" : S.setor;
@@ -131,7 +132,7 @@ function renderSync(){
   const el = $("#sync"); if (!el) return;
   el.innerHTML = S.ocupado ? `<span class="spin" aria-hidden="true"></span> Atualizando…` : S.ultima ? `Atualizado às ${S.ultima.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}` : "";
 }
-setInterval(() => { if (document.visibilityState==="visible" && $("#modal").hidden && S.token) { atualizar(true); if (S.tab==="pendencias" && TEM_ADM) carregarPend(); } }, 45000);
+setInterval(() => { if (document.visibilityState==="visible" && $("#modal").hidden && S.token) { atualizar(true); if ((S.tab==="pendencias" || S.tab==="pdpainel") && TEM_ADM) carregarPend(); } }, 45000);
 document.addEventListener("visibilitychange", () => { if (document.visibilityState==="visible" && S.token && (!S.ultima || Date.now()-S.ultima > 20000)) atualizar(true); });
 
 // ---------- avisos ----------
@@ -271,6 +272,7 @@ function registrarTela(tela, detalhe){
 function setTab(t){
   if (S.token && !podeAba(t)) t = primeiraAba();
   if (S.token && t !== S.tab && TELAS_LOG.includes(t)) registrarTela(t);
+  if (S.token && t !== S.tab && t === "pdpainel") registrarTela("pendencias", "Painel de pendências");
   S.tab = t;
   $$("nav.tabs [role=tablist] > button[data-tab]").forEach(b => b.setAttribute("aria-selected", b.dataset.tab===t ? "true":"false"));
   if (TEM_ADM) {
@@ -284,6 +286,7 @@ function setTab(t){
   if (t==="dashboard") carregarDashboard();
   if (t==="usuarios") carregarEquipe();
   if (t==="pendencias") carregarPend();
+  if (t==="pdpainel") { renderPdPainel(); carregarPend(); }
   if (t==="acessos") carregarAcessos();
   if (t==="cotacoes") { renderCot(); carregarCot(); }
   window.scrollTo({top:0});
@@ -383,7 +386,7 @@ const MENU = [
     {t:"os", rot:"Ordens de serviço (OS)", b:"b-os"}, {t:"demandas", rot:"Demandas", b:"b-dem"}]},
   {g:"Gestão", ico:'<path d="M5 19V11M10 19V6M15 19v-5M20 19V9"/>', itens:[{t:"dashboard", rot:"Dashboard"}]},
   {g:"Pendências e compras", ico:'<path d="M8 5h11M8 12h11M8 19h11M4 5h.01M4 12h.01M4 19h.01"/>', itens:[
-    {t:"pendencias", rot:"Controle de pendências", b:"b-adm"}, {t:"pendencias", acao:"nova", rot:"Incluir pendência"}, {t:"cotacoes", rot:"Cotações"}]},
+    {t:"pdpainel", rot:"Painel de pendências"}, {t:"pendencias", rot:"Controle de pendências", b:"b-adm"}, {t:"pendencias", acao:"nova", rot:"Incluir pendência"}, {t:"cotacoes", rot:"Cotações"}]},
   {g:"Equipe", ico:'<path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 6.5M18 14.5a6 6 0 0 1 3.5 5.5"/>', itens:[
     {t:"usuarios", rot:"Usuários e permissões"}, {t:"acessos", rot:"Histórico de acessos"}]}
 ];
@@ -2965,6 +2968,93 @@ async function carregarPend(){
   catch(e){ if (!S.pend) $("#pd-body").innerHTML = `<div class="notice crit">${esc(e.message)}</div>`; toast(e.message, true); }
   finally { PD.carregando = false; }
 }
+// ---------- painel de pendências: cartões com os números do controle e gráfico dos últimos 12 meses ----------
+// Tudo calculado na tela a partir das pendências já carregadas (não muda nada no Apps Script).
+const PP_ICO = {
+  total:'<path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>',
+  ok:'<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  mes:'<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4M9 15l2 2 4-4"/>',
+  andamento:'<path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v4h-4"/>',
+  pendente:'<circle cx="12" cy="12" r="8"/><path d="M12 8v4.5l3 2"/>',
+  alta:'<path d="M12 4 21 19.5H3z"/><path d="M12 10v4.5M12 17h.01"/>',
+  atraso:'<circle cx="12" cy="13.5" r="7"/><path d="M12 10.5V14l2.2 1.6M9.5 3h5M12 3v3.5"/>',
+  aprov:'<path d="M12 3 5 6v5.5c0 4.2 3 7.6 7 9.5 4-1.9 7-5.3 7-9.5V6z"/><path d="m9 12 2 2 4-4"/>',
+  nova:'<path d="m12 4 2.5 5.1 5.5.8-4 3.9.9 5.5L12 16.7l-4.9 2.6.9-5.5-4-3.9 5.5-.8z"/>',
+  cst:'<path d="M4 11a8 8 0 0 1 14-4.6L20 8.5M20 4v4.5h-4.5M20 13a8 8 0 0 1-14 4.6L4 15.5M4 20v-4.5h4.5"/>'
+};
+const ppMes = ms => { if (!ms) return ""; const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`; };
+const ppPlural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
+function ppIr(f){
+  // abre o Controle de pendências já filtrado pelo cartão escolhido
+  Object.assign(PD, {q:"", st:f.st || "", crit:f.crit || "", resp:"", late:!!f.late, novas:!!f.novas, cst:!!f.cst, aprov:!!f.aprov, hide:!!f.crit});
+  pdGuardarFiltros(); setTab("pendencias");
+}
+function renderPdPainel(){
+  const sec = $("#t-pdpainel"), box = $("#pp-cards"); if (!sec || !box || sec.hidden) return;
+  if (!S.pend) { box.innerHTML = `<div class="empty">Carregando pendências…</div>`; return; }
+  const all = pdLista(), pont = all.filter(p => !pdConst(p)), cst = all.filter(pdConst);
+  const n = s => pont.filter(p => p.status === s).length, pct = x => pont.length ? Math.round(x / pont.length * 100) : 0;
+  const mes = hoje().slice(0, 7), feitas = n("Concluído");
+  const feitasMes = pont.filter(p => p.status === "Concluído" && String(p.concluidoEm || "").slice(0, 7) === mes).length;
+  const novasMes = pont.filter(p => ppMes(pdCriado(p)) === mes).length;
+  const atrasadas = all.filter(pdAtrasada).length, cstVenc = cst.filter(pdAtrasada).length;
+  const cards = [
+    {k:"total", cor:"azul", rot:"Total de pendências", v:pont.length, sub: cst.length ? "+ " + ppPlural(cst.length, "tarefa constante", "tarefas constantes") : "", ir:{}},
+    {k:"ok", cor:"verde", rot:"Concluídas", v:feitas, sub:`${pct(feitas)}% do total`, ir:{st:"Concluído"}},
+    {k:"mes", cor:"teal", rot:"Concluídas este mês", v:feitasMes, sub:ppPlural(novasMes, "incluída este mês", "incluídas este mês"), ir:{st:"Concluído"}},
+    {k:"andamento", cor:"info", rot:"Em andamento", v:n("Em andamento"), sub:`${pct(n("Em andamento"))}% do total`, ir:{st:"Em andamento"}},
+    {k:"pendente", cor:"ambar", rot:"Pendentes", v:n("Pendente"), sub:`${pct(n("Pendente"))}% do total`, ir:{st:"Pendente"}}
+  ];
+  if (pdTemCrit()) cards.push({k:"alta", cor:"vermelho", rot:"Alta criticidade em aberto", v:all.filter(p => p.criticidade === "Alta" && p.status !== "Concluído").length, sub:"criticidade alta, ainda não concluídas", ir:{crit:"Alta"}});
+  cards.push({k:"atraso", cor:"vermelho", rot:"Atrasadas", v:atrasadas, sub: atrasadas ? "com o prazo vencido" : "nenhuma com o prazo vencido", ir:{late:true}});
+  if (pdV2()) { const ag = all.filter(pdEtapa).length; cards.push({k:"aprov", cor:"roxo", rot:"Aguardando aprovação", v:ag, sub:"inclusão ou conclusão", ir:{aprov:true}}); }
+  if (!ehSindico()) cards.push({k:"nova", cor:"laranja", rot:"Novas do síndico", v:all.filter(pdNova).length, sub:"ainda não vistas", ir:{novas:true}});
+  if (cst.length) cards.push({k:"cst", cor:"teal", rot:"Tarefas constantes", v:cst.length, sub: cstVenc ? ppPlural(cstVenc, "vencida", "vencidas") : "todas em dia", ir:{cst:true}});
+  box.innerHTML = cards.map((c, i) => `<button type="button" class="pp-card" data-i="${i}" title="Ver na lista">
+      <span class="pp-txt"><span class="pp-rot">${esc(c.rot)}</span><b class="pp-v num">${c.v}</b>${c.sub ? `<span class="pp-sub ${c.k === "ok" ? "ok" : ""}">${esc(c.sub)}</span>` : ""}</span>
+      <span class="pp-ico ${c.cor}"><svg viewBox="0 0 24 24" aria-hidden="true">${PP_ICO[c.k]}</svg></span></button>`).join("");
+  $$("#pp-cards .pp-card").forEach(b => b.onclick = () => ppIr(cards[+b.dataset.i].ir));
+  ppGrafico();
+}
+function ppSeries(){
+  const hojeD = new Date(), meses = [];
+  for (let i = 11; i >= 0; i--) { const d = new Date(hojeD.getFullYear(), hojeD.getMonth() - i, 1); meses.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`); }
+  const pont = pdLista().filter(p => !pdConst(p));
+  const criada = new Map(pont.map(p => [p.id, ppMes(pdCriado(p))]));
+  const fim = p => p.status === "Concluído" ? String(p.concluidoEm || "").slice(0, 7) : "";
+  return { meses, series: [
+    {k:"inc", rot:"Incluídas", v: meses.map(m => pont.filter(p => criada.get(p.id) === m).length)},
+    {k:"con", rot:"Concluídas", v: meses.map(m => pont.filter(p => fim(p) === m).length)},
+    // em aberto no fim do mês: incluída até o mês e ainda não concluída nele (as concluídas sem data não contam)
+    {k:"abe", rot:"Em aberto no fim do mês", v: meses.map(m => pont.filter(p => { const c = criada.get(p.id); if (c && c > m) return false; if (p.status !== "Concluído") return true; const f = fim(p); return !!f && f > m; }).length)}
+  ]};
+}
+const PP_MESES = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
+const ppRotMes = (m, i) => { const [a, mm] = m.split("-"); const r = PP_MESES[+mm - 1]; return i === 0 || mm === "01" ? `${r}/${a.slice(2)}` : r; };
+function ppGrafico(){
+  const el = $("#pp-graf"); if (!el || !S.pend || $("#t-pdpainel").hidden) return;
+  const { meses, series } = ppSeries();
+  const W = Math.max(300, Math.round(el.clientWidth || 600)), H = W < 560 ? 220 : 280;
+  const pl = 34, pr = 12, pt = 12, pb = 30, iw = W - pl - pr, ih = H - pt - pb;
+  const max = Math.max(1, ...series.flatMap(s => s.v));
+  const passo = max <= 5 ? 1 : max <= 10 ? 2 : max <= 25 ? 5 : max <= 50 ? 10 : max <= 100 ? 20 : Math.ceil(max / 5 / 50) * 50;
+  const top = Math.ceil(max / passo) * passo;
+  const x = i => pl + (iw * (i + .5)) / meses.length, y = v => pt + ih - (ih * v) / top;
+  let g = "";
+  for (let v = 0; v <= top; v += passo) g += `<line class="pp-grade" x1="${pl}" x2="${W - pr}" y1="${y(v)}" y2="${y(v)}"/><text class="pp-eixo" x="${pl - 6}" y="${y(v) + 4}" text-anchor="end">${v}</text>`;
+  const pulo = W < 420 ? 2 : 1;
+  meses.forEach((m, i) => { if (i % pulo === (meses.length - 1) % pulo) g += `<text class="pp-eixo" x="${x(i)}" y="${H - 9}" text-anchor="middle">${ppRotMes(m, i)}</text>`; });
+  series.forEach(s => {
+    g += `<polyline class="pp-linha ${s.k}" points="${s.v.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ")}"/>`;
+    g += s.v.map((v, i) => `<circle class="pp-pto ${s.k}" cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3.5"><title>${ppRotMes(meses[i], 0)} · ${s.rot}: ${v}</title></circle>`).join("");
+  });
+  el.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Pendências incluídas, concluídas e em aberto nos últimos 12 meses">${g}</svg>`;
+  $("#pp-leg").innerHTML = series.map(s => `<span><i class="${s.k}"></i>${esc(s.rot)}</span>`).join("");
+  $("#pp-tab").innerHTML = `<div class="tablebox"><table><thead><tr><th>Mês</th>${series.map(s => `<th class="num">${esc(s.rot)}</th>`).join("")}</tr></thead><tbody>${meses.map((m, i) => `<tr><td>${ppRotMes(m, 0)}</td>${series.map(s => `<td class="num">${s.v[i]}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+}
+let ppRedim;
+addEventListener("resize", () => { clearTimeout(ppRedim); ppRedim = setTimeout(() => { if (S.tab === "pdpainel") ppGrafico(); }, 150); });
+if ($("#pp-abrir")) $("#pp-abrir").addEventListener("click", () => ppIr({}));
 // gravações uma de cada vez, na ordem em que foram feitas
 function pdEnviar(acao, extra, aoConcluir){
   PD.salvando++;
@@ -3284,6 +3374,7 @@ function pdNovo(secao){
 }
 function renderPend(){
   if (!TEM_ADM || !can("pendencias") || !S.pend) return;
+  renderPdPainel();
   pdFiltros(); pdResumo();
   const body = $("#pd-body");
   if (!PD.secs.size) { body.textContent = ""; PD_SECOES.forEach(s => body.append(pdSecao(s).sec)); }
