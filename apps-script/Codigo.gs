@@ -206,7 +206,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-10-15 segurança 2';
+const VERSAO = '2026-10-22 pendências e senha própria';
 
 function doGet() {
   return json({ ok: true, app: 'Pier Gestão', versao: VERSAO });
@@ -232,7 +232,10 @@ function doPost(e) {
       if (!conta) {
         const travou = registrarFalhaLogin(usuarioDig);
         registrarAcesso(null, usuarioDig, Object.assign({}, req.registro || {}, { motivo: 'falha' }));
-        if (travou) auditar({ usuario: usuarioDig, nome: '', perfil: '' }, 'Login bloqueado', SEG.tentativas + ' senhas erradas seguidas; bloqueado por ' + SEG.bloqueioMin + ' min.', 'Negado');
+        if (travou) {
+          auditar({ usuario: usuarioDig, nome: '', perfil: '' }, 'Login bloqueado', SEG.tentativas + ' senhas erradas seguidas; bloqueado por ' + SEG.bloqueioMin + ' min.', 'Negado');
+          alertaSeguranca('bloqueio', usuarioDig, 'Login bloqueado por ' + SEG.bloqueioMin + ' min depois de ' + SEG.tentativas + ' senhas erradas seguidas.', (req.registro || {}).aparelho);
+        }
         return json({ ok: false, codigo: 'senha', erro: travou ? 'Senha errada de novo. Por segurança, este login ficou bloqueado por ' + SEG.bloqueioMin + ' min.' : 'Usuário ou senha incorretos.' });
       }
       limparFalhasLogin(usuarioDig);
@@ -250,9 +253,10 @@ function doPost(e) {
     if (req.acao === 'entrar' || req.acao === 'dados') gerarPreventivasSePreciso();
     if (req.acao === 'entrar') {
       if (req.registro) registrarAcesso(conta, conta.usuario, req.registro);
-      return json(Object.assign(base, token ? { token, sessaoHoras: Math.round(SEG.sessaoInativa / 36e5) } : {}));
+      return json(Object.assign(base, token ? { token, sessaoHoras: Math.round(SEG.sessaoInativa / 36e5), senhaProvisoria: !!conta.senhaProvisoria } : {}));
     }
     if (req.acao === 'sair') { encerrarSessao(req.token); auditar(conta, 'Saiu do sistema', ''); return json({ ok: true }); }
+    if (req.acao === 'visao') { registrarVisao(conta, req); return json({ ok: true }); }
     if (req.acao === 'acessos') { pode('acessos'); return json(Object.assign(base, { acessos: lerAcessos(req.dias) })); }
     if (req.acao === 'auditoria') { pode('acessos'); return json(Object.assign(base, { auditoria: lerAuditoria(req.dias) })); }
     if (req.acao === 'dados') return json(Object.assign(base, { dados: dados(req.meses, conta) }));
@@ -287,6 +291,7 @@ function doPost(e) {
         case 'acessoUsuario': pode('usuarios'); msg = acessoUsuario(req, conta); extra.equipe = equipe(); break;
         case 'salvarPerfil': pode('usuarios'); exigirPerfilTotalParaPerfil(req, conta); msg = salvarPerfil(req); extra.equipe = equipe(); break;
         case 'excluirPerfil': pode('usuarios'); msg = excluirPerfil(req.nome); extra.equipe = equipe(); break;
+        case 'trocarSenha': msg = trocarMinhaSenha(req, conta); extra.semDados = true; break;
         case 'pendSalvar': pode('pendencias'); msg = pendSalvar(req.pend || {}, conta); extra.pendencias = true; break;
         case 'pendExcluir': pode('pendencias'); msg = pendExcluir(req.id); extra.pendencias = true; break;
         default: throw falha('Ação desconhecida.');
@@ -298,10 +303,14 @@ function doPost(e) {
     }
     if (extra.pendencias) return json(Object.assign(base, { msg, pendencias: pendLista(), pendVersao: PEND_VERSAO }));
     if (extra.equipe) return json(Object.assign(base, { msg }, extra));
+    if (extra.semDados) return json(Object.assign(base, { msg }));
     return json(Object.assign(base, { msg, dados: dados(req.meses, conta) }, extra));
   } catch (err) {
     // tentativas sem permissão ficam no histórico de auditoria
-    if (conta && (err.negado || /não tem permissão/i.test(String(err.message)))) auditar(conta, ACOES_AUDIT[req.acao] || String(req.acao || ''), String(err.message), 'Negado');
+    if (conta && (err.negado || /não tem permissão/i.test(String(err.message)))) {
+      auditar(conta, ACOES_AUDIT[req.acao] || String(req.acao || ''), String(err.message), 'Negado');
+      alertaSeguranca('negado', conta.usuario, 'Tentativa sem permissão: ' + (ACOES_AUDIT[req.acao] || String(req.acao || '')) + ' — ' + String(err.message), '', conta.nome);
+    }
     return json({ ok: false, erro: err.paraUsuario ? err.message : 'Erro no servidor: ' + err.message });
   }
 }
@@ -676,12 +685,60 @@ function autenticar(usuario, senha) {
   const u = String(usuario || '').trim().toLowerCase();
   const s = String(senha || '').trim();
   if (!u || !s) return null;
+  garantirColunaProvisoria();
   const U = lerUsuarios();
   const us = U.lista.find(x => x.usuario === u);
   if (!us || !us.ativo || !conferirSenha(s, us.senha)) return null;
   // senha ainda em texto (digitada direto na planilha): vira código na primeira entrada
   if (!ehHash(us.senha)) U.sh.getRange(us.row, U.c['Senha'] + 1).setNumberFormat('@').setValue(hashSenha(s));
-  return contaDe(us);
+  const conta = contaDe(us);
+  conta.senhaProvisoria = us.provisoria;
+  return conta;
+}
+
+// Coluna "Senha provisória" da aba Usuarios: criada uma vez só. Na criação, quem já usa o sistema fica com a
+// senha marcada como provisória e é convidado a criar a própria na próxima entrada
+// (menos o "admin" e o login compartilhado "limpeza").
+function garantirColunaProvisoria() {
+  const U = lerUsuarios();
+  if (U.c['Senha provisória'] >= 0) return false;
+  const col = U.ncol + 1;
+  U.sh.getRange(1, col).setValue('Senha provisória').setFontWeight('bold').setBackground('#1F2A37').setFontColor('#FFFFFF');
+  U.lista.forEach(us => {
+    const marcar = us.usuario !== 'admin' && us.usuario !== 'limpeza';
+    U.sh.getRange(us.row, col).setNumberFormat('@').setValue(marcar ? 'Sim' : '');
+  });
+  return true;
+}
+
+// a própria pessoa troca a senha: confere a atual, grava a nova (com hash) e encerra os outros acessos abertos
+function trocarMinhaSenha(r, conta) {
+  const usuario = conta.usuario;
+  const atual = String(r.atual || '').trim(), nova = String(r.nova || '').trim();
+  const bloq = loginBloqueado(usuario);
+  if (bloq) throw falha('Muitas tentativas com senha errada. Tente de novo em ' + bloq + ' min.');
+  const U = lerUsuarios();
+  const us = U.lista.find(x => x.usuario === usuario);
+  if (!us || !us.ativo) throw falha('Usuário não encontrado.');
+  if (!atual || !conferirSenha(atual, us.senha)) {
+    const travou = registrarFalhaLogin(usuario);
+    AUDIT_DET = 'Senha atual errada ao trocar a senha';
+    if (travou) alertaSeguranca('bloqueio', usuario, 'Login bloqueado por ' + SEG.bloqueioMin + ' min: senha atual errada ' + SEG.tentativas + ' vezes ao tentar trocar a senha.', '', conta.nome);
+    throw falha(travou ? 'Senha atual errada de novo. Por segurança, novas entradas deste login ficaram bloqueadas por ' + SEG.bloqueioMin + ' min.' : 'A senha atual não confere.');
+  }
+  if (nova.length < SEG.senhaMin) throw falha('A nova senha precisa ter pelo menos ' + SEG.senhaMin + ' caracteres.');
+  if (nova === atual) throw falha('A nova senha precisa ser diferente da atual.');
+  if (nova.toLowerCase() === usuario) throw falha('A senha não pode ser igual ao usuário.');
+  if (/^(.)\1+$/.test(nova)) throw falha('Escolha uma senha menos óbvia (não use o mesmo caractere repetido).');
+  garantirColunaProvisoria();
+  const U2 = lerUsuarios();
+  U2.sh.getRange(us.row, U2.c['Senha'] + 1).setNumberFormat('@').setValue(hashSenha(nova));
+  U2.sh.getRange(us.row, U2.c['Senha provisória'] + 1).setNumberFormat('@').setValue('');
+  limparFalhasLogin(usuario);
+  const encerradas = encerrarSessoesDe(usuario, conta.sessao);
+  AUDIT_DET = 'Trocou a própria senha' + (encerradas ? '; ' + encerradas + ' outro(s) acesso(s) encerrado(s)' : '');
+  alertaSeguranca('senha', usuario, 'Trocou a própria senha.' + (encerradas ? ' ' + encerradas + ' outro(s) aparelho(s) desconectado(s).' : ''), '', conta.nome);
+  return 'Senha trocada. A partir de agora, use a sua nova senha.' + (encerradas ? ' Os outros aparelhos conectados vão pedir a senha de novo.' : '');
 }
 function contaDe(us) {
   const perms = lerPerfis()[us.perfil] || {};
@@ -698,6 +755,7 @@ function lerUsuarios() {
     if (c[label] < 0) throw falha('A coluna "' + label + '" não foi encontrada na aba Usuarios.');
   });
   c['Telefone'] = head.indexOf('Telefone');
+  c['Senha provisória'] = head.indexOf('Senha provisória');
   const lista = [];
   for (let i = 1; i < vals.length; i++) {
     const r = vals[i];
@@ -706,7 +764,8 @@ function lerUsuarios() {
     lista.push({
       row: i + 1, usuario, nome: texto(r[c['Nome']], 60), senha: String(r[c['Senha']]).trim(),
       perfil: String(r[c['Perfil']]).trim(), ativo: String(r[c['Ativo']]).trim().toLowerCase().indexOf('n') !== 0,
-      telefone: c['Telefone'] >= 0 ? String(r[c['Telefone']]).replace(/\D/g, '') : ''
+      telefone: c['Telefone'] >= 0 ? String(r[c['Telefone']]).replace(/\D/g, '') : '',
+      provisoria: c['Senha provisória'] >= 0 && String(r[c['Senha provisória']]).trim().toLowerCase().indexOf('s') === 0
     });
   }
   return { sh, c, lista, ncol: head.length };
@@ -736,7 +795,7 @@ function equipe() {
   return {
     usuarios: (function () {
       const ses = contarSessoes();
-      return lerUsuarios().lista.map(u => ({ usuario: u.usuario, nome: u.nome, perfil: u.perfil, ativo: u.ativo, telefone: u.telefone,
+      return lerUsuarios().lista.map(u => ({ usuario: u.usuario, nome: u.nome, perfil: u.perfil, ativo: u.ativo, telefone: u.telefone, provisoria: u.provisoria,
         sessoes: ses[u.usuario] || 0, bloqueado: !!loginBloqueado(u.usuario) }));
     })(),
     perfis: Object.keys(perfis).map(n => ({ nome: n, perms: perfis[n], fixo: n === PERFIL_TOTAL })),
@@ -765,6 +824,7 @@ function salvarUsuario(r, conta) {
     U.sh.getRange(1, U.ncol + 1).setValue('Telefone').setFontWeight('bold').setBackground('#1F2A37').setFontColor('#FFFFFF');
     U = lerUsuarios();
   }
+  if (garantirColunaProvisoria()) U = lerUsuarios();
   const outro = U.lista.find(x => x.usuario === usuario && x.usuario !== original);
   if (outro) throw falha('O usuário "' + usuario + '" já existe.');
   const anterior = original ? U.lista.find(x => x.usuario === original) : null;
@@ -778,7 +838,11 @@ function salvarUsuario(r, conta) {
   }
   const linha = [];
   linha[U.c['Usuário']] = usuario; linha[U.c['Nome']] = nome;
-  if (senha) linha[U.c['Senha']] = hashSenha(senha);
+  if (senha) {
+    linha[U.c['Senha']] = hashSenha(senha);
+    // senha criada pela Administração para outra pessoa é provisória: na entrada, ela é convidada a criar a própria
+    linha[U.c['Senha provisória']] = original && original === conta.usuario ? '' : 'Sim';
+  }
   linha[U.c['Perfil']] = perfil; linha[U.c['Ativo']] = ativo ? 'Sim' : 'Não'; linha[U.c['Telefone']] = telefone;
   let row;
   if (original) {
@@ -829,6 +893,8 @@ function salvarUsuario(r, conta) {
     if (anterior && anterior.telefone !== telefone) mud.push('WhatsApp');
   }
   AUDIT_DET = (original ? 'Alterou ' : 'Criou ') + usuario + (mud.length ? ': ' + mud.join(', ') : ' (sem mudanças)') + (encerradas ? '; ' + encerradas + ' acesso(s) aberto(s) encerrado(s)' : '');
+  if (!original || senha || (anterior && (anterior.perfil !== perfil || anterior.ativo !== ativo || original !== usuario)))
+    alertaSeguranca('usuario', usuario, AUDIT_DET + ' (feito por ' + conta.nome + ').', '', nome);
   return original ? 'Usuário atualizado: ' + nome + '.' + (encerradas ? ' Os acessos abertos dele foram encerrados.' : '') : 'Usuário criado: ' + nome + '.';
 }
 
@@ -1785,8 +1851,10 @@ function autorizar() {
   tabela('audit');
   const limpeza = garantirLimpeza() + garantirSindico() + garantirGerente();
   abaEmails();
+  garantirLinhaEmail('Segurança');
   Logger.log('E-mail: ' + MailApp.getRemainingDailyQuota() + ' envios disponíveis hoje (a permissão de enviar e-mail fica autorizada).');
   const senhas = migrarSenhas();
+  garantirColunaProvisoria();
   protegerAbas();
   const arquivos = verificarArquivos();
   Logger.log('Pronto: pastas de fotos e de notas fiscais, abas OS, Demandas, Preventivas, Pendencias e Emails, setores e permissões verificadas.' + limpeza);
@@ -2233,6 +2301,67 @@ function pendAprovar(t, atual, v, conta, obj) {
   throw falha('Aprovação inválida.');
 }
 
+// ---------- log de segurança: telas vistas, exportações e alertas ----------
+// telas sensíveis (e exportações) que ficam registradas na Auditoria, com a permissão que cada uma exige
+const TELAS_VISTAS = {
+  historico: ['Histórico de movimentações', 'historico_ver'], dashboard: ['Dashboard', 'dashboard'],
+  usuarios: ['Usuários e permissões', 'usuarios'], pendencias: ['Controle de pendências', 'pendencias'],
+  acessos: ['Histórico de acessos', 'acessos'],
+  exportar_movs: ['Movimentações (planilha CSV)', 'exportar'], exportar_consumo: ['Consumo por item (planilha CSV)', 'exportar']
+};
+function registrarVisao(conta, req) {
+  const t = TELAS_VISTAS[String(req.tela || '')];
+  if (!t) return;
+  const exp = String(req.tela).indexOf('exportar_') === 0;
+  const det = t[0] + (req.detalhe ? ' · ' + texto(req.detalhe, 80) : '');
+  if (!conta.perms[t[1]]) {
+    auditar(conta, exp ? 'Exportou planilha' : 'Abriu tela', det + ' — sem permissão', 'Negado');
+    alertaSeguranca('negado', conta.usuario, 'Tentou ' + (exp ? 'exportar ' : 'abrir ') + det + ' sem permissão.', '', conta.nome);
+    return;
+  }
+  auditar(conta, exp ? 'Exportou planilha' : 'Abriu tela', det);
+}
+
+// alerta por e-mail para a linha "Segurança" da aba Emails; o mesmo tipo de alerta da mesma pessoa
+// sai no máximo uma vez a cada 15 min (bloqueio e acesso negado) ou 1 min (senha e usuário). Nunca leva senhas.
+function alertaSeguranca(tipo, usuario, detalhe, aparelho, nome) {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const chave = 'ALERTA_' + tipo + '_' + String(usuario || '').slice(0, 40);
+    const intervalo = (tipo === 'bloqueio' || tipo === 'negado' ? 15 : 1) * 60 * 1000;
+    const ultimo = Number(props.getProperty(chave) || 0);
+    if (Date.now() - ultimo < intervalo) return;
+    const dest = emailsDoSetor('Segurança');
+    if (!dest.length) { garantirLinhaEmail('Segurança'); return; }
+    props.setProperty(chave, String(Date.now()));
+    const titulo = { bloqueio: 'login bloqueado', negado: 'acesso negado', senha: 'senha trocada', usuario: 'usuário criado ou alterado' }[tipo] || tipo;
+    const quando = agora();
+    const corpo = [
+      'Alerta de segurança do Pier Gestão: ' + titulo + '.',
+      '',
+      'Quando: ' + String(quando).slice(0, 10).split('-').reverse().join('/') + ' ' + String(quando).slice(11, 16),
+      'Usuário: ' + (usuario || '—') + (nome ? ' (' + nome + ')' : ''),
+      aparelho ? 'Aparelho: ' + texto(aparelho, 60) : '',
+      'O que aconteceu: ' + texto(detalhe, 400),
+      '',
+      'Veja os detalhes em Administração → Histórico de acessos → Segurança.',
+      'Mensagem automática do Pier Gestão. Não responda este e-mail.'
+    ].filter((l, i, a) => l !== '' || (i > 0 && a[i - 1] !== '')).join('\n');
+    MailApp.sendEmail({ to: dest.join(','), subject: 'Pier Gestão – alerta de segurança: ' + titulo + ' (' + (usuario || '—') + ')', body: corpo, name: 'Pier Gestão' });
+  } catch (e) {
+    Logger.log('Alerta de segurança não enviado: ' + e.message);
+  }
+}
+// acrescenta uma linha na aba Emails (sem e-mail) para a Administração preencher
+function garantirLinhaEmail(para) {
+  const sh = abaEmails();
+  const n = sh.getLastRow();
+  const nomes = n > 1 ? sh.getRange(2, 1, n - 1, 1).getValues().map(r => chaveNome(r[0])) : [];
+  if (nomes.indexOf(chaveNome(para)) >= 0) return;
+  const ex = EMAILS_INICIAIS.find(x => chaveNome(x[0]) === chaveNome(para));
+  sh.getRange(n + 1, 1, 1, 3).setValues([[para, '', ex ? ex[1] : '']]);
+}
+
 // ---------- aviso por e-mail ao incluir uma pendência ----------
 // Os endereços ficam na aba "Emails" da planilha (coluna "Para": Gerente, Síndico ou o nome do responsável; coluna "E-mail").
 const EMAILS_ABA = 'Emails';
@@ -2241,7 +2370,8 @@ const EMAILS_INICIAIS = [
   ['Supervisor', 'Recebe quando for o responsável'], ['Auxiliar', 'Recebe quando for o responsável'],
   ['Manutenção', 'Recebe quando for o responsável'], ['Limpeza', 'Recebe quando for o responsável'],
   ['Jardinagem', 'Recebe quando for o responsável'], ['Piscina', 'Recebe quando for o responsável'],
-  ['Fornecedor', 'Recebe quando for o responsável']
+  ['Fornecedor', 'Recebe quando for o responsável'],
+  ['Segurança', 'Recebe os alertas de segurança: login bloqueado, acesso negado, senha trocada, usuário criado ou alterado']
 ];
 const chaveNome = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
 
@@ -2501,6 +2631,8 @@ function limparFalhasLogin(usuario) { if (usuario) PropertiesService.getScriptPr
 
 // --- histórico de auditoria (aba Auditoria) ---
 const ACOES_AUDIT = {
+  visao: 'Abriu tela',
+  trocarSenha: 'Trocou a própria senha',
   registrar: 'Movimentação', osAbrir: 'Abriu OS', osAtualizar: 'Atualizou OS', osFoto: 'Foto na OS', osFotoRemover: 'Tirou foto da OS',
   demCriar: 'Criou demanda', demAtualizar: 'Atualizou demanda', salvarPreventiva: 'Salvou preventiva', excluirPreventiva: 'Excluiu preventiva',
   salvarLocais: 'Alterou locais', importarContagem: 'Importou inventário', devolver: 'Devolução', salvarItem: 'Salvou item',

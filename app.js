@@ -151,6 +151,41 @@ function sair(msg){
   if (tk && API) { try { fetch(API, {method:"POST", body:JSON.stringify({acao:"sair", token:tk}), redirect:"follow", keepalive:true}).catch(()=>{}); } catch(e){} }
   encerrarLocal(msg);
 }
+$("#l-esqueci").addEventListener("click", () => {
+  const box = $("#l-esqueci-box"); box.hidden = !box.hidden; $("#l-esqueci").setAttribute("aria-expanded", box.hidden ? "false" : "true");
+});
+// trocar a própria senha (convite depois da senha provisória, ou pelo botão "Trocar senha" no topo)
+function abrirMinhaSenha(o){
+  o = o || {};
+  const prov = !!o.provisoria;
+  $("#modal-box").innerHTML = `<h3>${prov ? "Crie a sua senha" : "Trocar minha senha"}</h3>
+    ${prov ? `<p class="hint" style="margin:-6px 0 12px">Você entrou com uma senha provisória, criada pela Administração. Crie agora uma senha só sua.</p>` : ""}
+    <form class="form" id="f-senha" novalidate autocomplete="off">
+      ${prov && o.atual ? "" : `<div class="field full"><label for="ms-atual">Senha atual</label><input class="input" id="ms-atual" type="password" autocomplete="current-password"></div>`}
+      <div class="field full"><label for="ms-nova">Nova senha</label><input class="input" id="ms-nova" type="password" autocomplete="new-password"><span class="hint">Pelo menos 6 caracteres. Não use o seu usuário nem a mesma tecla repetida.</span></div>
+      <div class="field full"><label for="ms-conf">Repita a nova senha</label><input class="input" id="ms-conf" type="password" autocomplete="new-password"></div>
+      <label class="pd-chk full"><input type="checkbox" id="ms-ver"> Mostrar as senhas</label>
+      <div class="full actions"><button class="btn primary" type="submit" id="ms-ok">Salvar minha senha</button><button class="btn" type="button" id="ms-no">${prov ? "Agora não" : "Cancelar"}</button><span class="hint" id="ms-msg"></span></div>
+    </form>`;
+  $("#modal").hidden = false;
+  ($("#ms-atual") || $("#ms-nova")).focus();
+  $("#ms-no").onclick = () => { fecharModal(); if (prov) toast("Tudo bem. Você será convidado de novo na próxima entrada."); };
+  $("#ms-ver").onchange = e => $$("#f-senha input[type=password], #f-senha input[data-senha]").forEach(i => { i.dataset.senha = "1"; i.type = e.target.checked ? "text" : "password"; });
+  $("#f-senha").addEventListener("submit", async ev => {
+    ev.preventDefault();
+    const msg = $("#ms-msg"); msg.className = "hint err";
+    const atual = $("#ms-atual") ? $("#ms-atual").value.trim() : String(o.atual || ""), nova = $("#ms-nova").value.trim(), conf = $("#ms-conf").value.trim();
+    if (!atual) { msg.textContent = "Informe a senha atual."; $("#ms-atual").focus(); return; }
+    if (nova.length < 6) { msg.textContent = "A nova senha precisa ter pelo menos 6 caracteres."; $("#ms-nova").focus(); return; }
+    if (nova !== conf) { msg.textContent = "As duas senhas novas não são iguais."; $("#ms-conf").focus(); return; }
+    if (nova === atual) { msg.textContent = "A nova senha precisa ser diferente da atual."; $("#ms-nova").focus(); return; }
+    const ok = $("#ms-ok"); ok.disabled = true; msg.className = "hint"; msg.innerHTML = `<span class="spin" aria-hidden="true"></span> Salvando…`;
+    try {
+      const r = await api("trocarSenha", {atual, nova});
+      fecharModal(); toast(r.msg || "Senha trocada.");
+    } catch(e){ ok.disabled = false; msg.className = "hint err"; msg.textContent = e.message; }
+  });
+}
 $("#f-login").addEventListener("submit", async ev => {
   ev.preventDefault();
   const usuario = $("#l-usuario").value.trim().toLowerCase(), senha = $("#l-senha").value.trim(), msg = $("#l-msg");
@@ -161,7 +196,9 @@ $("#f-login").addEventListener("submit", async ev => {
   const setorEscolhido = $("#l-setor").value;
   $("#l-senha").value = "";
   try {
-    await api("entrar", {usuario, senha, registro:{motivo:"login", entrada:setorEscolhido, aparelho:aparelho()}});
+    const rEntrar = await api("entrar", {usuario, senha, registro:{motivo:"login", entrada:setorEscolhido, aparelho:aparelho()}});
+    // senha provisória (criada pela Administração): convida a pessoa a criar a própria; a senha digitada fica só na memória desta janela
+    const convidar = () => { if (rEntrar && rEntrar.senhaProvisoria) setTimeout(() => abrirMinhaSenha({provisoria:true, atual:senha}), 400); };
     const permitidos = setoresDasPerms(S.perms);
     try { localStorage.setItem("estoque-entrada", setorEscolhido); } catch(e){}
     // Entrada pela Administração: abre direto o menu Administração; o estoque fica no setor de sempre
@@ -176,7 +213,7 @@ $("#f-login").addEventListener("submit", async ev => {
       let salvo = ""; try { salvo = localStorage.getItem("estoque-setor") || ""; } catch(e){}
       S.setor = permitidos.includes(salvo) ? salvo : permitidos[0]; S.setores = permitidos;
       S.adm = true; aplicarPermissoes();
-      guardar(); $("#login").hidden = true; renderMe(); setTab(aba); atualizar();
+      guardar(); $("#login").hidden = true; renderMe(); setTab(aba); atualizar(); convidar();
       return;
     }
     if (!setoresReais().length) {
@@ -194,7 +231,7 @@ $("#f-login").addEventListener("submit", async ev => {
     }
     S.setor = setorEscolhido; S.setores = permitidos; S.adm = false; aplicarPermissoes();
     try { localStorage.setItem("estoque-setor", setorEscolhido); } catch(e){}
-    guardar(); $("#login").hidden = true; renderMe(); setTab(podeAba(S.tab) ? S.tab : primeiraAba()); atualizar();
+    guardar(); $("#login").hidden = true; renderMe(); setTab(podeAba(S.tab) ? S.tab : primeiraAba()); atualizar(); convidar();
   } catch(e){ S.token = ""; msg.className = "hint err"; msg.textContent = e.message; $("#l-senha").focus(); }
   finally { btn.disabled = false; }
 });
@@ -204,18 +241,30 @@ function renderMe(){
   $("#me").innerHTML = `<div class="me-box">
       <div class="setor-sel" id="me-setor"></div>
       <div class="me-user"><span class="avatar" aria-hidden="true">${esc(iniciais(S.nome))}</span>
-        <div class="me-dados"><div class="who">${esc(S.nome)}</div><div class="me-linha"><span class="role ${can("usuarios")?"adm":""}">${esc(S.perfil||"")}</span><button class="sair" id="b-sair" type="button">Sair</button></div></div>
+        <div class="me-dados"><div class="who">${esc(S.nome)}</div><div class="me-linha"><span class="role ${can("usuarios")?"adm":""}">${esc(S.perfil||"")}</span><button class="sair" id="b-senha" type="button">Trocar senha</button><button class="sair" id="b-sair" type="button">Sair</button></div></div>
       </div>
     </div>
     <div class="sync" id="sync"></div>`;
   renderSetorSel();
   $("#b-sair").onclick = () => sair("");
+  $("#b-senha").onclick = () => abrirMinhaSenha();
   renderSync();
 }
 
 // ---------- abas ----------
+// log de segurança: telas sensíveis e exportações ficam na Auditoria (no máximo 1 registro por tela a cada 30 min)
+const TELAS_LOG = ["historico","dashboard","usuarios","pendencias","acessos"];
+const telasVistas = new Map();
+function registrarTela(tela, detalhe){
+  if (!S.token) return;
+  const k = tela + "|" + (detalhe || ""), agoraMs = Date.now();
+  if (!tela.startsWith("exportar_") && agoraMs - (telasVistas.get(k) || 0) < 30*60*1000) return;
+  telasVistas.set(k, agoraMs);
+  api("visao", Object.assign({tela}, detalhe ? {detalhe} : {})).catch(() => {});
+}
 function setTab(t){
   if (S.token && !podeAba(t)) t = primeiraAba();
+  if (S.token && t !== S.tab && TELAS_LOG.includes(t)) registrarTela(t);
   S.tab = t;
   $$("nav.tabs [role=tablist] > button[data-tab]").forEach(b => b.setAttribute("aria-selected", b.dataset.tab===t ? "true":"false"));
   if (TEM_ADM) {
@@ -789,6 +838,7 @@ $("#h-csv").addEventListener("click", () => {
   const n = v => v===""||v==null ? "" : String(v).replace(".",",");
   const lines = [cols.join(";")].concat(list.map(m => [fData(m.data), TIPOS[m.tipo]?.nome||m.tipo, m.itemCodigo, m.itemNome, n(m.qtd), m.unidade, n(m.delta), m.responsavel, m.destino, m.motivo, m.velhoDestino, m.fornecedor, m.nf, n(m.valorUnit), m.previsao?fData(m.previsao):"", m.estadoDevolucao, m.obs, m.registradoPor, m.estornado?"sim":"", String(m.nfFotos||"").split(/\s+/).filter(Boolean).join(" ")].map(cell).join(";")));
   const blob = new Blob(["﻿"+lines.join("\r\n")], {type:"text/csv;charset=utf-8"});
+  registrarTela("exportar_movs", S.histMes);
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `movimentacoes-${S.histMes}.csv`;
   document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 });
@@ -1066,6 +1116,7 @@ $("#d-csv").addEventListener("click", () => {
   const linhas = [["Código","Item","Categoria","Saídas","Trocas","Empréstimos","Entradas","Compras (R$)","Estoque atual","Unidade","Último movimento"].join(";")]
     .concat(S.detalhe.map(d => [d.codigo, d.nome, d.cat, n(d.saida), n(d.troca), n(d.emp), n(d.entrada), n(Math.round(d.gasto*100)/100), d.estoque===undefined?"":n(d.estoque), d.unidade, d.ultimo?fData(d.ultimo):""].map(cell).join(";")));
   const blob = new Blob(["﻿"+linhas.join("\r\n")], {type:"text/csv;charset=utf-8"});
+  registrarTela("exportar_consumo", R.de + " a " + R.ate);
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `consumo-por-item-${R.de}-a-${R.ate}.csv`;
   document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 });
@@ -1081,7 +1132,7 @@ function renderEquipe(){
   if (!E) { $("#q-usuarios").innerHTML = `<tr><td colspan="7"><div class="empty">Carregando…</div></td></tr>`; return; }
   const us = [...E.usuarios].sort((a,b) => (b.ativo - a.ativo) || String(a.nome).localeCompare(String(b.nome),"pt-BR"));
   $("#q-usuarios").innerHTML = us.map(u => `<tr class="${u.ativo?"":"inativo"}">
-    <td><b>${esc(u.nome||"—")}</b>${u.usuario===S.usuario?' <span class="muted">(você)</span>':""}</td>
+    <td><b>${esc(u.nome||"—")}</b>${u.usuario===S.usuario?' <span class="muted">(você)</span>':""}${u.provisoria ? ' <span class="pill p-ajuste" title="Ainda não criou a própria senha">senha provisória</span>' : ""}</td>
     <td class="mono">${esc(u.usuario)}</td>
     <td>${esc(u.perfil)}</td>
     <td>${u.ativo ? '<span class="pill s-ok">Ativo</span>' : '<span class="pill p-ajuste">Bloqueado</span>'}</td>
@@ -1121,7 +1172,7 @@ function abrirUsuario(usuario){
         ${u.bloqueado ? `<button class="btn small" type="button" id="u-liberar">Liberar o login</button>` : ""}
         ${u.sessoes && !eu ? `<button class="btn small" type="button" id="u-encerrar">Encerrar acessos abertos</button>` : ""}
       </div><span class="hint">Trocar a senha ou bloquear o login também encerra os acessos abertos.</span></div>` : ""}
-      <p class="hint full">Passe o usuário e a senha para o colaborador. O nome aparece no histórico em cada lançamento que ele fizer. O WhatsApp serve para avisar quando uma demanda for delegada a ele.</p>
+      <p class="hint full">A senha definida aqui é <b>provisória</b>: ao entrar com ela, a pessoa é convidada a criar a própria senha${u && u.provisoria ? " (esta pessoa ainda não criou a dela)" : ""}. Passe o usuário e a senha para o colaborador. O nome aparece no histórico em cada lançamento que ele fizer. O WhatsApp serve para avisar quando uma demanda for delegada a ele.</p>
       <div class="full actions"><button class="btn primary" type="submit" id="u-ok">${u ? "Salvar" : "Criar login"}</button><button class="btn" type="button" id="u-no">Cancelar</button><span class="hint" id="u-msg"></span></div>
     </form>`;
   $("#modal").hidden = false; $("#u-nome").focus();
@@ -2526,10 +2577,15 @@ async function carregarAcessos(){
   $("#ac-body").innerHTML = `<tr><td colspan="6"><div class="empty"><span class="spin" aria-hidden="true"></span> Carregando…</div></td></tr>`;
   try {
     const dias = Number($("#ac-periodo").value)||0;
-    if (acModo === "alteracoes") {
+    if (acModo === "alteracoes" || acModo === "vistas") {
       const r = await api("auditoria", {dias});
       if (tok !== acTok) return;
       S.auditoria = r.auditoria || []; renderAuditoria(); return;
+    }
+    if (acModo === "seguranca") {
+      const [ra, rb] = await Promise.all([api("auditoria", {dias}), api("acessos", {dias})]);
+      if (tok !== acTok) return;
+      S.auditoria = ra.auditoria || []; S.acessos = rb.acessos || []; renderSeguranca(); return;
     }
     const r = await api("acessos", {dias});
     if (tok !== acTok) return;
@@ -2537,8 +2593,10 @@ async function carregarAcessos(){
   } catch(e){ if (tok === acTok) $("#ac-body").innerHTML = `<tr><td colspan="6"><div class="notice crit" style="margin:0">${esc(/desconhecida/i.test(e.message) ? "A planilha ainda está com o código anterior. Atualize o código do Apps Script para o histórico começar a ser gravado." : e.message)}</div></td></tr>`; }
 }
 // alterações gravadas na aba Auditoria: quem fez, o quê, quando; as negadas aparecem em vermelho
+const AC_VISTA = a => a.acao === "Abriu tela" || a.acao === "Exportou planilha";
 function renderAuditoria(){
-  const L = S.auditoria || [];
+  const vistas = acModo === "vistas";
+  const L = (S.auditoria || []).filter(a => vistas ? AC_VISTA(a) : !AC_VISTA(a));
   const sel = $("#ac-pessoa"), cur = sel.value;
   const pessoas = [...new Map(L.filter(a => a.usuario).map(a => [a.usuario, a.nome || a.usuario])).entries()].sort((a,b) => String(a[1]).localeCompare(String(b[1]),"pt-BR"));
   sel.innerHTML = `<option value="">Todas as pessoas</option>` + pessoas.map(([u,n]) => `<option value="${esc(u)}">${esc(n)}${n!==u?" ("+esc(u)+")":""}</option>`).join("");
@@ -2546,7 +2604,8 @@ function renderAuditoria(){
   const q = norm($("#ac-busca").value.trim());
   const vis = L.filter(a => (!sel.value || a.usuario === sel.value) && (!q || norm([a.acao, a.detalhe, a.nome].join(" ")).includes(q)));
   const negadas = L.filter(a => a.resultado !== "OK").length;
-  $("#ac-resumo").innerHTML = `<div class="ac-pessoa" aria-hidden="true"><b>${L.length} alteraç${L.length===1?"ão":"ões"}</b><span>no período</span></div>`
+  $("#ac-resumo").innerHTML = (vistas ? `<div class="ac-pessoa" aria-hidden="true"><b>${L.filter(a => a.acao === "Abriu tela").length} tela${L.filter(a => a.acao === "Abriu tela").length===1?"":"s"} aberta${L.filter(a => a.acao === "Abriu tela").length===1?"":"s"}</b><span>no período</span></div><div class="ac-pessoa" aria-hidden="true"><b>${L.filter(a => a.acao === "Exportou planilha").length} exportaç${L.filter(a => a.acao === "Exportou planilha").length===1?"ão":"ões"}</b><span>planilhas baixadas</span></div>`
+      : `<div class="ac-pessoa" aria-hidden="true"><b>${L.length} alteraç${L.length===1?"ão":"ões"}</b><span>no período</span></div>`)
     + (negadas ? `<div class="ac-pessoa falha"><b>${negadas} negada${negadas===1?"":"s"}</b><span>tentativas sem permissão ou logins bloqueados</span></div>` : "");
   $("#ac-body").innerHTML = vis.length ? vis.map(a => `<tr class="${a.resultado!=="OK"?"ac-falha":""}">
       <td class="num" style="white-space:nowrap">${fData(a.quando)} <b>${esc(String(a.quando).slice(11,16))}</b></td>
@@ -2554,17 +2613,68 @@ function renderAuditoria(){
       <td class="hide-s">${esc(a.perfil || "—")}</td>
       <td>${esc(a.acao)}${a.resultado!=="OK" ? ` <span class="pill s-zero">${esc(a.resultado)}</span>` : ""}</td>
       <td colspan="2" class="ac-det">${esc(a.detalhe || "—")}</td></tr>`).join("")
-    : `<tr><td colspan="6"><div class="empty">${L.length ? "Nenhuma alteração com esses filtros." : "Nenhuma alteração registrada neste período. O registro começa com a atualização do código da planilha."}</div></td></tr>`;
+    : `<tr><td colspan="6"><div class="empty">${L.length ? "Nada com esses filtros." : vistas ? "Nenhuma tela registrada neste período. O registro das telas abertas começa com a atualização do código da planilha." : "Nenhuma alteração registrada neste período. O registro começa com a atualização do código da planilha."}</div></td></tr>`;
+}
+// painel de segurança: senhas erradas, bloqueios, acessos negados, trocas de senha, mudanças em usuários e perfis, aparelho novo
+const AC_SEG = {
+  senha: ["Senha errada", "tentativas que não entraram"], bloqueio: ["Login bloqueado", "bloqueios por tentativas"],
+  negado: ["Acesso negado", "ações ou telas sem permissão"], troca: ["Senha trocada", "pela pessoa ou pela Administração"],
+  usuario: ["Usuários e perfis", "logins e permissões alterados"], aparelho: ["Aparelho novo", "entrada de um aparelho diferente"]
+};
+let acSegCat = "";
+function eventosSeguranca(){
+  const ev = [];
+  const A = (S.acessos || []).slice().sort((a,b) => String(a.quando).localeCompare(String(b.quando)));
+  const vistos = new Map();
+  A.forEach(a => {
+    if (a.motivo === "falha") ev.push({cat:"senha", quando:a.quando, usuario:a.usuario, nome:a.nome, det:"Senha errada" + (a.aparelho ? " · " + a.aparelho : "")});
+    else if (a.motivo === "bloqueado") ev.push({cat:"bloqueio", quando:a.quando, usuario:a.usuario, nome:a.nome, det:"Tentou entrar com o login bloqueado" + (a.aparelho ? " · " + a.aparelho : "")});
+    else if (a.motivo === "login" && a.aparelho) {
+      const ap = vistos.get(a.usuario) || new Set();
+      if (ap.size && !ap.has(a.aparelho)) ev.push({cat:"aparelho", quando:a.quando, usuario:a.usuario, nome:a.nome, det:"Entrou de um aparelho que não tinha usado no período: " + a.aparelho});
+      ap.add(a.aparelho); vistos.set(a.usuario, ap);
+    }
+  });
+  (S.auditoria || []).forEach(a => {
+    const base = {quando:a.quando, usuario:a.usuario, nome:a.nome};
+    if (a.acao === "Login bloqueado") ev.push(Object.assign({cat:"bloqueio", det:a.detalhe}, base));
+    else if (a.resultado && a.resultado !== "OK") ev.push(Object.assign({cat:"negado", det:a.acao + ": " + a.detalhe}, base));
+    else if (a.acao === "Trocou a própria senha" || (a.acao === "Usuário" && /senha trocada/.test(a.detalhe||""))) ev.push(Object.assign({cat:"troca", det:a.detalhe}, base));
+    else if (["Usuário","Perfil","Excluiu perfil","Acessos de usuário"].includes(a.acao)) ev.push(Object.assign({cat:"usuario", det:a.acao + ": " + a.detalhe}, base));
+  });
+  return ev.sort((a,b) => String(b.quando).localeCompare(String(a.quando)));
+}
+function renderSeguranca(){
+  const todos = eventosSeguranca();
+  const sel = $("#ac-pessoa"), cur = sel.value;
+  const pessoas = [...new Map(todos.filter(e => e.usuario).map(e => [e.usuario, e.nome || e.usuario])).entries()].sort((a,b) => String(a[1]).localeCompare(String(b[1]),"pt-BR"));
+  sel.innerHTML = `<option value="">Todas as pessoas</option>` + pessoas.map(([u,n]) => `<option value="${esc(u)}">${esc(n)}${n!==u?" ("+esc(u)+")":""}</option>`).join("");
+  sel.value = pessoas.some(p => p[0] === cur) ? cur : "";
+  const q = norm($("#ac-busca").value.trim());
+  const vis = todos.filter(e => (!acSegCat || e.cat === acSegCat) && (!sel.value || e.usuario === sel.value) && (!q || norm([e.det, e.nome, e.usuario].join(" ")).includes(q)));
+  const grave = c => c === "bloqueio" || c === "negado" || c === "senha";
+  $("#ac-resumo").innerHTML = Object.entries(AC_SEG).map(([c,[t,sub]]) => { const n = todos.filter(e => e.cat === c).length;
+    return `<button type="button" class="ac-pessoa ${n && grave(c) ? "falha" : ""}" data-sc="${c}" aria-pressed="${acSegCat === c}"><b>${n} · ${esc(t)}</b><span>${esc(sub)}</span></button>`; }).join("");
+  $("#ac-body").innerHTML = vis.length ? vis.map(e => `<tr class="${grave(e.cat) ? "ac-falha" : ""}">
+      <td class="num" style="white-space:nowrap">${fData(e.quando)} <b>${esc(String(e.quando).slice(11,16))}</b></td>
+      <td><b>${esc(e.nome || e.usuario || "—")}</b><span class="sub mono">${esc(e.usuario || "")}</span></td>
+      <td><span class="pill ${grave(e.cat) ? "s-zero" : e.cat === "aparelho" ? "p-ajuste" : "s-ok"}">${esc(AC_SEG[e.cat][0])}</span></td>
+      <td colspan="3" class="ac-det">${esc(e.det || "—")}</td></tr>`).join("")
+    : `<tr><td colspan="6"><div class="empty">${todos.length ? "Nada com esses filtros." : "Nenhum evento de segurança neste período."}</div></td></tr>`;
 }
 function acTrocarModo(m){
-  acModo = m;
+  acModo = m; acSegCat = "";
   $$("#ac-modo button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.m === m)));
-  const alt = m === "alteracoes";
-  $("#ac-tipo").hidden = alt; $("#ac-busca").hidden = !alt;
-  $("#ac-head").innerHTML = alt ? `<tr><th>Data e hora</th><th>Pessoa</th><th class="hide-s">Perfil</th><th>Ação</th><th colspan="2">Detalhe</th></tr>`
+  const ent = m === "entradas";
+  $("#ac-tipo").hidden = !ent; $("#ac-busca").hidden = ent;
+  $("#ac-head").innerHTML = m === "seguranca" ? `<tr><th>Data e hora</th><th>Pessoa</th><th>Evento</th><th colspan="3">Detalhe</th></tr>`
+    : !ent ? `<tr><th>Data e hora</th><th>Pessoa</th><th class="hide-s">Perfil</th><th>${m === "vistas" ? "O quê" : "Ação"}</th><th colspan="2">Detalhe</th></tr>`
     : `<tr><th>Data e hora</th><th>Pessoa</th><th class="hide-s">Perfil</th><th>Entrou por</th><th class="hide-m">Aparelho</th><th>Tipo</th></tr>`;
-  $("#ac-desc").textContent = alt ? "O que cada pessoa alterou no sistema, com data e hora. Tentativas sem permissão aparecem em vermelho."
-    : "Cada entrada no sistema, com data, hora, setor escolhido e aparelho. Tentativas com senha errada aparecem em vermelho.";
+  $("#ac-desc").textContent = {
+    alteracoes: "O que cada pessoa alterou no sistema, com data e hora. Tentativas sem permissão aparecem em vermelho.",
+    vistas: "Quem abriu as telas sensíveis (Histórico, Dashboard, Usuários, Pendências, Histórico de acessos) e quem baixou planilhas.",
+    seguranca: "Eventos de segurança: senhas erradas, bloqueios, acessos negados, trocas de senha, mudanças em usuários e perfis, entrada de aparelho novo."
+  }[m] || "Cada entrada no sistema, com data, hora, setor escolhido e aparelho. Tentativas com senha errada aparecem em vermelho.";
   carregarAcessos();
 }
 function renderAcessos(){
@@ -2593,14 +2703,16 @@ function renderAcessos(){
       <td>${a.motivo==="bloqueado" ? `<span class="pill s-zero">Login bloqueado</span>` : a.motivo==="falha" ? `<span class="pill s-zero">Senha errada</span>` : a.motivo==="login" ? `<span class="pill s-ok">Entrou com senha</span>` : `<span class="pill p-ajuste">Voltou ao sistema</span>`}</td></tr>`).join("")
     : `<tr><td colspan="6"><div class="empty">${L.length ? "Nenhum acesso com esses filtros." : "Nenhum acesso registrado neste período. Os acessos passam a ser gravados a partir da atualização do código da planilha."}</div></td></tr>`;
 }
-$("#ac-pessoa").addEventListener("change", () => acModo === "alteracoes" ? renderAuditoria() : renderAcessos());
+const acRender = () => acModo === "seguranca" ? renderSeguranca() : acModo === "entradas" ? renderAcessos() : renderAuditoria();
+$("#ac-pessoa").addEventListener("change", acRender);
 $("#ac-tipo").addEventListener("change", renderAcessos);
-$("#ac-busca").addEventListener("input", renderAuditoria);
+$("#ac-busca").addEventListener("input", acRender);
 $("#ac-modo").addEventListener("click", e => { const b = e.target.closest("[data-m]"); if (b && b.dataset.m !== acModo) acTrocarModo(b.dataset.m); });
 $("#ac-periodo").addEventListener("change", carregarAcessos);
 $("#ac-atualizar").addEventListener("click", carregarAcessos);
 $("#ac-resumo").addEventListener("click", e => {
   const b = e.target.closest("button.ac-pessoa"); if (!b) return;
+  if (b.dataset.sc) { acSegCat = acSegCat === b.dataset.sc ? "" : b.dataset.sc; renderSeguranca(); return; }
   if (b.dataset.f) { $("#ac-tipo").value = $("#ac-tipo").value === "falha" ? "" : "falha"; $("#ac-pessoa").value = ""; }
   else { $("#ac-pessoa").value = $("#ac-pessoa").value === b.dataset.u ? "" : b.dataset.u; }
   renderAcessos();

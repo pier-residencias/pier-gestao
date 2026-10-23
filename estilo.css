@@ -613,3 +613,8 @@ div.ac-pessoa{cursor:default}
 .pd-ospill.ok{background:var(--ok-bg);color:var(--ok)}
 .pd-ospill.canc{background:var(--grey-bg);color:var(--muted);text-decoration:line-through}
 .pd-chk-os{font-weight:600;color:var(--fg)}
+/* login: esqueci minha senha; topo: trocar senha */
+.l-esqueci{margin-top:12px;display:grid;gap:6px}
+.l-esqueci .link{justify-self:start;font-size:.9rem}
+.me-linha .sair+.sair{margin-left:8px}
+.ac-modo{flex-wrap:wrap}
