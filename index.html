@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="estilo.css?v=20261022senha">
+<link rel="stylesheet" href="estilo.css?v=20261023menu">
 </head>
 <body>
 <div class="login" id="login" hidden>
@@ -32,8 +32,16 @@
   </form>
 </div>
 <div class="stripe" aria-hidden="true"></div>
+<!-- menu lateral: grupos que abrem e fecham e, no fim, a troca de setor (no celular abre pelo botão ☰) -->
+<aside class="side" id="side" aria-label="Menu" hidden>
+  <div class="side-topo"><img class="side-logo" src="img/logo.png" alt="Pier Residências" width="900" height="272"><button type="button" class="side-x" id="side-x" aria-label="Fechar o menu">×</button></div>
+  <nav class="side-nav" id="side-nav" aria-label="Seções do sistema"></nav>
+  <div class="side-setor" id="side-setor"></div>
+</aside>
+<div class="side-fundo" id="side-fundo" hidden></div>
 <header class="top">
   <div class="wrap">
+    <button type="button" class="menu-btn" id="menu-btn" aria-controls="side" aria-expanded="false" aria-label="Abrir o menu" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
     <div class="brand">
       <picture>
         <source srcset="img/logo-claro.png" media="(prefers-color-scheme: dark)">
@@ -64,9 +72,10 @@
     <button type="button" class="admbtn" id="tab-adm" aria-haspopup="true" aria-expanded="false" aria-controls="adm-menu" hidden aria-label="Administração"><span class="lbl-l">Administração</span><span class="lbl-c" aria-hidden="true">Adm.</span> <span class="badge alert" id="b-adm" hidden>0</span> <span class="car" aria-hidden="true">▾</span></button>
   </div>
   <div class="admmenu" id="adm-menu" role="menu" aria-label="Administração" hidden>
-    <div class="mh">Pendências</div>
+    <div class="mh">Pendências e compras</div>
     <button type="button" role="menuitem" data-adm-tab="pendencias"><b>Controle de pendências</b><span>Lista do síndico: situação, responsável e prazo</span></button>
     <button type="button" role="menuitem" data-adm-tab="pendencias" data-adm-acao="nova"><b>Incluir pendência</b><span>Registrar uma pendência nova na lista</span></button>
+    <button type="button" role="menuitem" data-adm-tab="cotacoes"><b>Cotações</b><span>Mapas de cotação, fornecedores e aprovação</span></button>
     <div class="mh" data-grupo="equipe">Equipe</div>
     <button type="button" role="menuitem" data-adm-tab="usuarios"><b>Usuários e permissões</b><span>Logins, perfis e o que cada um pode fazer</span></button>
     <button type="button" role="menuitem" data-adm-tab="acessos"><b>Histórico de acessos</b><span>Entradas, alterações, telas vistas e eventos de segurança</span></button>
@@ -428,6 +437,17 @@
   </section>
 
   <!-- HISTÓRICO DE ACESSOS (menu Administração, só perfil Administração) -->
+  <!-- COTAÇÕES (menu Administração) -->
+  <section id="t-cotacoes" hidden>
+    <div id="ct-lista-box">
+      <div class="sec-head"><h2 class="sec">Cotações</h2><span class="muted">Mapas de cotação no modelo do Pier: fornecedores, preços, recomendação e aprovação do gerente e do síndico.</span><button class="btn primary" type="button" id="ct-nova">+ Nova cotação</button></div>
+      <div class="pd-stats" id="ct-resumo"></div>
+      <div class="toolbar"><input class="input" id="ct-q" type="search" placeholder="Buscar cotação, fornecedor ou pendência"><select class="input" id="ct-fs" aria-label="Filtrar por situação"></select></div>
+      <div class="tablebox"><table><thead><tr><th>Nº</th><th>Finalidade</th><th class="hide-s">Fornec.</th><th class="hide-m">Recomendado</th><th>Valor</th><th>Situação</th><th class="hide-s">Data</th></tr></thead><tbody id="ct-body"><tr><td colspan="7"><div class="empty">Carregando…</div></td></tr></tbody></table></div>
+    </div>
+    <div id="ct-editor" hidden></div>
+  </section>
+
   <section id="t-acessos" hidden>
     <div class="sec-head"><h2 class="sec">Histórico de acessos</h2><span class="muted" id="ac-desc">Cada entrada no sistema, com data, hora, setor escolhido e aparelho. Tentativas com senha errada aparecem em vermelho.</span></div>
     <div class="ac-modo" id="ac-modo" role="group" aria-label="O que mostrar"><button type="button" data-m="entradas" aria-pressed="true">Entradas no sistema</button><button type="button" data-m="alteracoes" aria-pressed="false">Alterações</button><button type="button" data-m="vistas" aria-pressed="false">Telas vistas</button><button type="button" data-m="seguranca" aria-pressed="false">Segurança</button></div>
@@ -472,6 +492,6 @@
 
 <script src="config.js"></script>
 <script src="nfe.js?v=20261015s"></script>
-<script src="app.js?v=20261022senha"></script>
+<script src="app.js?v=20261023menu"></script>
 </body>
 </html>

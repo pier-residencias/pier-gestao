@@ -35,7 +35,7 @@ const SETORES_PERM = [["Manutenção","setor_manutencao"],["Limpeza","setor_limp
 const setoresDasPerms = p => { const l = SETORES_PERM.filter(x => p && p[x[1]]).map(x => x[0]); return l.length ? l : ["Manutenção"]; };
 const doSetor = x => setorDe(x) === S.setor;
 const can = p => !!(S.perms && S.perms[p]);
-const ABAS_PERM = {painel:["painel"], demandas:["dem_ver","dem_executar","dem_delegar"], os:["os_ver","os_abrir","os_atender","os_gerenciar"], registrar:["registrar_saida","registrar_entrada","registrar_troca","registrar_emprestimo"], itens:["itens_ver"], historico:["historico_ver"], emprestimos:["devolver","registrar_emprestimo"], dashboard:["dashboard"], usuarios:["usuarios"], pendencias:["pendencias"], acessos:["acessos"]};
+const ABAS_PERM = {painel:["painel"], demandas:["dem_ver","dem_executar","dem_delegar"], os:["os_ver","os_abrir","os_atender","os_gerenciar"], registrar:["registrar_saida","registrar_entrada","registrar_troca","registrar_emprestimo"], itens:["itens_ver"], historico:["historico_ver"], emprestimos:["devolver","registrar_emprestimo"], dashboard:["dashboard"], usuarios:["usuarios"], pendencias:["pendencias"], cotacoes:["pendencias"], acessos:["acessos"]};
 // Se o navegador ainda estiver com a página antiga guardada, o menu Administração não existe nela:
 // o resto do sistema continua funcionando normalmente.
 const TEM_ADM = !!(document.getElementById("tab-adm") && document.getElementById("adm-menu") && document.getElementById("t-pendencias"));
@@ -43,7 +43,7 @@ if (!TEM_ADM) delete ABAS_PERM.pendencias;
 if (!TEM_ADM || !document.getElementById("t-acessos")) delete ABAS_PERM.acessos;
 // O que aparece depende de como a pessoa entrou: Manutenção (tudo do estoque, OS e demandas),
 // Limpeza (só o estoque da limpeza) ou Administração (só o menu Administração).
-const ABAS_ADM = ["pendencias","usuarios","acessos"];
+const ABAS_ADM = ["pendencias","cotacoes","usuarios","acessos"];
 const ABAS_LIMPEZA = ["painel","registrar","itens","historico","os"];
 const TIPOS_LIMPEZA = ["saida","entrada"];
 const modo = () => S.adm ? "Administração" : S.setor;
@@ -145,7 +145,7 @@ function mostrarLogin(msg){
   ($("#l-usuario").value ? $("#l-senha") : $("#l-usuario")).focus();
 }
 // sair encerra a sessão também no servidor: o código guardado no aparelho deixa de valer
-function encerrarLocal(msg){ S.token = ""; S.perms = {}; S.rel = null; S.eq = null; S.pend = null; apagarSessao(); abrirMenuAdm(false); mostrarLogin(msg); }
+function encerrarLocal(msg){ S.token = ""; S.perms = {}; S.rel = null; S.eq = null; S.pend = null; apagarSessao(); abrirMenuAdm(false); fecharMenu(); mostrarLogin(msg); renderMenu(); }
 function sair(msg){
   const tk = S.token;
   if (tk && API) { try { fetch(API, {method:"POST", body:JSON.stringify({acao:"sair", token:tk}), redirect:"follow", keepalive:true}).catch(()=>{}); } catch(e){} }
@@ -239,13 +239,12 @@ $("#f-login").addEventListener("submit", async ev => {
 function iniciais(n){ const p = String(n||"").replace(/\(.*?\)/g,"").trim().split(/\s+/).filter(Boolean); return ((p[0]||"?")[0] + (p.length > 1 ? p[p.length-1][0] : "")).toUpperCase(); }
 function renderMe(){
   $("#me").innerHTML = `<div class="me-box">
-      <div class="setor-sel" id="me-setor"></div>
       <div class="me-user"><span class="avatar" aria-hidden="true">${esc(iniciais(S.nome))}</span>
         <div class="me-dados"><div class="who">${esc(S.nome)}</div><div class="me-linha"><span class="role ${can("usuarios")?"adm":""}">${esc(S.perfil||"")}</span><button class="sair" id="b-senha" type="button">Trocar senha</button><button class="sair" id="b-sair" type="button">Sair</button></div></div>
       </div>
     </div>
     <div class="sync" id="sync"></div>`;
-  renderSetorSel();
+  renderSetorSel(); renderMenu();
   $("#b-sair").onclick = () => sair("");
   $("#b-senha").onclick = () => abrirMinhaSenha();
   renderSync();
@@ -253,7 +252,7 @@ function renderMe(){
 
 // ---------- abas ----------
 // log de segurança: telas sensíveis e exportações ficam na Auditoria (no máximo 1 registro por tela a cada 30 min)
-const TELAS_LOG = ["historico","dashboard","usuarios","pendencias","acessos"];
+const TELAS_LOG = ["historico","dashboard","usuarios","pendencias","acessos","cotacoes"];
 const telasVistas = new Map();
 function registrarTela(tela, detalhe){
   if (!S.token) return;
@@ -272,12 +271,14 @@ function setTab(t){
     $$("#adm-menu [data-adm-tab]").forEach(b => { if (b.dataset.admTab===t && !b.dataset.admAcao) b.setAttribute("aria-current","page"); else b.removeAttribute("aria-current"); });
   }
   $$("main > section").forEach(s => s.hidden = s.id !== "t-"+t);
+  renderMenu(); fecharMenu();
   renderSetorSel();
   renderAll();
   if (t==="dashboard") carregarDashboard();
   if (t==="usuarios") carregarEquipe();
   if (t==="pendencias") carregarPend();
   if (t==="acessos") carregarAcessos();
+  if (t==="cotacoes") { renderCot(); carregarCot(); }
   window.scrollTo({top:0});
   try{ history.replaceState(null,"","#"+t); }catch(e){}
 }
@@ -349,6 +350,7 @@ const SETOR_INFO = {
 };
 const icoSetor = s => `<svg viewBox="0 0 24 24" aria-hidden="true" class="ico">${(SETOR_INFO[s]||SETOR_INFO["Manutenção"]).ico}</svg>`;
 function renderSetorSel(){
+  renderMenuSetor();
   const el = $("#me-setor");
   if (el) {
     const atual = modo(), modos = modosDisponiveis(), info = SETOR_INFO[atual] || SETOR_INFO["Manutenção"];
@@ -364,13 +366,107 @@ function renderSetorSel(){
   }
   $$(".setor-nome").forEach(n => n.textContent = S.setores.length > 1 ? " · " + S.setor : "");
 }
+// ---------- menu lateral ----------
+// Os itens seguem as mesmas permissões e o mesmo setor das abas (podeAba); o contador de cada item é o da aba.
+const MENU = [
+  {t:"painel", rot:"Painel", ico:'<path d="M4 11.5 12 5l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5h-5v5H5a1 1 0 0 1-1-1z"/>'},
+  {g:"Estoque", ico:'<path d="M4 8.5 12 4l8 4.5v7L12 20l-8-4.5zM4 8.5l8 4.5 8-4.5M12 13v7"/>', itens:[
+    {t:"registrar", rot:"Registrar movimentação"}, {t:"itens", rot:"Itens", b:"b-itens"}, {t:"historico", rot:"Histórico"}, {t:"emprestimos", rot:"Empréstimos", b:"b-emp"}]},
+  {g:"Manutenção e serviços", ico:'<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3.6 17.4a1.9 1.9 0 0 0 2.7 2.7l5.7-5.7a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.3-.3-2.4z"/>', itens:[
+    {t:"os", rot:"Ordens de serviço (OS)", b:"b-os"}, {t:"demandas", rot:"Demandas", b:"b-dem"}]},
+  {g:"Gestão", ico:'<path d="M5 19V11M10 19V6M15 19v-5M20 19V9"/>', itens:[{t:"dashboard", rot:"Dashboard"}]},
+  {g:"Pendências e compras", ico:'<path d="M8 5h11M8 12h11M8 19h11M4 5h.01M4 12h.01M4 19h.01"/>', itens:[
+    {t:"pendencias", rot:"Controle de pendências", b:"b-adm"}, {t:"pendencias", acao:"nova", rot:"Incluir pendência"}, {t:"cotacoes", rot:"Cotações"}]},
+  {g:"Equipe", ico:'<path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 6.5M18 14.5a6 6 0 0 1 3.5 5.5"/>', itens:[
+    {t:"usuarios", rot:"Usuários e permissões"}, {t:"acessos", rot:"Histórico de acessos"}]}
+];
+const MENU_ICO = d => `<svg viewBox="0 0 24 24" aria-hidden="true" class="side-ico">${d}</svg>`;
+let menuAbertos = null;
+try { const x = JSON.parse(localStorage.getItem("menu-abertos") || "null"); if (Array.isArray(x)) menuAbertos = new Set(x); } catch(e){}
+const menuGuardar = () => { try { localStorage.setItem("menu-abertos", JSON.stringify([...menuAbertos])); } catch(e){} };
+const menuLogado = () => !!S.token && !!$("#login") && $("#login").hidden;
+const itemPode = it => (TEM_ADM || !ABAS_ADM.includes(it.t)) && podeAba(it.t) && !!$("#t-" + it.t);
+function renderMenu(){
+  const side = $("#side"); if (!side) return;
+  const logado = menuLogado();
+  side.hidden = !logado; $("#menu-btn").hidden = !logado;
+  document.body.classList.toggle("com-menu", logado);
+  if (!logado) return;
+  // grupo da tela atual sempre aberto; os outros como a pessoa deixou
+  const grupoAtual = MENU.find(m => m.itens && m.itens.some(i => i.t === S.tab && !i.acao));
+  if (!menuAbertos) menuAbertos = new Set(grupoAtual ? [grupoAtual.g] : []);
+  if (grupoAtual && !menuAbertos.has(grupoAtual.g) && menuGrupoAtual !== grupoAtual.g) { menuAbertos.add(grupoAtual.g); menuGuardar(); }
+  menuGrupoAtual = grupoAtual ? grupoAtual.g : "";
+  const item = (it, sub) => `<button type="button" class="side-item ${sub ? "sub" : ""}" data-mtab="${it.t}"${it.acao ? ` data-macao="${it.acao}"` : ""} ${it.t === S.tab && !it.acao ? 'aria-current="page"' : ""}>${sub ? "" : MENU_ICO(it.ico)}<span class="side-rot">${esc(it.rot)}</span>${it.b ? `<span class="badge side-b" data-b="${it.b}" hidden></span>` : ""}</button>`;
+  $("#side-nav").innerHTML = MENU.map((m, k) => {
+    if (!m.itens) return itemPode(m) ? item(m, false) : "";
+    const vis = m.itens.filter(itemPode); if (!vis.length) return "";
+    const aberto = menuAbertos.has(m.g), ativo = m === grupoAtual;
+    return `<div class="side-grupo ${ativo ? "ativo" : ""}"><button type="button" class="side-item side-g" data-grupo="${esc(m.g)}" aria-expanded="${aberto}" aria-controls="side-g${k}">${MENU_ICO(m.ico)}<span class="side-rot">${esc(m.g)}</span><span class="badge side-b side-gb" hidden></span><svg class="side-car" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+      <div class="side-sub" id="side-g${k}" ${aberto ? "" : "hidden"}>${vis.map(i => item(i, true)).join("")}</div></div>`;
+  }).join("");
+  menuBadges(); renderMenuSetor();
+}
+let menuGrupoAtual = "";
+// contadores: copiados das abas (OS em aberto, empréstimos, demandas novas, pendências novas e aprovações)
+function menuBadges(){
+  $$("#side-nav .side-b[data-b]").forEach(b => {
+    const o = document.getElementById(b.dataset.b);
+    const n = o ? Number(o.textContent) || 0 : 0, mostrar = !!o && !o.hidden && n > 0 && b.dataset.b !== "b-itens";
+    b.textContent = n; b.hidden = !mostrar; b.classList.toggle("alert", !!o && (o.classList.contains("alert") || b.dataset.b === "b-adm" || b.dataset.b === "b-dem"));
+  });
+  // grupo fechado mostra a soma dos alertas de dentro, para nada passar despercebido
+  $$("#side-nav .side-grupo").forEach(g => {
+    const gb = g.querySelector(".side-gb"), sub = g.querySelector(".side-sub");
+    const n = [...g.querySelectorAll(".side-sub .side-b.alert:not([hidden])")].reduce((s, b) => s + (Number(b.textContent) || 0), 0);
+    gb.textContent = n; gb.hidden = !n || !sub.hidden; gb.classList.add("alert");
+  });
+}
+// troca de setor no fim do menu
+function renderMenuSetor(){
+  const el = $("#side-setor"); if (!el || !menuLogado()) return;
+  const atual = modo(), modos = modosDisponiveis(), info = SETOR_INFO[atual] || SETOR_INFO["Manutenção"];
+  const varios = modos.some(x => x !== atual);
+  const aberto = el.dataset.aberto === "1" && varios;
+  el.innerHTML = `<span class="side-lbl" id="side-setor-lbl">Setor</span>
+    <button type="button" class="side-item side-setor-btn ${info.cls}" id="side-setor-btn" aria-labelledby="side-setor-lbl side-setor-btn" ${varios ? `aria-expanded="${aberto}" aria-controls="side-setores"` : "disabled"}>${icoSetor(atual)}<span class="side-rot">${esc(atual)}</span>${varios ? `<svg class="side-car" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>` : ""}</button>
+    ${varios ? `<div class="side-sub side-setores" id="side-setores" role="group" aria-label="Trocar de setor" ${aberto ? "" : "hidden"}>${modos.map(x => { const i = SETOR_INFO[x] || SETOR_INFO["Manutenção"];
+      return `<button type="button" class="side-item sub ${i.cls}" data-msetor="${esc(x)}" aria-pressed="${x === atual}">${icoSetor(x)}<span class="side-rot"><b>${esc(x)}</b><small>${esc(x === "Administração" && (ehSindico() || !(can("usuarios") || can("acessos"))) ? "Pendências" : i.desc)}</small></span></button>`; }).join("")}</div>` : ""}`;
+}
+function abrirMenu(){ const s = $("#side"); if (!s || s.hidden) return; s.classList.add("aberto"); $("#side-fundo").hidden = false; $("#menu-btn").setAttribute("aria-expanded", "true"); document.body.classList.add("menu-aberto"); const a = s.querySelector('[aria-current="page"]') || s.querySelector(".side-item"); if (a) a.focus(); }
+function fecharMenu(){ const s = $("#side"); if (!s || !s.classList.contains("aberto")) return; s.classList.remove("aberto"); $("#side-fundo").hidden = true; $("#menu-btn").setAttribute("aria-expanded", "false"); document.body.classList.remove("menu-aberto"); }
+if ($("#side")) {
+  $("#menu-btn").addEventListener("click", abrirMenu);
+  $("#side-x").addEventListener("click", () => { fecharMenu(); $("#menu-btn").focus(); });
+  $("#side-fundo").addEventListener("click", fecharMenu);
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#side").classList.contains("aberto")) { fecharMenu(); $("#menu-btn").focus(); } });
+  $("#side").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.grupo) {
+      const g = b.dataset.grupo, abrir = b.getAttribute("aria-expanded") !== "true";
+      if (abrir) menuAbertos.add(g); else menuAbertos.delete(g); menuGuardar();
+      b.setAttribute("aria-expanded", String(abrir)); b.nextElementSibling.hidden = !abrir; menuBadges(); return;
+    }
+    if (b.id === "side-setor-btn") { const el = $("#side-setor"); el.dataset.aberto = el.dataset.aberto === "1" ? "" : "1"; renderMenuSetor(); const f = $("#side-setores button[aria-pressed=false]"); if (f && el.dataset.aberto) f.focus(); return; }
+    if (b.dataset.msetor) { $("#side-setor").dataset.aberto = ""; if (b.dataset.msetor !== modo()) { mudarModo(b.dataset.msetor); toast(`Setor ${modo()}.`); } else renderMenuSetor(); fecharMenu(); return; }
+    if (b.dataset.mtab) {
+      const t = b.dataset.mtab;
+      if (S.tab !== t) setTab(t); else fecharMenu();
+      if (b.dataset.macao === "nova" && t === "pendencias") pdAbrirNova();
+    }
+  });
+  // contadores das abas mudam o tempo todo: o menu acompanha
+  new MutationObserver(() => menuBadges()).observe($("nav.tabs"), {subtree:true, childList:true, characterData:true, attributes:true, attributeFilter:["hidden","class"]});
+  // ao passar para tela de computador com a gaveta aberta, fecha a gaveta
+  matchMedia("(min-width:1024px)").addEventListener("change", e => { if (e.matches) fecharMenu(); });
+}
 function mudarModo(x){
   if (x === modo()) return;
   if (x === "Administração") { if (!TEM_ADM || !podeAdm()) return; S.adm = true; }
   else { if (!S.setores.includes(x)) return; S.adm = false; mudarSetor(x); }
   try { localStorage.setItem("estoque-entrada", x); } catch(e){}
   aplicarPermissoes(); renderSetorSel();
-  setTab(podeAba(S.tab) ? S.tab : primeiraAba());
+  setTab(podeAba(S.tab) ? S.tab : primeiraAba()); renderMenu();
 }
 function mudarSetor(x){
   if (x === S.setor || !S.setores.includes(x)) return;
@@ -910,6 +1006,7 @@ function aplicarPermissoes(){
   $("#o-nova").hidden = !can("os_abrir");
   $("#dm-nova").hidden = !can("dem_delegar");
   $("#pv-box").hidden = !can("dem_delegar");
+  renderMenu();
   $("#k-dem-box").hidden = $("#p-dem-box").hidden = !podeAba("demandas");
   $("#k-os-box").hidden = $("#p-os-box").hidden = !podeAba("os");
   $("#m-osref-box").hidden = !podeAba("os") || !["saida","troca"].includes(S.tipo);
@@ -3050,16 +3147,17 @@ function pdAtualizar(p){
   const quando = p.atualizadoEm ? `Atualizado em ${fData(p.atualizadoEm)} ${String(p.atualizadoEm).slice(11,16)}${p.atualizadoPor ? " por "+p.atualizadoPor : ""}` : "";
   const fimPrazo = !cst && p.status === "Concluído" && p.concluidoEm && p.prazo ? pdDias(p.prazo, p.concluidoEm) : null;
   const etapa = pdV2() ? pdEtapa(p) : null;
-  const assinatura = [nova, p.criadaPor, quando, ehSindico(), ehGerente(), cst, p.ultimaVez, sub, pdTemNovos(), fimPrazo, etapa && etapa.tipo, etapa && etapa.etapa, p.conclData, p.os, p.osStatus, pdV3()].join("|");
+  const assinatura = [nova, p.criadaPor, quando, ehSindico(), ehGerente(), cst, p.ultimaVez, sub, pdTemNovos(), fimPrazo, etapa && etapa.tipo, etapa && etapa.etapa, p.conclData, p.os, p.osStatus, pdV3(), p.cotNumero, p.cotStatus].join("|");
   if (f.meta.dataset.a !== assinatura) {
     f.meta.dataset.a = assinatura;
     f.meta.innerHTML = (nova ? `<span class="pd-nova-pill">Nova do síndico</span>${ehSindico() ? "" : `<button type="button" class="btn small pd-ciente" data-ciente="${esc(p.id)}">Ciente</button>`}` : "")
       + (etapa ? pdAprovHtml(p, etapa) : "")
+      + (p.cotNumero ? `<button type="button" class="pd-ospill pd-cotpill" data-cot="${esc(p.cotId)}" title="Abrir a cotação desta pendência">${esc(p.cotNumero)} · ${esc(p.cotStatus)}</button>` : "")
       + (p.os ? `<span class="pd-ospill ${p.osStatus === "Concluída" ? "ok" : p.osStatus === "Cancelada" ? "canc" : ""}" title="OS criada a partir desta pendência">${esc(p.os)}${p.osSetor ? " · " + esc(p.osSetor) : ""}${p.osStatus ? " · " + esc(p.osStatus) : ""}</span>` : "")
       + (fimPrazo !== null ? `<span class="pd-fim ${fimPrazo > 0 ? "atraso" : "ok"}">${fimPrazo > 0 ? `Concluída ${fimPrazo} dia${fimPrazo===1?"":"s"} após o prazo` : "Concluída no prazo"}</span>` : "")
       + (cst ? `<span class="pd-ult">Última execução: <b>${p.ultimaVez ? fDia(p.ultimaVez) : "ainda não registrada"}</b></span>` : "")
       + `<span>${p.criadaPor && p.criadaPor !== "undefined" && p.origem && p.origem !== "undefined" ? "Incluída por " + esc(p.criadaPor) + " · " : ""}${esc(quando)}</span>`
-      + (pdTemNovos() ? `<span class="pd-acoes">${sub ? "" : `<button type="button" class="link" data-sub="${esc(p.id)}">+ subitem</button>`}<button type="button" class="link" data-editar="${esc(p.id)}">editar</button>${pdV3() && (!p.os || p.osStatus === "Cancelada") ? `<button type="button" class="link" data-os="${esc(p.id)}">+ OS</button>` : ""}</span>` : "");
+      + (pdTemNovos() ? `<span class="pd-acoes">${sub ? "" : `<button type="button" class="link" data-sub="${esc(p.id)}">+ subitem</button>`}<button type="button" class="link" data-editar="${esc(p.id)}">editar</button>${pdV3() && (!p.os || p.osStatus === "Cancelada") ? `<button type="button" class="link" data-os="${esc(p.id)}">+ OS</button>` : ""}${"cotId" in p && !p.cotNumero && !pdConst(p) && p.status !== "Concluído" ? `<button type="button" class="link" data-novacot="${esc(p.id)}">+ Cotação</button>` : ""}</span>` : "");
   }
   r.el.classList.toggle("nova", nova);
   r.el.classList.toggle("done", p.status === "Concluído" && !cst);
@@ -3362,7 +3460,9 @@ function pdTextoEmail(){
 if (TEM_ADM) {
 $("#pd-nova").addEventListener("click", () => pdAbrirNova());
 $("#pd-body").addEventListener("click", e => {
-  const b = e.target.closest("[data-ciente],[data-feito],[data-sub],[data-editar],[data-aprovar],[data-recusar],[data-os]"); if (!b) return;
+  const b = e.target.closest("[data-ciente],[data-feito],[data-sub],[data-editar],[data-aprovar],[data-recusar],[data-os],[data-cot],[data-novacot]"); if (!b) return;
+  if (b.dataset.cot) { const id = b.dataset.cot; CT.abrirDepois = () => { const c = (CT.lista || []).find(x => x.id === id); if (c) ctAbrir(c); }; setTab("cotacoes"); return; }
+  if (b.dataset.novacot) { const p = pdAchar(b.dataset.novacot) || {}; CT.edit = null; CT.abrirDepois = () => ctNova({pendencia:p.id, finalidade:p.titulo, titulo:p.titulo}); setTab("cotacoes"); return; }
   if (b.dataset.os) { pdAbrirOS(b.dataset.os); return; }
   if (b.dataset.aprovar) { b.disabled = true; pdEnviar("pendSalvar", {pend:{id:b.dataset.id, aprovar:b.dataset.aprovar}}); }
   else if (b.dataset.recusar) { b.disabled = true; pdEnviar("pendSalvar", {pend:{id:b.dataset.recusar, recusarConclusao:true}}); }
@@ -3397,6 +3497,652 @@ $("#pd-mail").addEventListener("click", () => {
   };
   $("#pd-mail-c").focus();
 });
+}
+
+// ---------- cotações e mapa de cotação (menu Administração) ----------
+// Cada cotação: fornecedores (colunas), itens com o preço de cada fornecedor, frete, desconto, referência de mercado,
+// recomendação e aprovação do gerente e do síndico. O mapa sai no modelo do Pier (.xlsx) e para impressão.
+const CT = { lista:null, pendOpcoes:[], ia:false, versao:0, edit:null, sujo:false, q:"", st:"", carregando:false, erro:"" };
+const CT_ST = ["Em cotação","Aguardando gerente","Aguardando síndico","Aprovada","Cancelada"];
+const CT_CAMPOS = [
+  ["empresa","Empresa"],["cnpj","CNPJ"],["telefone","Telefone"],["email","E-mail"],["contato","Contato"],
+  ["modelo","Marca / modelo ofertado"],["atende","Atende à especificação?","sel",["","Sim","Parcial","Não"]],
+  ["prazo","Prazo de entrega"],["pagamento","Condição de pagamento"],["validade","Validade da proposta"],["garantia","Garantia"],
+  ["instalacao","Instalação inclusa?","sel",["","Sim","Não"]],["frete","Frete (R$)","num"],["desconto","Desconto (R$)","num"],["obs","Observação"]
+];
+const ctNum = v => { if (v === null || v === undefined) return null; let s = String(v).replace(/R\$|\s/g, ""); if (!s) return null; if (s.includes(",")) s = s.replace(/\./g, "").replace(",", "."); const n = Number(s); return isFinite(n) && n >= 0 ? n : null; };
+const ctFmtN = v => v === null || v === undefined || v === "" ? "" : Number(v).toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2});
+const ctBRL = v => v === null || v === undefined || v === "" ? "—" : fBRL(v);
+const ctEditavel = () => !!CT.edit && (!CT.edit.status || CT.edit.status === "Em cotação");
+const ctVazia = () => ({ status:"Em cotação", finalidade:"", data:hoje(), solicitante:S.nome || "", pendencia:"",
+  dados:{ especificacao:"", fornecedores:[ctFornVazio(), ctFornVazio(), ctFornVazio()], itens:[{descricao:"", unid:"un.", quant:1, precos:[null,null,null], ref:null, refFonte:""}],
+          observacoes:"", recomendacao:{fornecedor:-1, justificativa:""} } });
+function ctFornVazio(){ return {empresa:"", cnpj:"", telefone:"", email:"", contato:"", modelo:"", atende:"", prazo:"", pagamento:"", validade:"", garantia:"", instalacao:"", frete:null, desconto:null, obs:"", anexos:[]}; }
+// totais por fornecedor (iguais ao servidor): itens + frete − desconto
+function ctTotais(d){
+  return d.fornecedores.map((f, i) => {
+    let sub = 0, n = 0;
+    d.itens.forEach(it => { const p = it.precos[i]; if (p !== null && p !== undefined) { sub += (Number(it.quant) || 0) * p; n++; } });
+    return { subtotal: Math.round(sub*100)/100, total: Math.round((sub + (f.frete||0) - (f.desconto||0))*100)/100, completo: d.itens.length > 0 && n === d.itens.length, algum: n > 0 };
+  });
+}
+// menor preço de cada item e menor total (só propostas que não dizem "Não atende")
+function ctMelhores(d){
+  const vale = i => d.fornecedores[i].atende !== "Não";
+  const itens = d.itens.map(it => { let m = null; it.precos.forEach((p, i) => { if (p !== null && p !== undefined && vale(i) && (m === null || p < m)) m = p; }); return m; });
+  const tot = ctTotais(d);
+  const ordem = tot.map((t, i) => ({i, ...t})).filter(t => t.completo && vale(t.i)).sort((a, b) => a.total - b.total);
+  return { itens, total: ordem.length ? ordem[0].total : null, ordem };
+}
+function ctSugestao(d){
+  const m = ctMelhores(d);
+  if (!m.ordem.length) return null;
+  const a = m.ordem[0], b = m.ordem[1];
+  const nome = i => d.fornecedores[i].empresa || `Empresa ${i+1}`;
+  let txt = `Menor valor total entre as propostas completas que atendem à especificação: ${nome(a.i)}, ${fBRL(a.total)}`;
+  if (b) { const eco = b.total - a.total; txt += `. Economia de ${fBRL(eco)} (${(eco / b.total * 100).toLocaleString("pt-BR", {maximumFractionDigits:1})}%) em relação à segunda opção, ${nome(b.i)} (${fBRL(b.total)})`; }
+  return { fornecedor: a.i, justificativa: txt + "." };
+}
+function ctEconomia(d){
+  const r = d.recomendacao.fornecedor; if (r < 0) return "";
+  const tot = ctTotais(d), m = ctMelhores(d);
+  const outros = m.ordem.filter(o => o.i !== r);
+  if (!tot[r] || !tot[r].algum || !outros.length) return "";
+  const prox = outros[0], dif = prox.total - tot[r].total;
+  return dif >= 0 ? `Economia de ${fBRL(dif)} em relação à próxima opção (${d.fornecedores[prox.i].empresa || "Empresa " + (prox.i+1)}).`
+    : `Atenção: custa ${fBRL(-dif)} a mais que ${d.fornecedores[prox.i].empresa || "Empresa " + (prox.i+1)}. Explique o motivo na justificativa.`;
+}
+
+async function carregarCot(){
+  if (!TEM_ADM || !can("pendencias") || CT.carregando) return;
+  CT.carregando = true;
+  try {
+    const r = await api("cotLista");
+    CT.lista = r.cotacoes || []; CT.pendOpcoes = r.pendOpcoes || []; CT.ia = !!r.ia; CT.versao = Number(r.cotVersao) || 0; CT.erro = "";
+    if (CT.abrirDepois) { const x = CT.abrirDepois; CT.abrirDepois = null; x(); }
+  } catch(e){ CT.erro = /desconhecida/i.test(e.message) ? "Para usar as Cotações, a planilha precisa do código novo do Apps Script (colar e implantar uma nova versão)." : e.message; }
+  finally { CT.carregando = false; renderCot(); }
+}
+function renderCot(){
+  if (!TEM_ADM || !$("#t-cotacoes")) return;
+  $("#ct-lista-box").hidden = !!CT.edit; $("#ct-editor").hidden = !CT.edit;
+  if (CT.edit) return;
+  const corpo = $("#ct-body");
+  if (CT.erro) { corpo.innerHTML = `<tr><td colspan="7"><div class="notice crit" style="margin:0">${esc(CT.erro)}</div></td></tr>`; return; }
+  if (!CT.lista) { corpo.innerHTML = `<tr><td colspan="7"><div class="empty"><span class="spin" aria-hidden="true"></span> Carregando…</div></td></tr>`; return; }
+  const fs = $("#ct-fs"); if (!fs.options.length) fs.innerHTML = `<option value="">Todas as situações</option>` + CT_ST.map(s => `<option>${esc(s)}</option>`).join("");
+  fs.value = CT.st;
+  const q = norm(CT.q);
+  const vis = CT.lista.filter(c => (!CT.st || c.status === CT.st) && (!q || norm([c.numero, c.finalidade, c.pendNumero, c.vencedor, c.dados.fornecedores.map(f => f.empresa).join(" ")].join(" ")).includes(q)));
+  const aguardam = CT.lista.filter(c => (c.status === "Aguardando gerente" && (ehGerente() || ehSindico())) || (c.status === "Aguardando síndico" && ehSindico())).length;
+  $("#ct-resumo").innerHTML = CT_ST.map(s => { const n = CT.lista.filter(c => c.status === s).length; return `<button type="button" class="pd-stat ${s.startsWith("Aguardando") && n ? "aprov" : ""}" data-ctst="${esc(s)}" aria-pressed="${CT.st === s}"><b>${n}</b><span>${esc(s.toLowerCase())}</span></button>`; }).join("")
+    + (aguardam ? `<span class="hint">${aguardam} aguardando a sua aprovação</span>` : "");
+  corpo.innerHTML = vis.length ? vis.map(c => `<tr class="click" data-ct="${esc(c.id)}" tabindex="0">
+      <td class="mono">${esc(c.numero)}</td>
+      <td><b>${esc(c.finalidade)}</b>${c.pendNumero ? `<span class="sub">Pendência ${esc(c.pendNumero)}</span>` : ""}</td>
+      <td class="hide-s num">${c.dados.fornecedores.filter(f => f.empresa).length}</td>
+      <td class="hide-m">${esc(c.vencedor || "—")}</td>
+      <td class="num">${c.valorVencedor ? esc(fBRL(c.valorVencedor)) : "—"}</td>
+      <td><span class="ct-st" data-st="${esc(c.status)}">${esc(c.status)}</span></td>
+      <td class="hide-s num">${esc(fData(c.data))}</td></tr>`).join("")
+    : `<tr><td colspan="7"><div class="empty">${CT.lista.length ? "Nenhuma cotação com esses filtros." : "Nenhuma cotação ainda. Clique em \"+ Nova cotação\" ou em \"+ Cotação\" numa pendência."}</div></td></tr>`;
+}
+function ctAbrir(c){
+  CT.edit = JSON.parse(JSON.stringify(c)); CT.sujo = false;
+  const d = CT.edit.dados;
+  d.itens.forEach(it => { while (it.precos.length < d.fornecedores.length) it.precos.push(null); });
+  renderCot(); renderCotEditor(); window.scrollTo({top:0});
+}
+function ctNova(o){
+  const c = ctVazia();
+  if (o && o.pendencia) { c.pendencia = o.pendencia; c.finalidade = o.finalidade || ""; if (o.titulo) c.dados.itens[0].descricao = o.titulo; }
+  ctAbrir(c); CT.sujo = true;
+  const e = $("#ct-finalidade"); if (e) e.focus();
+}
+// editor: dados da cotação, fornecedores (colunas), itens e preços, recomendação, observações e aprovação
+function renderCotEditor(){
+  const c = CT.edit, d = c.dados, ed = ctEditavel(), dis = ed ? "" : "disabled";
+  const nf = d.fornecedores.length, nomeF = i => d.fornecedores[i].empresa || `Empresa ${i+1}`;
+  const pendSel = `<option value="">Sem pendência ligada</option>` + CT.pendOpcoes.concat(c.pendencia && !CT.pendOpcoes.some(p => p.id === c.pendencia) ? [{id:c.pendencia, numero:"", titulo:c.pendNumero || "pendência ligada", secao:""}] : [])
+    .map(p => `<option value="${esc(p.id)}" ${p.id === c.pendencia ? "selected" : ""}>${esc((p.numero ? p.numero + " · " : "") + p.titulo + (p.secao ? " (" + p.secao + ")" : ""))}</option>`).join("");
+  const celF = (f, i, [k, rot, tipo, ops]) => {
+    if (tipo === "sel") return `<select class="input" data-s="${i}" data-k="${k}" aria-label="${esc(rot)} – ${esc(nomeF(i))}" ${dis}>${ops.map(o => `<option value="${o}" ${f[k]===o?"selected":""}>${o || "—"}</option>`).join("")}</select>`;
+    const val = tipo === "num" ? ctFmtN(f[k]) : (f[k] || "");
+    return `<input class="input ${tipo==="num"?"num":""}" data-s="${i}" data-k="${k}" ${tipo==="num"?'inputmode="decimal"':""} value="${esc(val)}" aria-label="${esc(rot)} – ${esc(nomeF(i))}" ${dis}>`;
+  };
+  const anexos = (f, i) => `<div class="ct-anx">${(f.anexos||[]).map(a => `<button type="button" class="link" data-anx="${esc(a.id)}" data-nome="${esc(a.nome)}">${esc(a.nome)}</button>${CT.ia && ed ? `<button type="button" class="btn small" data-ia="ler" data-s="${i}" data-anx2="${esc(a.id)}">Ler com IA</button>` : ""}`).join("")}
+      ${ed ? `<label class="btn small ct-up">Anexar orçamento<input type="file" accept="application/pdf,image/*" data-up="${i}" hidden></label>` : ""}${!(f.anexos||[]).length && !ed ? "—" : ""}</div>`;
+  const tot = ctTotais(d), m = ctMelhores(d);
+  $("#ct-editor").innerHTML = `
+    <div class="ct-topo">
+      <button type="button" class="link" id="ct-voltar">← Cotações</button>
+      <h2 class="sec">${c.numero ? esc(c.numero) : "Nova cotação"}</h2><span class="ct-st" data-st="${esc(c.status)}">${esc(c.status)}</span>
+      <span class="hint" id="ct-sujo" ${CT.sujo ? "" : "hidden"}>Alterações não salvas</span>
+      <div class="ct-acoes">
+        ${ed ? `<button type="button" class="btn primary" id="ct-salvar">Salvar</button>` : ""}
+        <button type="button" class="btn" id="ct-pedido">Pedido de cotação</button>
+        <button type="button" class="btn" id="ct-xlsx">Baixar mapa (.xlsx)</button>
+        <button type="button" class="btn" id="ct-print">Imprimir / PDF</button>
+        ${c.id ? `<button type="button" class="btn" id="ct-drive">Salvar mapa no Drive</button>` : ""}
+        ${c.mapaId ? `<button type="button" class="link" data-anx="${esc(c.mapaId)}" data-nome="Mapa ${esc(c.numero)}.xlsx">Mapa salvo em ${esc(fDataHora(c.mapaEm))}</button>` : ""}
+      </div>
+    </div>
+    <div class="ct-sair" id="ct-sair" hidden><span>Há alterações não salvas.</span><button type="button" class="btn small primary" id="ct-sair-salvar">Salvar e voltar</button><button type="button" class="btn small" id="ct-sair-desc">Descartar</button><button type="button" class="btn small" id="ct-sair-no">Continuar editando</button></div>
+    ${c.recusa && c.status === "Em cotação" ? `<div class="notice warn">Devolvida para ajustes: ${esc(pdMarca(c.recusa))}</div>` : ""}
+    <div class="card ct-card"><h3>Dados da cotação</h3><div class="form-pend">
+      <div class="field full"><label for="ct-finalidade">Finalidade da cotação <span class="req">*</span></label><input class="input" id="ct-finalidade" data-f="finalidade" value="${esc(c.finalidade)}" placeholder="Ex.: Ar-condicionado da academia" ${dis}></div>
+      <div class="field"><label for="ct-data">Data da cotação</label><input class="input" type="date" id="ct-data" data-f="data" value="${esc(c.data)}" ${dis}></div>
+      <div class="field"><label for="ct-solic">Solicitante / Responsável</label><input class="input" id="ct-solic" data-f="solicitante" value="${esc(c.solicitante)}" ${dis}></div>
+      <div class="field full"><label for="ct-pend">Pendência de origem</label><select class="input" id="ct-pend" data-f="pendencia" ${dis}>${pendSel}</select></div>
+      <div class="field full"><label for="ct-espec">Especificação técnica (o que precisa atender)</label><textarea class="input" id="ct-espec" data-f="especificacao" rows="2" placeholder="Ex.: 30.000 BTUs, inverter, só frio, 220V, com instalação" ${dis}>${esc(d.especificacao)}</textarea></div>
+      <p class="hint full">Fornecedores consultados: <b id="ct-nforn">${d.fornecedores.filter(f => f.empresa).length}</b>${d.fornecedores.filter(f => f.empresa).length < 3 ? " · o recomendado é consultar pelo menos 3" : ""}</p>
+    </div></div>
+    <div class="card ct-card"><div class="ct-h"><h3>Dados dos fornecedores</h3>${ed && nf < 10 ? `<button type="button" class="btn small" id="ct-addf">+ Fornecedor</button>` : ""}</div>
+      <div class="tablebox ct-scroll"><table class="ct-tab ct-forn"><thead><tr><th>Dados do fornecedor</th>${d.fornecedores.map((f, i) => `<th>${esc(nomeF(i))}${ed && nf > 1 ? ` <button type="button" class="pd-del" data-rmf="${i}" title="Tirar este fornecedor" aria-label="Tirar ${esc(nomeF(i))}">×</button>` : ""}</th>`).join("")}</tr></thead>
+      <tbody>${CT_CAMPOS.map(cp => `<tr><th scope="row">${esc(cp[1])}</th>${d.fornecedores.map((f, i) => `<td>${celF(f, i, cp)}</td>`).join("")}</tr>`).join("")}
+        <tr><th scope="row">Orçamentos anexados</th>${d.fornecedores.map((f, i) => `<td>${anexos(f, i)}</td>`).join("")}</tr></tbody></table></div>
+      ${ed && !c.id ? `<p class="hint">Para anexar orçamentos, salve a cotação primeiro.</p>` : ""}
+    </div>
+    <div class="card ct-card"><div class="ct-h"><h3>Itens cotados</h3>${ed ? `<button type="button" class="btn small" id="ct-addi">+ Item</button>` : ""}${CT.ia && ed && c.id ? `<button type="button" class="btn small" data-ia="referencia">Pesquisar preço de referência com IA</button>` : ""}</div>
+      <div class="tablebox ct-scroll"><table class="ct-tab ct-itens"><thead>
+        <tr><th rowspan="2">Item</th><th rowspan="2">Descrição</th><th rowspan="2">Unid.</th><th rowspan="2">Quant.</th>${d.fornecedores.map((f, i) => `<th colspan="2">${esc(nomeF(i))}</th>`).join("")}<th colspan="2">Referência de mercado</th>${ed ? "<th rowspan='2'></th>" : ""}</tr>
+        <tr>${d.fornecedores.map(() => `<th>Preço unit. (R$)</th><th>Preço total (R$)</th>`).join("")}<th>Preço unit. (R$)</th><th>Fonte</th></tr></thead>
+      <tbody>${d.itens.map((it, j) => `<tr>
+          <td class="num">${j+1}</td>
+          <td><input class="input" data-i="${j}" data-k="descricao" value="${esc(it.descricao)}" aria-label="Descrição do item ${j+1}" ${dis}></td>
+          <td><input class="input ct-un" data-i="${j}" data-k="unid" value="${esc(it.unid)}" aria-label="Unidade do item ${j+1}" ${dis}></td>
+          <td><input class="input num ct-q" data-i="${j}" data-k="quant" inputmode="decimal" value="${esc(ctFmtN(it.quant).replace(/,00$/, ""))}" aria-label="Quantidade do item ${j+1}" ${dis}></td>
+          ${d.fornecedores.map((f, i) => `<td><input class="input num ct-p" data-i="${j}" data-p="${i}" inputmode="decimal" value="${esc(ctFmtN(it.precos[i]))}" aria-label="Preço unitário de ${esc(nomeF(i))}, item ${j+1}" ${dis}></td><td class="num ct-lt" id="ct-lt-${j}-${i}"></td>`).join("")}
+          <td><input class="input num" data-i="${j}" data-k="ref" inputmode="decimal" value="${esc(ctFmtN(it.ref))}" aria-label="Preço de referência, item ${j+1}" ${dis}></td>
+          <td><input class="input" data-i="${j}" data-k="refFonte" value="${esc(it.refFonte)}" placeholder="site ou loja" aria-label="Fonte da referência, item ${j+1}" ${dis}></td>
+          ${ed ? `<td>${d.itens.length > 1 ? `<button type="button" class="pd-del" data-rmi="${j}" title="Tirar este item" aria-label="Tirar o item ${j+1}">×</button>` : ""}</td>` : ""}</tr>`).join("")}</tbody>
+      <tfoot>
+        <tr><th colspan="4">Subtotal dos itens (R$)</th>${d.fornecedores.map((f, i) => `<td></td><td class="num" id="ct-sub-${i}"></td>`).join("")}<td colspan="${ed ? 3 : 2}"></td></tr>
+        <tr><th colspan="4">Frete (R$)</th>${d.fornecedores.map((f, i) => `<td></td><td class="num" id="ct-fr-${i}"></td>`).join("")}<td colspan="${ed ? 3 : 2}"></td></tr>
+        <tr><th colspan="4">Desconto (R$)</th>${d.fornecedores.map((f, i) => `<td></td><td class="num" id="ct-de-${i}"></td>`).join("")}<td colspan="${ed ? 3 : 2}"></td></tr>
+        <tr class="ct-total"><th colspan="4">VALOR TOTAL DA PROPOSTA (R$)</th>${d.fornecedores.map((f, i) => `<td></td><td class="num" id="ct-tt-${i}"></td>`).join("")}<td colspan="${ed ? 3 : 2}"></td></tr>
+      </tfoot></table></div>
+      <p class="hint">Em verde: o menor preço de cada item e o menor total, entre as propostas que não estão marcadas como "Não atende". Frete e desconto entram nos dados do fornecedor.</p>
+    </div>
+    <div class="card ct-card"><div class="ct-h"><h3>Análise e recomendação</h3>${ed ? `<button type="button" class="btn small" id="ct-sugerir">Sugerir pelo menor total</button>` : ""}${CT.ia && ed && c.id ? `<button type="button" class="btn small" data-ia="comparar">Comparar com IA</button>` : ""}</div>
+      <div class="form-pend">
+        <div class="field"><label for="ct-venc">Fornecedor recomendado</label><select class="input" id="ct-venc" data-f="vencedor" ${dis}><option value="-1">Escolha</option>${d.fornecedores.map((f, i) => `<option value="${i}" ${d.recomendacao.fornecedor === i ? "selected" : ""}>${esc(nomeF(i))}</option>`).join("")}</select></div>
+        <div class="field"><span class="lbl-campo">Valor total recomendado</span><div class="ct-valor" id="ct-vrec">—</div><span class="hint" id="ct-eco"></span></div>
+        <div class="field full"><label for="ct-just">Justificativa</label><textarea class="input" id="ct-just" data-f="justificativa" rows="3" placeholder="Por que este fornecedor: preço, prazo, garantia, especificação…" ${dis}>${esc(d.recomendacao.justificativa)}</textarea></div>
+      </div></div>
+    <div class="card ct-card"><h3>Observações</h3><textarea class="input" id="ct-obs" data-f="observacoes" rows="3" placeholder="Ex.: modelos não são idênticos; confirmar valor final com o fornecedor" ${dis}>${esc(d.observacoes)}</textarea></div>
+    ${c.id ? `<div class="card ct-card"><h3>Aprovação</h3>${ctAprovHtml(c)}</div>` : ""}`;
+  ctRecalcular();
+}
+function ctAprovHtml(c){
+  const linha = (rot, v, falta) => `<li><span>${rot}</span> <b>${v ? esc(pdMarca(v)) : falta}</b></li>`;
+  let h = `<ul class="pd-aprov-info">${linha("Gerente:", c.aprovGerente, c.status === "Aguardando gerente" ? "aguardando" : "—")}${linha("Síndico:", c.aprovSindico, c.status === "Aguardando síndico" ? "aguardando" : "—")}</ul><div class="actions" style="margin-top:10px">`;
+  if (c.status === "Em cotação") h += `<button type="button" class="btn primary" data-op="enviar">Enviar para aprovação</button><button type="button" class="btn" data-op="cancelar">Cancelar cotação</button>`;
+  if (c.status === "Aguardando gerente" && (ehGerente() || ehSindico())) h += `<button type="button" class="btn primary" data-op="aprovar">${ehGerente() ? "Aprovar (gerente)" : "Aprovar em nome do gerente"}</button>`;
+  if (c.status === "Aguardando síndico" && ehSindico()) h += `<button type="button" class="btn primary" data-op="aprovar">Aprovar (síndico)</button>`;
+  if (c.status.startsWith("Aguardando") && (ehGerente() || ehSindico())) h += `<input class="input" id="ct-motivo" placeholder="Motivo da devolução (opcional)" style="max-width:280px"><button type="button" class="btn" data-op="recusar">Devolver para ajustes</button>`;
+  if (c.status === "Cancelada") h += `<button type="button" class="btn" data-op="reabrir">Reabrir</button>`;
+  if (c.status === "Aprovada") h += `<span class="hint">Aprovada. O mapa final é salvo no Drive na aprovação do síndico.</span>`;
+  return h + `<span class="hint" id="ct-op-msg"></span></div>`;
+}
+function ctRecalcular(){
+  const d = CT.edit.dados, tot = ctTotais(d), m = ctMelhores(d);
+  d.itens.forEach((it, j) => d.fornecedores.forEach((f, i) => {
+    const el = $(`#ct-lt-${j}-${i}`); if (!el) return;
+    const p = it.precos[i];
+    el.textContent = p === null || p === undefined ? "" : ctFmtN((Number(it.quant)||0) * p);
+    const best = p !== null && p !== undefined && m.itens[j] !== null && p === m.itens[j] && f.atende !== "Não";
+    el.classList.toggle("ct-best", best);
+    const inp = el.previousElementSibling && el.previousElementSibling.querySelector("input"); if (inp) inp.classList.toggle("ct-best", best);
+  }));
+  d.fornecedores.forEach((f, i) => {
+    const t = tot[i], set = (id, v) => { const e = $(id); if (e) e.textContent = v; };
+    set(`#ct-sub-${i}`, t.algum ? ctFmtN(t.subtotal) : ""); set(`#ct-fr-${i}`, f.frete ? ctFmtN(f.frete) : "");
+    set(`#ct-de-${i}`, f.desconto ? "− " + ctFmtN(f.desconto) : ""); set(`#ct-tt-${i}`, t.algum ? ctFmtN(t.total) + (t.completo ? "" : " *") : "");
+    const tt = $(`#ct-tt-${i}`); if (tt) { tt.classList.toggle("ct-best", t.completo && m.total !== null && t.total === m.total && f.atende !== "Não"); tt.title = t.algum && !t.completo ? "Faltam preços de algum item" : ""; }
+  });
+  const r = d.recomendacao.fornecedor;
+  if ($("#ct-vrec")) $("#ct-vrec").textContent = r >= 0 && tot[r] && tot[r].algum ? fBRL(tot[r].total) : "—";
+  if ($("#ct-eco")) $("#ct-eco").textContent = ctEconomia(d);
+  if ($("#ct-nforn")) $("#ct-nforn").textContent = d.fornecedores.filter(f => f.empresa).length;
+  if ($("#ct-sujo")) $("#ct-sujo").hidden = !CT.sujo;
+}
+function ctMudou(){ CT.sujo = true; ctRecalcular(); }
+function ctLerCampo(e){
+  const d = CT.edit.dados, t = e.target;
+  if (t.dataset.f) {
+    const k = t.dataset.f;
+    if (k === "especificacao" || k === "observacoes") d[k] = t.value;
+    else if (k === "justificativa") d.recomendacao.justificativa = t.value;
+    else if (k === "vencedor") d.recomendacao.fornecedor = Number(t.value);
+    else CT.edit[k] = t.value;
+  } else if (t.dataset.s !== undefined && t.dataset.k) {
+    const f = d.fornecedores[+t.dataset.s], k = t.dataset.k;
+    f[k] = (k === "frete" || k === "desconto") ? ctNum(t.value) : t.value;
+    if (k === "empresa") { const th = $$("#ct-editor .ct-forn thead th")[+t.dataset.s + 1]; if (th && th.firstChild) th.firstChild.textContent = t.value || `Empresa ${+t.dataset.s+1}`; }
+  } else if (t.dataset.i !== undefined) {
+    const it = d.itens[+t.dataset.i];
+    if (t.dataset.p !== undefined) it.precos[+t.dataset.p] = ctNum(t.value);
+    else if (t.dataset.k === "quant" || t.dataset.k === "ref") it[t.dataset.k] = ctNum(t.value);
+    else it[t.dataset.k] = t.value;
+  } else return;
+  ctMudou();
+}
+// envia o que está na tela; o servidor devolve a cotação gravada (com os IDs dos fornecedores)
+async function ctSalvar(quieto){
+  const c = CT.edit;
+  if (!String(c.finalidade || "").trim()) { toast("Informe a finalidade da cotação.", true); const e = $("#ct-finalidade"); if (e) e.focus(); return null; }
+  const b = $("#ct-salvar"); if (b) b.disabled = true;
+  try {
+    const r = await api("cotSalvar", {cot:{id:c.id, finalidade:c.finalidade, data:c.data, solicitante:c.solicitante, pendencia:c.pendencia, dados:c.dados}});
+    ctAtualizarDaResposta(r.cot); if (!quieto) toast(r.msg || "Salvo.");
+    return r.cot;
+  } catch(e){ toast(e.message, true); return null; }
+  finally { if (b) b.disabled = false; }
+}
+function ctAtualizarDaResposta(cot){
+  if (!cot) return;
+  CT.lista = CT.lista || [];
+  const i = CT.lista.findIndex(x => x.id === cot.id); if (i >= 0) CT.lista[i] = cot; else CT.lista.unshift(cot);
+  if (CT.edit && (!CT.edit.id || CT.edit.id === cot.id)) ctAbrir(cot);
+  if (S.pend) carregarPend();
+}
+async function ctOp(op){
+  const c = CT.edit; if (!c || !c.id) return;
+  if (op === "enviar" && CT.sujo && !(await ctSalvar(true))) return;
+  const msg = $("#ct-op-msg");
+  const r = await enviar(null, msg, "cotSalvar", {cot:{id:c.id}, op, motivo: op === "recusar" && $("#ct-motivo") ? $("#ct-motivo").value : ""});
+  if (!r) return;
+  ctAtualizarDaResposta(r.cot);
+  if (op === "aprovar" && r.cot && r.cot.status === "Aprovada") ctSalvarMapaDrive(true);
+}
+async function ctAnexar(i, file){
+  if (!file) return;
+  let c = CT.edit;
+  if (!c.id || CT.sujo) { c = await ctSalvar(true); if (!c) return; }
+  const f = CT.edit.dados.fornecedores[i];
+  if (!f || !f.id) { toast("Salve a cotação antes de anexar.", true); return; }
+  if (file.size > 7 * 1024 * 1024 && file.type === "application/pdf") { toast("O PDF passa de 7 MB.", true); return; }
+  toast("Enviando o orçamento…");
+  try {
+    const foto = /^image\//.test(file.type);
+    const b64 = foto ? await reduzirFoto(file, 2000, 0.85) : await lerBase64(file);
+    const r = await api("cotArquivo", {id:CT.edit.id, tipo:"orcamento", fornecedor:f.id, mime: foto ? "image/jpeg" : file.type, b64, nome:file.name});
+    ctAtualizarDaResposta(r.cot); toast(r.msg || "Orçamento anexado.");
+  } catch(e){ toast(e.message || "Não foi possível anexar.", true); }
+}
+async function ctBaixarArquivo(fileId, nome){
+  try {
+    const r = await api("cotVerArquivo", {id:CT.edit.id, fileId});
+    const bin = atob(r.arquivo.b64), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([u8], {type:r.arquivo.mime})); a.download = nome || "arquivo";
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+  } catch(e){ toast(e.message, true); }
+}
+
+// ---- pedido de cotação (texto para WhatsApp ou e-mail) ----
+function ctTextoPedido(c){
+  const d = c.dados, L = ["Olá! Aqui é " + (c.solicitante || S.nome || "a administração") + ", do Pier Residências (condomínio residencial na Barra da Tijuca).", "", "Gostaríamos de uma cotação para:"];
+  d.itens.filter(it => it.descricao).forEach((it, j) => L.push(`${j+1}. ${it.descricao} – ${String(ctFmtN(it.quant)).replace(/,00$/, "")} ${it.unid || "un."}`));
+  if (String(d.especificacao || "").trim()) L.push("", "Especificação: " + d.especificacao.trim());
+  L.push("", "Por favor, informe: preço unitário e total, frete, prazo de entrega, condição de pagamento, validade da proposta, garantia e se a instalação está inclusa.",
+    "Se possível, envie a proposta em PDF com o CNPJ da empresa.", "", "Obrigado!");
+  return L.join("\n");
+}
+function ctAbrirPedido(textoIA){
+  const c = CT.edit, d = c.dados;
+  $("#modal-box").classList.add("largo");
+  $("#modal-box").innerHTML = `<h3>Pedido de cotação</h3>
+    <p class="hint" style="margin:-6px 0 12px">Texto pronto para mandar aos fornecedores. Ajuste se quiser antes de enviar.</p>
+    <textarea class="input" id="ct-ped-txt" rows="14" style="width:100%">${esc(textoIA || ctTextoPedido(c))}</textarea>
+    <div class="actions" style="margin-top:12px;flex-wrap:wrap">
+      <button class="btn primary" type="button" id="ct-ped-copiar">Copiar texto</button>
+      ${d.fornecedores.filter(f => String(f.telefone||"").replace(/\D/g,"").length >= 10).map(f => `<button class="btn" type="button" data-wa="${esc(String(f.telefone).replace(/\D/g,""))}">WhatsApp: ${esc(f.empresa || "fornecedor")}</button>`).join("")}
+      ${CT.ia && c.id ? `<button class="btn" type="button" id="ct-ped-ia">Escrever com IA</button>` : ""}
+      <button class="btn" type="button" id="ct-ped-x">Fechar</button>
+    </div>`;
+  $("#modal").hidden = false;
+  $("#ct-ped-x").onclick = fecharModal;
+  $("#ct-ped-copiar").onclick = () => { const ta = $("#ct-ped-txt"); try { navigator.clipboard.writeText(ta.value).then(() => toast("Texto copiado."), () => { ta.select(); toast("Texto selecionado. Copie com Ctrl+C."); }); } catch(e){ ta.select(); } };
+  $$("#modal-box [data-wa]").forEach(b => b.onclick = () => { let t = b.dataset.wa; if (t.length <= 11) t = "55" + t; window.open(`https://wa.me/${t}?text=${encodeURIComponent($("#ct-ped-txt").value)}`, "_blank", "noopener"); });
+  if ($("#ct-ped-ia")) $("#ct-ped-ia").onclick = () => ctIA("pedido");
+}
+
+// ---- mapa de cotação no modelo do Pier (.xlsx gerado aqui mesmo, sem biblioteca externa) ----
+// zip sem compressão (o .xlsx é um zip de arquivos XML)
+function zipStore(arquivos){
+  const T = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; T[n] = c >>> 0; }
+  const crc = u => { let c = 0xFFFFFFFF; for (let i = 0; i < u.length; i++) c = T[(c ^ u[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+  const enc = new TextEncoder(), partes = [], central = []; let off = 0;
+  for (const a of arquivos) {
+    const nome = enc.encode(a.nome), d = typeof a.dados === "string" ? enc.encode(a.dados) : a.dados, cr = crc(d);
+    const h = new DataView(new ArrayBuffer(30));
+    h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(12, 0x21, true);
+    h.setUint32(14, cr, true); h.setUint32(18, d.length, true); h.setUint32(22, d.length, true); h.setUint16(26, nome.length, true);
+    partes.push(new Uint8Array(h.buffer), nome, d);
+    const c = new DataView(new ArrayBuffer(46));
+    c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true); c.setUint16(14, 0x21, true);
+    c.setUint32(16, cr, true); c.setUint32(20, d.length, true); c.setUint32(24, d.length, true); c.setUint16(28, nome.length, true); c.setUint32(42, off, true);
+    central.push(new Uint8Array(c.buffer), nome);
+    off += 30 + nome.length + d.length;
+  }
+  const tamC = central.reduce((s, u) => s + u.length, 0), e = new DataView(new ArrayBuffer(22));
+  e.setUint32(0, 0x06054b50, true); e.setUint16(8, arquivos.length, true); e.setUint16(10, arquivos.length, true); e.setUint32(12, tamC, true); e.setUint32(16, off, true);
+  const tudo = partes.concat(central, [new Uint8Array(e.buffer)]), out = new Uint8Array(tudo.reduce((s, u) => s + u.length, 0));
+  let p = 0; for (const u of tudo) { out.set(u, p); p += u.length; }
+  return out;
+}
+// planilha de uma aba, com estilos (fonte, cor de fundo, borda, alinhamento, formato), mesclas, fórmulas, imagem e impressão
+function xlsxMini(){
+  const C = new Map(), merges = [], cols = {}, rows = {}; let img = null, area = null;
+  const est = { fonts:['<font><sz val="10"/><name val="Calibri"/></font>'], fills:['<fill><patternFill patternType="none"/></fill>', '<fill><patternFill patternType="gray125"/></fill>'],
+    borders:['<border><left/><right/><top/><bottom/><diagonal/></border>'], numFmts:[], xfs:['<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'], idx:new Map() };
+  const add = (lista, xml) => { let i = lista.indexOf(xml); if (i < 0) { lista.push(xml); i = lista.length - 1; } return i; };
+  const x = v => String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
+  const L = n => { let s = ""; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
+  const BORDA = '<border><left style="thin"><color rgb="FFB7C4D1"/></left><right style="thin"><color rgb="FFB7C4D1"/></right><top style="thin"><color rgb="FFB7C4D1"/></top><bottom style="thin"><color rgb="FFB7C4D1"/></bottom><diagonal/></border>';
+  function estilo(o){
+    o = o || {}; const k = JSON.stringify(o); if (est.idx.has(k)) return est.idx.get(k);
+    const f = add(est.fonts, `<font>${o.b ? "<b/>" : ""}${o.i ? "<i/>" : ""}<sz val="${o.size || 10}"/><color rgb="${o.cor || "FF1F2A37"}"/><name val="Calibri"/></font>`);
+    const fi = o.fill ? add(est.fills, `<fill><patternFill patternType="solid"><fgColor rgb="${o.fill}"/><bgColor indexed="64"/></patternFill></fill>`) : 0;
+    const bo = o.borda === false ? 0 : add(est.borders, BORDA);
+    let nf = 0; if (o.num) { let j = est.numFmts.indexOf(o.num); if (j < 0) { est.numFmts.push(o.num); j = est.numFmts.length - 1; } nf = 164 + j; }
+    est.xfs.push(`<xf numFmtId="${nf}" fontId="${f}" fillId="${fi}" borderId="${bo}" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"${nf ? ' applyNumberFormat="1"' : ""}><alignment horizontal="${o.h || "left"}" vertical="center"${o.wrap === false ? "" : ' wrapText="1"'}/></xf>`);
+    const i = est.xfs.length - 1; est.idx.set(k, i); return i;
+  }
+  const serial = d => (Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - Date.UTC(1899, 11, 30)) / 864e5;
+  function celXml(r, c, at){
+    const ref = L(c) + r, s = ` s="${at.s || 0}"`, v = at.v;
+    if (v === undefined || v === null || v === "") return `<c r="${ref}"${s}/>`;
+    if (v instanceof Date) return `<c r="${ref}"${s}><v>${serial(v)}</v></c>`;
+    if (typeof v === "number") return isFinite(v) ? `<c r="${ref}"${s}><v>${v}</v></c>` : `<c r="${ref}"${s}/>`;
+    if (typeof v === "object" && v.f) {
+      const res = v.r;
+      return typeof res === "number" ? `<c r="${ref}"${s}><f>${x(v.f)}</f><v>${res}</v></c>` : `<c r="${ref}"${s} t="str"><f>${x(v.f)}</f><v>${x(res === undefined || res === null ? "" : res)}</v></c>`;
+    }
+    return `<c r="${ref}"${s} t="inlineStr"><is><t xml:space="preserve">${x(v)}</t></is></c>`;
+  }
+  return {
+    L,
+    cel(r, c, v, o){ const k = r + "," + c, at = C.get(k) || {}; if (v !== undefined) at.v = v; at.s = estilo(o); C.set(k, at); },
+    merge(r1, c1, r2, c2){ merges.push(`${L(c1)}${r1}:${L(c2)}${r2}`); },
+    col(c, w){ cols[c] = w; }, row(r, h){ rows[r] = h; },
+    imagem(bytes, wPx, hPx){ img = {bytes, w:wPx, h:hPx}; },
+    area(ref){ area = ref; },
+    gerar(nomeAba){
+      const nome = String(nomeAba || "Cotação").replace(/[\\/?*[\]:']/g, "-").slice(0, 31);
+      const porLinha = new Map();
+      for (const [k, at] of C) { const [r, c] = k.split(",").map(Number); if (!porLinha.has(r)) porLinha.set(r, []); porLinha.get(r).push([c, at]); }
+      const linhasR = [...new Set([...porLinha.keys(), ...Object.keys(rows).map(Number)])].sort((a, b) => a - b);
+      const dados = linhasR.map(r => `<row r="${r}"${rows[r] ? ` ht="${rows[r]}" customHeight="1"` : ""}>${(porLinha.get(r) || []).sort((a, b) => a[0] - b[0]).map(([c, at]) => celXml(r, c, at)).join("")}</row>`).join("");
+      const colsXml = Object.keys(cols).length ? `<cols>${Object.keys(cols).map(Number).sort((a, b) => a - b).map(c => `<col min="${c}" max="${c}" width="${cols[c]}" customWidth="1"/>`).join("")}</cols>` : "";
+      const NS = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+      const XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+      const sheet = `${XML}<worksheet ${NS}><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><sheetViews><sheetView workbookViewId="0" showGridLines="0"/></sheetViews><sheetFormatPr defaultRowHeight="15"/>${colsXml}<sheetData>${dados}</sheetData>${merges.length ? `<mergeCells count="${merges.length}">${merges.map(m => `<mergeCell ref="${m}"/>`).join("")}</mergeCells>` : ""}<pageMargins left="0.3" right="0.3" top="0.4" bottom="0.4" header="0.2" footer="0.2"/><pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"/>${img ? '<drawing r:id="rId1"/>' : ""}</worksheet>`;
+      const styles = `${XML}<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${est.numFmts.length ? `<numFmts count="${est.numFmts.length}">${est.numFmts.map((f, i) => `<numFmt numFmtId="${164 + i}" formatCode="${x(f)}"/>`).join("")}</numFmts>` : ""}<fonts count="${est.fonts.length}">${est.fonts.join("")}</fonts><fills count="${est.fills.length}">${est.fills.join("")}</fills><borders count="${est.borders.length}">${est.borders.join("")}</borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="${est.xfs.length}">${est.xfs.join("")}</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+      const nomeX = x(nome).replace(/'/g, "''");
+      const wb = `${XML}<workbook ${NS}><bookViews><workbookView/></bookViews><sheets><sheet name="${x(nome)}" sheetId="1" r:id="rId1"/></sheets>${area ? `<definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">'${nomeX}'!${area.replace(/([A-Z]+)(\d+)/g, "$$$1$$$2")}</definedName></definedNames>` : ""}</workbook>`;
+      const REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+      const arqs = [
+        {nome:"[Content_Types].xml", dados:`${XML}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${img ? '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>' : ""}</Types>`},
+        {nome:"_rels/.rels", dados:`${XML}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/officeDocument" Target="xl/workbook.xml"/></Relationships>`},
+        {nome:"xl/workbook.xml", dados:wb},
+        {nome:"xl/_rels/workbook.xml.rels", dados:`${XML}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="${REL}/styles" Target="styles.xml"/></Relationships>`},
+        {nome:"xl/styles.xml", dados:styles},
+        {nome:"xl/worksheets/sheet1.xml", dados:sheet}
+      ];
+      if (img) {
+        const cx = Math.round(img.w * 9525), cy = Math.round(img.h * 9525);
+        arqs.push({nome:"xl/worksheets/_rels/sheet1.xml.rels", dados:`${XML}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/drawing" Target="../drawings/drawing1.xml"/></Relationships>`});
+        arqs.push({nome:"xl/drawings/drawing1.xml", dados:`${XML}<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="${REL}"><xdr:oneCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>76200</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>57150</xdr:rowOff></xdr:from><xdr:ext cx="${cx}" cy="${cy}"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="2" name="Logo Pier"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="rId1"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor></xdr:wsDr>`});
+        arqs.push({nome:"xl/drawings/_rels/drawing1.xml.rels", dados:`${XML}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/image" Target="../media/image1.png"/></Relationships>`});
+        arqs.push({nome:"xl/media/image1.png", dados:img.bytes});
+      }
+      return zipStore(arqs);
+    }
+  };
+}
+async function ctLogoBytes(){
+  try { const r = await fetch("img/logo-claro.png"); if (!r.ok) return null; return new Uint8Array(await r.arrayBuffer()); } catch(e){ return null; }
+}
+async function ctGerarXlsx(c){
+  const d = c.dados, nf = Math.max(d.fornecedores.length, 1), tot = ctTotais(d), m = ctMelhores(d);
+  const W = xlsxMini(), L = W.L;
+  const AZUL = "FF1F3A56", AZUL2 = "FF4A7296", CLARO = "FFDCE6EF", AMAR = "FFFFF6D9", VERDE = "FFC6EFCE", VERDE_T = "FF006100", BRANCO = "FFFFFFFF";
+  const MOEDA = '"R$" #,##0.00';
+  const colF = i => 5 + i * 2;                       // E, G, I… (duas colunas por fornecedor, como no modelo)
+  const colRef = colF(nf), ult = colRef + 1;          // referência de mercado: preço e fonte
+  W.col(1, 6); W.col(2, 44); W.col(3, 7); W.col(4, 8);
+  for (let i = 0; i < nf; i++) { W.col(colF(i), 15); W.col(colF(i) + 1, 16); }
+  W.col(colRef, 15); W.col(ult, 26);
+  const cel = (r, k, v, o) => W.cel(r, k, v, o);
+  const faixa = (r, c1, c2, v, o) => { if (c2 > c1) W.merge(r, c1, r, c2); for (let k = c1; k <= c2; k++) cel(r, k, k === c1 ? v : undefined, o); };
+  const linhasTexto = (v, largura) => String(v === null || v === undefined ? "" : v).split("\n").reduce((s, l) => s + Math.max(1, Math.ceil(l.length / largura)), 0);
+  // cabeçalho azul com o logo
+  for (let r = 1; r <= 4; r++) { for (let k = 1; k <= ult; k++) cel(r, k, undefined, {fill:AZUL, borda:false}); W.row(r, 17); }
+  W.merge(1, 4, 2, ult); cel(1, 4, "COTAÇÃO DE PREÇOS", {fill:AZUL, b:true, size:16, cor:BRANCO, h:"center", borda:false});
+  W.merge(3, 4, 4, ult); cel(3, 4, "PIER RESIDÊNCIAS  |  Condomínio Residencial – Barra da Tijuca", {fill:AZUL, i:true, cor:BRANCO, h:"center", borda:false});
+  const logo = await ctLogoBytes(); if (logo) W.imagem(logo, 200, 60);
+  // dados da cotação
+  let r = 6;
+  const pend = c.pendNumero || ((CT.pendOpcoes.find(p => p.id === c.pendencia) || {}).titulo) || "—";
+  [["Nº da cotação:", c.numero || "(ainda não salva)"], ["Finalidade da cotação:", c.finalidade], ["Data da cotação:", c.data ? new Date(c.data + "T12:00:00") : ""],
+   ["Solicitante / Responsável:", c.solicitante], ["Pendência de origem:", pend], ["Nº de fornecedores consultados:", d.fornecedores.filter(f => f.empresa).length],
+   ["Especificação técnica:", d.especificacao || "—"]].forEach(([rot, v]) => {
+    faixa(r, 1, 3, rot, {b:true}); faixa(r, 4, ult, v, {fill:AMAR, b:true, num: v instanceof Date ? "dd/mm/yyyy" : undefined});
+    if (rot.startsWith("Especificação")) W.row(r, Math.max(16, linhasTexto(v, 140) * 15)); r++; });
+  // dados dos fornecedores
+  r++;
+  faixa(r, 1, 4, "Dados do Fornecedor", {fill:AZUL2, b:true, cor:BRANCO, h:"center"});
+  d.fornecedores.forEach((f, i) => faixa(r, colF(i), colF(i) + 1, (f.empresa || `EMPRESA ${i+1}`).toUpperCase(), {fill:AZUL, b:true, cor:BRANCO, h:"center"}));
+  r++;
+  CT_CAMPOS.filter(x => x[0] !== "obs").concat([["anexos", "Orçamento anexado"], ["obs", "Observação"]]).forEach(([k, rot, tipo]) => {
+    faixa(r, 1, 4, rot, {fill:CLARO, b:true});
+    let alto = 1;
+    d.fornecedores.forEach((f, i) => {
+      let v = k === "anexos" ? (f.anexos || []).map(a => a.nome).join("\n") : f[k];
+      if (tipo === "num") v = v ? Number(v) : null;
+      const vazio = v === null || v === undefined || v === "";
+      faixa(r, colF(i), colF(i) + 1, vazio ? "—" : v, {fill:AMAR, h:"center", num: tipo === "num" && !vazio ? MOEDA : undefined, b: k === "atende" && v === "Não", cor: k === "atende" && v === "Não" ? "FFB42318" : undefined});
+      alto = Math.max(alto, linhasTexto(v, 30));
+    });
+    if (alto > 1) W.row(r, Math.min(90, 15 * alto + 2)); r++;
+  });
+  // itens cotados
+  r++;
+  faixa(r, 1, ult, "Itens Cotados", {fill:AZUL2, b:true, cor:BRANCO}); r++;
+  const h1 = r, h2 = r + 1, hd = {fill:AZUL, b:true, cor:BRANCO, h:"center"};
+  [["Item", 1], ["Descrição", 2], ["Unid.", 3], ["Quant.", 4]].forEach(([t, k]) => { W.merge(h1, k, h2, k); cel(h1, k, t, hd); cel(h2, k, undefined, hd); });
+  d.fornecedores.forEach((f, i) => { faixa(h1, colF(i), colF(i) + 1, (f.empresa || `Empresa ${i+1}`).toUpperCase(), hd); cel(h2, colF(i), "Preço Unit. (R$)", hd); cel(h2, colF(i) + 1, "Preço Total (R$)", hd); });
+  const hr = {fill:AZUL2, b:true, cor:BRANCO, h:"center"};
+  faixa(h1, colRef, ult, "REFERÊNCIA DE MERCADO", hr); cel(h2, colRef, "Preço Unit. (R$)", hr); cel(h2, ult, "Fonte", hr);
+  r = h2 + 1;
+  const i0 = r;
+  d.itens.forEach((it, j) => {
+    const bg = j % 2 ? BRANCO : CLARO, q = Number(it.quant) || 0;
+    cel(r, 1, j + 1, {fill:bg, h:"center"}); cel(r, 2, it.descricao, {fill:AMAR}); cel(r, 3, it.unid, {fill:AMAR, h:"center"}); cel(r, 4, q, {fill:AMAR, h:"center"});
+    d.fornecedores.forEach((f, i) => {
+      const p = it.precos[i], tem = p !== null && p !== undefined, best = tem && p === m.itens[j] && f.atende !== "Não";
+      const est = {fill:best ? VERDE : AMAR, num:MOEDA, h:"right", b:best, cor:best ? VERDE_T : undefined};
+      cel(r, colF(i), tem ? p : null, est);
+      const U = L(colF(i)) + r;
+      cel(r, colF(i) + 1, {f:`IF(${U}="","",D${r}*${U})`, r: tem ? Math.round(q * p * 100) / 100 : ""}, {fill:best ? VERDE : bg, num:MOEDA, h:"right", b:true, cor:best ? VERDE_T : undefined});
+    });
+    cel(r, colRef, it.ref === null || it.ref === undefined ? null : it.ref, {fill:AMAR, num:MOEDA, h:"right"}); cel(r, ult, it.refFonte || "", {fill:AMAR, size:9});
+    const alto = Math.max(linhasTexto(it.descricao, 52), linhasTexto(it.refFonte, 30));
+    if (alto > 1) W.row(r, Math.min(75, 15 * alto)); r++;
+  });
+  const i1 = r - 1, rs = r;
+  [["Subtotal dos itens (R$)", i => ({f:`SUM(${L(colF(i)+1)}${i0}:${L(colF(i)+1)}${i1})`, r:tot[i].subtotal})], ["Frete (R$)", i => d.fornecedores[i].frete || 0], ["Desconto (R$)", i => d.fornecedores[i].desconto || 0]]
+    .forEach(([rot, fn]) => { faixa(r, 1, 4, rot, {fill:CLARO, b:true, h:"right"}); d.fornecedores.forEach((f, i) => { cel(r, colF(i), "", {fill:CLARO}); cel(r, colF(i) + 1, fn(i), {fill:CLARO, num:MOEDA, h:"right"}); }); faixa(r, colRef, ult, "", {fill:CLARO}); r++; });
+  faixa(r, 1, 4, "VALOR TOTAL DA PROPOSTA (R$)", {fill:AZUL, b:true, cor:BRANCO, h:"right"});
+  d.fornecedores.forEach((f, i) => { const col = L(colF(i) + 1), best = tot[i].completo && m.total !== null && tot[i].total === m.total && f.atende !== "Não";
+    cel(r, colF(i), "", {fill:AZUL}); cel(r, colF(i) + 1, {f:`${col}${rs}+${col}${rs+1}-${col}${rs+2}`, r:tot[i].total}, {fill:best ? VERDE : AZUL, num:MOEDA, b:true, cor:best ? VERDE_T : BRANCO, h:"right"}); });
+  faixa(r, colRef, ult, "", {fill:AZUL}); r += 2;
+  // análise e recomendação, observações e aprovações
+  const ir = d.recomendacao.fornecedor;
+  faixa(r, 1, ult, "Análise e recomendação", {fill:AZUL2, b:true, cor:BRANCO}); r++;
+  [["Fornecedor recomendado:", ir >= 0 ? (d.fornecedores[ir].empresa || `Empresa ${ir+1}`) : "—"], ["Valor total recomendado:", ir >= 0 && tot[ir].algum ? tot[ir].total : "—"],
+   ["Economia / comparação:", ctEconomia(d) || "—"], ["Justificativa:", d.recomendacao.justificativa || "—"]].forEach(([rot, v]) => {
+    faixa(r, 1, 3, rot, {b:true, fill:CLARO}); faixa(r, 4, ult, v, {fill:AMAR, b:rot.startsWith("Fornecedor") || rot.startsWith("Valor"), num: typeof v === "number" ? MOEDA : undefined, h: typeof v === "number" ? "left" : undefined});
+    const alto = linhasTexto(v, 150); if (alto > 1) W.row(r, Math.min(120, 15 * alto)); r++; });
+  r++;
+  faixa(r, 1, ult, "Observações", {fill:AZUL2, b:true, cor:BRANCO}); r++;
+  const obs = d.observacoes || "—"; faixa(r, 1, ult, obs, {fill:AMAR}); W.row(r, Math.min(180, Math.max(16, linhasTexto(obs, 170) * 15))); r += 2;
+  faixa(r, 1, ult, "Aprovações", {fill:AZUL2, b:true, cor:BRANCO}); r++;
+  [["Situação:", c.status || "Em cotação"], ["Gerente:", c.aprovGerente ? pdMarca(c.aprovGerente) : "—"], ["Síndico:", c.aprovSindico ? pdMarca(c.aprovSindico) : "—"]]
+    .forEach(([rot, v]) => { faixa(r, 1, 3, rot, {b:true, fill:CLARO}); faixa(r, 4, ult, v, {fill:AMAR}); r++; });
+  r++;
+  faixa(r, 1, ult, `Gerado pelo Pier Gestão em ${fDataHora(new Date(Date.now() - 3*3600e3).toISOString().slice(0, 16).replace("T", " "))}. Em verde: menor preço de cada item e menor total entre as propostas que atendem à especificação.`, {i:true, size:8, cor:"FF5B6B7B", borda:false});
+  W.area(`A1:${L(ult)}${r}`);
+  return W.gerar(c.numero || "Cotação");
+}
+// nome do arquivo sem acentos: alguns navegadores trocam por "download" um nome com "ç" ou "ã"
+const ctNomeMapa = c => (`Mapa de cotacao ${c.numero || "nova"} - ${String(c.finalidade || "").slice(0, 50)}`).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\x20-\x7E]/g, "").replace(/[\\/:*?"<>|]/g, "-") + ".xlsx";
+async function ctBaixarXlsx(){
+  const b = $("#ct-xlsx"); if (b) b.disabled = true;
+  try {
+    const buf = await ctGerarXlsx(CT.edit);
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([buf], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"})); a.download = ctNomeMapa(CT.edit);
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+    registrarTela("exportar_mapa", CT.edit.numero || "nova");
+  } catch(e){ toast(e.message || "Não foi possível gerar o mapa.", true); }
+  finally { if (b) b.disabled = false; }
+}
+async function ctSalvarMapaDrive(automatico){
+  const c = CT.edit; if (!c || !c.id) return;
+  if (CT.sujo && ctEditavel() && !(await ctSalvar(true))) return;
+  const b = $("#ct-drive"); if (b) b.disabled = true;
+  try {
+    const u8 = await ctGerarXlsx(CT.edit);
+    let bin = ""; for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+    const r = await api("cotArquivo", {id:c.id, tipo:"mapa", mime:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", b64:btoa(bin)});
+    ctAtualizarDaResposta(r.cot); toast(automatico ? "Cotação aprovada. Mapa final salvo no Drive." : (r.msg || "Mapa salvo no Drive."));
+  } catch(e){ toast(e.message || "Não foi possível salvar o mapa no Drive.", true); }
+  finally { if (b) b.disabled = false; }
+}
+// versão para imprimir ou salvar em PDF (mesmo conteúdo do mapa)
+function ctImprimir(){
+  const c = CT.edit, d = c.dados, tot = ctTotais(d), m = ctMelhores(d), nf = d.fornecedores.length;
+  const nomeF = i => esc(d.fornecedores[i].empresa || `Empresa ${i+1}`);
+  const v = x => x === null || x === undefined || x === "" ? "—" : esc(x);
+  const linhasF = CT_CAMPOS.filter(x => x[0] !== "obs").concat([["anexos", "Orçamento anexado"], ["obs", "Observação"]]).map(([k, rot, tipo]) =>
+    `<tr><th class="cl">${esc(rot)}</th>${d.fornecedores.map(f => `<td colspan="2" class="am c">${k === "anexos" ? v((f.anexos||[]).map(a => a.nome).join(", ")) : tipo === "num" ? (f[k] ? esc(fBRL(f[k])) : "—") : v(f[k])}</td>`).join("")}</tr>`).join("");
+  const itens = d.itens.map((it, j) => `<tr><td class="c">${j+1}</td><td>${v(it.descricao)}</td><td class="c">${v(it.unid)}</td><td class="c">${v(ctFmtN(it.quant).replace(/,00$/, ""))}</td>${d.fornecedores.map((f, i) => { const p = it.precos[i], best = p !== null && p !== undefined && p === m.itens[j] && f.atende !== "Não"; return `<td class="n ${best ? "vd" : ""}">${p === null || p === undefined ? "" : esc(fBRL(p))}</td><td class="n b ${best ? "vd" : ""}">${p === null || p === undefined ? "" : esc(fBRL((Number(it.quant)||0) * p))}</td>`; }).join("")}<td class="n">${it.ref ? esc(fBRL(it.ref)) : ""}</td><td class="pq">${v(it.refFonte)}</td></tr>`).join("");
+  const rod = (rot, fn, cls) => `<tr class="${cls||""}"><th colspan="4" class="d">${rot}</th>${d.fornecedores.map((f, i) => `<td></td><td class="n b ${fn.best && fn.best(i) ? "vd" : ""}">${fn(i)}</td>`).join("")}<td colspan="2"></td></tr>`;
+  const totF = i => tot[i].algum ? esc(fBRL(tot[i].total)) : ""; totF.best = i => tot[i].completo && m.total !== null && tot[i].total === m.total && d.fornecedores[i].atende !== "Não";
+  const ir = d.recomendacao.fornecedor;
+  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(ctNomeMapa(c).replace(/\.xlsx$/, ""))}</title><style>
+    @page{size:A4 landscape;margin:10mm} body{font:10px Calibri,Arial,sans-serif;color:#1f2a37;margin:0}
+    table{border-collapse:collapse;width:100%;margin-bottom:8px} th,td{border:1px solid #b7c4d1;padding:3px 5px;vertical-align:middle;text-align:left}
+    .cab{background:#1f3a56;color:#fff;text-align:center;padding:10px;margin-bottom:8px;position:relative} .cab h1{margin:0;font-size:18px} .cab p{margin:3px 0 0;font-style:italic}
+    .cab img{position:absolute;left:10px;top:8px;height:40px}
+    .az{background:#1f3a56;color:#fff;text-align:center} .az2{background:#4a7296;color:#fff;font-weight:700} .cl{background:#dce6ef;font-weight:700;white-space:nowrap}
+    .am{background:#fff6d9} .c{text-align:center} .n{text-align:right;white-space:nowrap} .b{font-weight:700} .d{text-align:right} .vd{background:#c6efce;color:#006100;font-weight:700}
+    .tt th,.tt td{background:#1f3a56;color:#fff} .tt td.vd{background:#c6efce;color:#006100} .pq{font-size:9px} .rod{font-size:8px;color:#5b6b7b;font-style:italic}
+  </style></head><body>
+    <div class="cab"><img src="${new URL("img/logo-claro.png", location.href).href}" alt=""><h1>COTAÇÃO DE PREÇOS</h1><p>PIER RESIDÊNCIAS | Condomínio Residencial – Barra da Tijuca</p></div>
+    <table><tr><th class="cl" style="width:22%">Nº da cotação</th><td class="am b">${v(c.numero || "(ainda não salva)")}</td><th class="cl" style="width:18%">Data da cotação</th><td class="am b">${v(fData(c.data))}</td></tr>
+      <tr><th class="cl">Finalidade da cotação</th><td class="am b">${v(c.finalidade)}</td><th class="cl">Solicitante / Responsável</th><td class="am b">${v(c.solicitante)}</td></tr>
+      <tr><th class="cl">Pendência de origem</th><td class="am">${v(c.pendNumero)}</td><th class="cl">Fornecedores consultados</th><td class="am b">${d.fornecedores.filter(f => f.empresa).length}</td></tr>
+      <tr><th class="cl">Especificação técnica</th><td class="am" colspan="3">${v(d.especificacao)}</td></tr></table>
+    <table><tr><th class="az2" style="width:18%">Dados do Fornecedor</th>${d.fornecedores.map((f, i) => `<th colspan="2" class="az">${nomeF(i).toUpperCase()}</th>`).join("")}</tr>${linhasF}</table>
+    <table><tr><th class="az" rowspan="2">Item</th><th class="az" rowspan="2">Descrição</th><th class="az" rowspan="2">Unid.</th><th class="az" rowspan="2">Quant.</th>${d.fornecedores.map((f, i) => `<th class="az" colspan="2">${nomeF(i).toUpperCase()}</th>`).join("")}<th class="az2 c" colspan="2">REFERÊNCIA DE MERCADO</th></tr>
+      <tr>${d.fornecedores.map(() => `<th class="az">Preço Unit.</th><th class="az">Preço Total</th>`).join("")}<th class="az2 c">Preço Unit.</th><th class="az2 c">Fonte</th></tr>
+      ${itens}
+      ${rod("Subtotal dos itens", i => tot[i].algum ? esc(fBRL(tot[i].subtotal)) : "")}${rod("Frete", i => d.fornecedores[i].frete ? esc(fBRL(d.fornecedores[i].frete)) : "—")}${rod("Desconto", i => d.fornecedores[i].desconto ? "− " + esc(fBRL(d.fornecedores[i].desconto)) : "—")}
+      ${rod("VALOR TOTAL DA PROPOSTA", totF, "tt")}</table>
+    <table><tr><th class="az2" colspan="2">Análise e recomendação</th></tr>
+      <tr><th class="cl" style="width:22%">Fornecedor recomendado</th><td class="am b">${ir >= 0 ? nomeF(ir) : "—"}</td></tr>
+      <tr><th class="cl">Valor total recomendado</th><td class="am b">${ir >= 0 && tot[ir].algum ? esc(fBRL(tot[ir].total)) : "—"}</td></tr>
+      <tr><th class="cl">Economia / comparação</th><td class="am">${v(ctEconomia(d))}</td></tr>
+      <tr><th class="cl">Justificativa</th><td class="am">${v(d.recomendacao.justificativa)}</td></tr></table>
+    <table><tr><th class="az2">Observações</th></tr><tr><td class="am" style="white-space:pre-wrap">${v(d.observacoes)}</td></tr></table>
+    <table><tr><th class="az2" colspan="2">Aprovações</th></tr><tr><th class="cl" style="width:22%">Situação</th><td class="am">${v(c.status)}</td></tr>
+      <tr><th class="cl">Gerente</th><td class="am">${c.aprovGerente ? esc(pdMarca(c.aprovGerente)) : "—"}</td></tr><tr><th class="cl">Síndico</th><td class="am">${c.aprovSindico ? esc(pdMarca(c.aprovSindico)) : "—"}</td></tr></table>
+    <p class="rod">Gerado pelo Pier Gestão. Em verde: menor preço de cada item e menor total entre as propostas que atendem à especificação.</p>
+  </body></html>`;
+  let fr = $("#ct-print-frame");
+  if (fr) fr.remove();
+  fr = document.createElement("iframe"); fr.id = "ct-print-frame"; fr.setAttribute("aria-hidden", "true");
+  fr.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
+  document.body.appendChild(fr);
+  fr.contentDocument.open(); fr.contentDocument.write(html); fr.contentDocument.close();
+  const imprimir = () => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch(e){ toast("Não foi possível abrir a impressão.", true); } };
+  const img = fr.contentDocument.querySelector("img");
+  if (img && !img.complete) { img.onload = img.onerror = imprimir; } else setTimeout(imprimir, 100);
+  return html;
+}
+
+// ---- ajuda da IA (só aparece quando a IA estiver ligada no Apps Script) ----
+async function ctIA(tipo, extra){
+  const c = CT.edit; if (!c) return;
+  if (!c.id || CT.sujo) { if (!(await ctSalvar(true))) return; }
+  toast("Consultando a IA… pode levar alguns segundos.");
+  try {
+    const r = await api("cotIA", Object.assign({tipo, id:CT.edit.id}, extra || {}));
+    const d = CT.edit.dados;
+    if (tipo === "pedido" && r.texto) { ctAbrirPedido(r.texto); return; }
+    if (tipo === "ler" && r.fornecedor) {
+      const i = extra.indice, f = d.fornecedores[i];
+      Object.keys(r.fornecedor).forEach(k => { const val = r.fornecedor[k]; if (val !== null && val !== undefined && val !== "" && k in f && k !== "anexos" && k !== "id") f[k] = (k === "frete" || k === "desconto") ? ctNum(val) : String(val); });
+      (r.itens || []).forEach(x => {
+        const alvo = d.itens.find(it => it.descricao && x.descricao && (norm(it.descricao).includes(norm(x.descricao).slice(0, 18)) || norm(x.descricao).includes(norm(it.descricao).slice(0, 18))))
+          || (d.itens.length === 1 && !d.itens[0].precos.some(p => p !== null) ? d.itens[0] : null);
+        if (alvo) { alvo.precos[i] = ctNum(x.precoUnit); if (!alvo.descricao) alvo.descricao = x.descricao || ""; if (!alvo.quant && x.quant) alvo.quant = ctNum(x.quant); }
+        else d.itens.push({descricao:x.descricao || "", unid:x.unid || "un.", quant:ctNum(x.quant) || 1, precos:d.fornecedores.map((_, k) => k === i ? ctNum(x.precoUnit) : null), ref:null, refFonte:""});
+      });
+      CT.sujo = true; renderCotEditor(); toast("Orçamento lido pela IA. Confira os valores e salve.");
+    }
+    if (tipo === "comparar" && r.recomendacao) {
+      d.recomendacao.fornecedor = Number.isInteger(r.recomendacao.fornecedor) ? r.recomendacao.fornecedor : d.recomendacao.fornecedor;
+      d.recomendacao.justificativa = r.recomendacao.justificativa || d.recomendacao.justificativa;
+      if (r.alertas && r.alertas.length) d.observacoes = (d.observacoes ? d.observacoes + "\n" : "") + "Pontos levantados pela IA: " + r.alertas.join("; ");
+      CT.sujo = true; renderCotEditor(); toast("Recomendação da IA preenchida. Confira e salve.");
+    }
+    if (tipo === "referencia" && r.itens) {
+      r.itens.forEach(x => { const it = d.itens[x.indice]; if (it && x.preco) { it.ref = ctNum(x.preco); it.refFonte = String(x.fonte || "").slice(0, 300); } });
+      CT.sujo = true; renderCotEditor(); toast("Preços de referência preenchidos pela IA. Confira e salve.");
+    }
+  } catch(e){ toast(e.message, true); }
+}
+
+if (TEM_ADM && $("#t-cotacoes")) {
+  $("#ct-nova").addEventListener("click", () => ctNova());
+  $("#ct-q").addEventListener("input", e => { CT.q = e.target.value; renderCot(); });
+  $("#ct-fs").addEventListener("change", e => { CT.st = e.target.value; renderCot(); });
+  $("#ct-resumo").addEventListener("click", e => { const b = e.target.closest("[data-ctst]"); if (!b) return; CT.st = CT.st === b.dataset.ctst ? "" : b.dataset.ctst; renderCot(); });
+  $("#ct-body").addEventListener("click", e => { const tr = e.target.closest("tr[data-ct]"); if (!tr) return; const c = (CT.lista || []).find(x => x.id === tr.dataset.ct); if (c) ctAbrir(c); });
+  $("#ct-body").addEventListener("keydown", e => { if (e.key === "Enter") { const tr = e.target.closest("tr[data-ct]"); if (tr) tr.click(); } });
+  const ed = $("#ct-editor");
+  ed.addEventListener("input", ctLerCampo);
+  ed.addEventListener("change", e => {
+    if (e.target.dataset.up !== undefined) { ctAnexar(+e.target.dataset.up, e.target.files[0]); e.target.value = ""; return; }
+    if (e.target.tagName === "SELECT") ctLerCampo(e);
+    // números ficam no formato brasileiro ao sair do campo
+    if (e.target.classList.contains("num") && !e.target.classList.contains("ct-q")) { const n = ctNum(e.target.value); if (n !== null) e.target.value = ctFmtN(n); }
+  });
+  ed.addEventListener("click", async e => {
+    const b = e.target.closest("button"); if (!b) return;
+    const d = CT.edit && CT.edit.dados;
+    if (b.id === "ct-voltar") { if (CT.sujo && ctEditavel()) { $("#ct-sair").hidden = false; return; } CT.edit = null; renderCot(); return; }
+    if (b.id === "ct-sair-no") { $("#ct-sair").hidden = true; return; }
+    if (b.id === "ct-sair-desc") { CT.edit = null; CT.sujo = false; renderCot(); return; }
+    if (b.id === "ct-sair-salvar") { if (await ctSalvar()) { CT.edit = null; renderCot(); } return; }
+    if (b.id === "ct-salvar") { ctSalvar(); return; }
+    if (b.id === "ct-pedido") { ctAbrirPedido(); return; }
+    if (b.id === "ct-xlsx") { ctBaixarXlsx(); return; }
+    if (b.id === "ct-print") { ctImprimir(); return; }
+    if (b.id === "ct-drive") { ctSalvarMapaDrive(false); return; }
+    if (b.id === "ct-addf") { d.fornecedores.push(ctFornVazio()); d.itens.forEach(it => it.precos.push(null)); CT.sujo = true; renderCotEditor(); return; }
+    if (b.id === "ct-addi") { d.itens.push({descricao:"", unid:"un.", quant:1, precos:d.fornecedores.map(() => null), ref:null, refFonte:""}); CT.sujo = true; renderCotEditor(); const ins = $$("#ct-editor [data-k=descricao]"); if (ins.length) ins[ins.length-1].focus(); return; }
+    if (b.dataset.rmf !== undefined) { const i = +b.dataset.rmf; d.fornecedores.splice(i, 1); d.itens.forEach(it => it.precos.splice(i, 1)); const r = d.recomendacao.fornecedor; d.recomendacao.fornecedor = r === i ? -1 : r > i ? r - 1 : r; CT.sujo = true; renderCotEditor(); return; }
+    if (b.dataset.rmi !== undefined) { d.itens.splice(+b.dataset.rmi, 1); CT.sujo = true; renderCotEditor(); return; }
+    if (b.id === "ct-sugerir") { const s = ctSugestao(d); if (!s) { toast("Preencha os preços de todos os itens de pelo menos um fornecedor.", true); return; } d.recomendacao = s; CT.sujo = true; renderCotEditor(); return; }
+    if (b.dataset.anx) { ctBaixarArquivo(b.dataset.anx, b.dataset.nome); return; }
+    if (b.dataset.op) { b.disabled = true; await ctOp(b.dataset.op); return; }
+    if (b.dataset.ia) { b.disabled = true; await ctIA(b.dataset.ia, b.dataset.ia === "ler" ? {indice:+b.dataset.s, fileId:b.dataset.anx2} : null); b.disabled = false; return; }
+  });
 }
 
 // ---------- início ----------

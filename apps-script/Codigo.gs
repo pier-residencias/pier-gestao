@@ -115,6 +115,19 @@ const ABAS = {
     ],
     num: ['ordem']
   },
+  cot: {
+    nome: 'Cotacoes',
+    criar: true,
+    cols: [
+      ['id', 'ID'], ['numero', 'Nº'], ['status', 'Situação'], ['finalidade', 'Finalidade'], ['data', 'Data da cotação'],
+      ['solicitante', 'Solicitante / Responsável'], ['pendencia', 'ID da pendência'], ['pendNumero', 'Pendência'],
+      ['vencedor', 'Fornecedor recomendado'], ['valorVencedor', 'Valor recomendado (R$)'], ['dados', 'Dados (não editar)'],
+      ['criadaEm', 'Criada em'], ['criadaPor', 'Criada por'], ['atualizadoEm', 'Atualizado em'], ['atualizadoPor', 'Atualizado por'],
+      ['aprovGerente', 'Aprovada pelo gerente'], ['aprovSindico', 'Aprovada pelo síndico'], ['recusa', 'Última recusa'],
+      ['mapaId', 'ID do mapa'], ['mapaEm', 'Mapa salvo em']
+    ],
+    num: []
+  },
   audit: {
     nome: 'Auditoria',
     criar: true,
@@ -262,6 +275,9 @@ function doPost(e) {
     if (req.acao === 'dados') return json(Object.assign(base, { dados: dados(req.meses, conta) }));
     if (req.acao === 'relatorio') { pode('dashboard'); return json(Object.assign(base, { relatorio: relatorio(req.de, req.ate, conta) })); }
     if (req.acao === 'usuarios') { pode('usuarios'); return json(Object.assign(base, { equipe: equipe() })); }
+    if (req.acao === 'cotLista') { pode('pendencias'); return json(Object.assign(base, cotLista())); }
+    if (req.acao === 'cotVerArquivo') { pode('pendencias'); const f = cotVerArquivo(req); auditar(conta, 'Abriu arquivo de cotação', f.nome); delete f.nome; return json(Object.assign(base, { arquivo: f })); }
+    if (req.acao === 'cotIA') { pode('pendencias'); return json(Object.assign(base, cotIA(req, conta))); }
     if (req.acao === 'pendencias') { pode('pendencias'); return json(Object.assign(base, { pendencias: pendLista(), pendVersao: PEND_VERSAO })); }
     if (req.acao === 'nfVer') { algum(['historico_ver', 'registrar_entrada', 'dashboard']); const f = verArquivo(req.fotoId, pastaNF()); auditar(conta, 'Abriu nota fiscal', f.nome); delete f.nome; return json(Object.assign(base, { foto: f })); }
     if (req.acao === 'nfEnviar') { pode('registrar_entrada'); return json(Object.assign(base, { arquivo: nfEnviar(req, conta) })); }
@@ -293,6 +309,8 @@ function doPost(e) {
         case 'excluirPerfil': pode('usuarios'); msg = excluirPerfil(req.nome); extra.equipe = equipe(); break;
         case 'trocarSenha': msg = trocarMinhaSenha(req, conta); extra.semDados = true; break;
         case 'pendSalvar': pode('pendencias'); msg = pendSalvar(req.pend || {}, conta); extra.pendencias = true; break;
+        case 'cotSalvar': pode('pendencias'); msg = cotSalvar(req, conta); extra.cot = msg.cot; msg = msg.texto; extra.semDados = true; break;
+        case 'cotArquivo': pode('pendencias'); msg = cotArquivo(req, conta); extra.cot = msg.cot; msg = msg.texto; extra.semDados = true; break;
         case 'pendExcluir': pode('pendencias'); msg = pendExcluir(req.id); extra.pendencias = true; break;
         default: throw falha('Ação desconhecida.');
       }
@@ -303,7 +321,7 @@ function doPost(e) {
     }
     if (extra.pendencias) return json(Object.assign(base, { msg, pendencias: pendLista(), pendVersao: PEND_VERSAO }));
     if (extra.equipe) return json(Object.assign(base, { msg }, extra));
-    if (extra.semDados) return json(Object.assign(base, { msg }));
+    if (extra.semDados) return json(Object.assign(base, { msg }, extra.cot ? { cot: extra.cot } : {}));
     return json(Object.assign(base, { msg, dados: dados(req.meses, conta) }, extra));
   } catch (err) {
     // tentativas sem permissão ficam no histórico de auditoria
@@ -1298,6 +1316,7 @@ function pastaDrive(chave, nome) {
 }
 function pastaFotos() { return pastaDrive('PASTA_FOTOS_OS', 'Fotos das OS - Estoque da Manutenção'); }
 function pastaNF() { return pastaDrive('PASTA_NF', 'Notas fiscais - Pier Gestão'); }
+function pastaCotacoes() { return pastaDrive('PASTA_COTACOES', 'Cotações e mapas - Pier Gestão'); }
 
 function idsDeArquivos(v) {
   const s = String(v || '');
@@ -1966,6 +1985,13 @@ function pendLista() {
   let lista = linhas(t);
   const osPorId = {};
   if (lista.some(p => p.osId)) linhas(tabela('os')).forEach(o => { osPorId[o.id] = o; });
+  // cotação mais recente (não cancelada) de cada pendência
+  const cotPorPend = {};
+  if (SpreadsheetApp.getActive().getSheetByName(ABAS.cot.nome)) linhas(tabela('cot')).forEach(c => {
+    if (!c.pendencia || c.status === COT_STATUS.cancelada) return;
+    const ja = cotPorPend[c.pendencia];
+    if (!ja || String(c.criadaEm) > String(ja.criadaEm)) cotPorPend[c.pendencia] = c;
+  });
   if (!lista.length && pendSemear(t)) lista = linhas(t);
   if (pendNumerarSemNumero(t, lista)) lista = linhas(t);
   return lista
@@ -1977,7 +2003,9 @@ function pendLista() {
       criadaEm: p.criadaEm, prazoAtualizado: p.prazoAtualizado, aprovacao: p.aprovacao, aprovGerente: p.aprovGerente,
       aprovSindico: p.aprovSindico, conclPedida: p.conclPedida, conclData: p.conclData, conclGerente: p.conclGerente,
       conclSindico: p.conclSindico, os: p.os, osId: p.osId,
-      osStatus: p.osId && osPorId[p.osId] ? osPorId[p.osId].status : '', osSetor: p.osId && osPorId[p.osId] ? osSetor(osPorId[p.osId]) : '' }))
+      osStatus: p.osId && osPorId[p.osId] ? osPorId[p.osId].status : '', osSetor: p.osId && osPorId[p.osId] ? osSetor(osPorId[p.osId]) : '',
+      cotId: cotPorPend[p.id] ? cotPorPend[p.id].id : '', cotNumero: cotPorPend[p.id] ? cotPorPend[p.id].numero : '',
+      cotStatus: cotPorPend[p.id] ? cotPorPend[p.id].status : '' }))
     .sort((a, b) => (Number(a.ordem) || 1e9) - (Number(b.ordem) || 1e9));
 }
 
@@ -2301,12 +2329,227 @@ function pendAprovar(t, atual, v, conta, obj) {
   throw falha('Aprovação inválida.');
 }
 
+// ---------- cotações e mapa de cotação ----------
+// Cada cotação guarda os fornecedores, os itens e os preços em JSON (coluna "Dados"); a tela gera o mapa no modelo do Pier.
+// Situação: Em cotação → (enviar) Aguardando gerente → Aguardando síndico → Aprovada; recusar volta para Em cotação.
+const COT_STATUS = { cotacao: 'Em cotação', gerente: 'Aguardando gerente', sindico: 'Aguardando síndico', aprovada: 'Aprovada', cancelada: 'Cancelada' };
+const COT_VERSAO = 1;
+const COT_MAX = { fornecedores: 10, itens: 60, anexos: 6 };
+
+// número em formato brasileiro ("4.769,97", "R$ 205,16") ou já numérico; negativo ou inválido vira vazio
+const cotNum = v => {
+  if (v === undefined || v === null || String(v).trim() === '') return null;
+  if (typeof v === 'number') return isFinite(v) && v >= 0 ? Math.round(v * 10000) / 10000 : null;
+  let s = String(v).replace(/R\$|\s/g, '');
+  if (s.indexOf(',') >= 0) s = s.replace(/\./g, '').replace(',', '.');
+  const n = Number(s);
+  return isFinite(n) && n >= 0 ? Math.round(n * 10000) / 10000 : null;
+};
+const cotTxt = (v, max) => texto(v, max || 200);
+const cotId = () => 'f' + Utilities.getUuid().replace(/-/g, '').slice(0, 10);
+
+// limpa e limita o que vem da tela; anexos nunca vêm da tela (ficam com o que já está gravado)
+function cotLimpar(d, antes) {
+  d = d || {}; antes = antes || {};
+  const anexosAntes = {};
+  (antes.fornecedores || []).forEach(f => { if (f && f.id) anexosAntes[f.id] = f.anexos || []; });
+  const opc = (v, lista) => lista.indexOf(v) >= 0 ? v : '';
+  const forn = (Array.isArray(d.fornecedores) ? d.fornecedores : []).slice(0, COT_MAX.fornecedores).map(f => {
+    f = f || {};
+    const id = /^f[0-9a-f]{10}$/.test(String(f.id || '')) ? String(f.id) : cotId();
+    return {
+      id, empresa: cotTxt(f.empresa, 80), cnpj: cotTxt(f.cnpj, 20), telefone: cotTxt(f.telefone, 30), email: cotTxt(f.email, 80),
+      contato: cotTxt(f.contato, 80), modelo: cotTxt(f.modelo, 160), atende: opc(f.atende, ['Sim', 'Não', 'Parcial']),
+      prazo: cotTxt(f.prazo, 120), pagamento: cotTxt(f.pagamento, 160), validade: cotTxt(f.validade, 60), garantia: cotTxt(f.garantia, 80),
+      instalacao: opc(f.instalacao, ['Sim', 'Não']), frete: cotNum(f.frete), desconto: cotNum(f.desconto), obs: cotTxt(f.obs, 400),
+      anexos: anexosAntes[id] || []
+    };
+  });
+  const itens = (Array.isArray(d.itens) ? d.itens : []).slice(0, COT_MAX.itens).map(it => {
+    it = it || {};
+    const precos = forn.map((f, i) => cotNum((it.precos || [])[i]));
+    return { descricao: cotTxt(it.descricao, 300), unid: cotTxt(it.unid, 12), quant: cotNum(it.quant), precos,
+      ref: cotNum(it.ref), refFonte: cotTxt(it.refFonte, 300) };
+  });
+  const rec = d.recomendacao || {};
+  const iRec = Number.isInteger(rec.fornecedor) && rec.fornecedor >= 0 && rec.fornecedor < forn.length ? rec.fornecedor : -1;
+  return { especificacao: cotTxt(d.especificacao, 1500), fornecedores: forn, itens, observacoes: cotTxt(d.observacoes, 3000),
+    recomendacao: { fornecedor: iRec, justificativa: cotTxt(rec.justificativa, 1500) } };
+}
+
+// total de cada fornecedor: soma dos itens + frete − desconto; "completo" quando todos os itens têm preço
+function cotTotais(d) {
+  return d.fornecedores.map((f, i) => {
+    let sub = 0, comPreco = 0;
+    d.itens.forEach(it => { const p = it.precos[i]; if (p !== null && p !== undefined) { sub += (it.quant || 0) * p; comPreco++; } });
+    const total = Math.round((sub + (f.frete || 0) - (f.desconto || 0)) * 100) / 100;
+    return { subtotal: Math.round(sub * 100) / 100, total, completo: d.itens.length > 0 && comPreco === d.itens.length, algum: comPreco > 0 };
+  });
+}
+
+function cotLer(c) {
+  let dados = {};
+  try { dados = JSON.parse(c.dados || '{}'); } catch (e) { dados = {}; }
+  dados = cotLimpar(dados, dados);
+  return { id: c.id, numero: c.numero, status: c.status, finalidade: c.finalidade, data: c.data, solicitante: c.solicitante,
+    pendencia: c.pendencia, pendNumero: c.pendNumero, vencedor: c.vencedor, valorVencedor: c.valorVencedor, dados,
+    criadaEm: c.criadaEm, criadaPor: c.criadaPor, atualizadoEm: c.atualizadoEm, atualizadoPor: c.atualizadoPor,
+    aprovGerente: c.aprovGerente, aprovSindico: c.aprovSindico, recusa: c.recusa, mapaId: c.mapaId, mapaEm: c.mapaEm };
+}
+
+function cotLista() {
+  const lista = linhas(tabela('cot')).map(cotLer).sort((a, b) => String(b.criadaEm).localeCompare(String(a.criadaEm)) || String(b.numero).localeCompare(String(a.numero)));
+  const pend = SpreadsheetApp.getActive().getSheetByName(ABAS.pend.nome) ? linhas(tabela('pend'))
+    .filter(p => p.status !== 'Concluído' && p.tipo !== 'Constante')
+    .map(p => ({ id: p.id, numero: p.numero, titulo: p.titulo, secao: pendRotuloSecao(p.secao) })) : [];
+  return { cotacoes: lista, pendOpcoes: pend, cotVersao: COT_VERSAO, ia: cotIADisponivel() };
+}
+
+function cotIADisponivel() {
+  return typeof iaCotacao === 'function' && !!PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
+}
+
+function cotSalvar(r, conta) {
+  const t = tabela('cot');
+  const todas = linhas(t);
+  const v = r.cot || {};
+  const atual = v.id ? todas.find(c => c.id === texto(v.id, 40)) : null;
+  if (v.id && !atual) throw falha('Esta cotação não existe mais. Atualize a tela.');
+  const sindico = ehSindico(conta), gerente = ehGerente(conta);
+  const marca = emNome => agora() + ' · ' + conta.nome + (emNome ? ' (em nome do gerente)' : '');
+  const obj = { atualizadoEm: agora(), atualizadoPor: conta.nome };
+  const fim = (texto2) => { gravar(t, obj, atual ? atual._row : undefined); const c = linhas(t).find(x => x.id === (atual ? atual.id : obj.id)); return { texto: texto2, cot: cotLer(c) }; };
+  const op = String(r.op || 'salvar');
+
+  if (op !== 'salvar') {
+    if (!atual) throw falha('Salve a cotação primeiro.');
+    const dados = cotLer(atual).dados;
+    if (op === 'enviar') {
+      if (atual.status !== COT_STATUS.cotacao) throw falha('Só uma cotação "Em cotação" pode ir para aprovação.');
+      const tot = cotTotais(dados);
+      if (!dados.fornecedores.length || !tot.some(x => x.algum)) throw falha('Informe ao menos um fornecedor com preço.');
+      const iRec = dados.recomendacao.fornecedor;
+      if (iRec < 0) throw falha('Escolha o fornecedor recomendado antes de enviar para aprovação.');
+      if (!dados.recomendacao.justificativa) throw falha('Escreva a justificativa da recomendação.');
+      Object.assign(obj, { status: COT_STATUS.gerente, aprovGerente: '', aprovSindico: '', recusa: '' });
+      return fim(atual.numero + ' enviada para aprovação do gerente e do síndico.');
+    }
+    if (op === 'aprovar') {
+      if (atual.status === COT_STATUS.gerente) {
+        if (!gerente && !sindico) throw falha('Só o gerente (ou o síndico, em nome dele) aprova esta etapa.');
+        Object.assign(obj, { status: COT_STATUS.sindico, aprovGerente: marca(!gerente) });
+        return fim('Cotação aprovada pelo gerente' + (gerente ? '' : ' (em nome dele)') + '. Falta a aprovação do síndico.');
+      }
+      if (atual.status === COT_STATUS.sindico) {
+        if (!sindico) throw falha('Só o síndico aprova esta etapa.');
+        Object.assign(obj, { status: COT_STATUS.aprovada, aprovSindico: marca(false) });
+        return fim(atual.numero + ' aprovada. Fornecedor: ' + (atual.vencedor || '—') + '.');
+      }
+      throw falha('Esta cotação não está aguardando aprovação.');
+    }
+    if (op === 'recusar') {
+      if (atual.status !== COT_STATUS.gerente && atual.status !== COT_STATUS.sindico) throw falha('Esta cotação não está aguardando aprovação.');
+      if (!gerente && !sindico) throw falha('Só o gerente ou o síndico podem recusar.');
+      const motivo = cotTxt(r.motivo, 300);
+      Object.assign(obj, { status: COT_STATUS.cotacao, aprovGerente: '', aprovSindico: '', recusa: agora() + ' · ' + conta.nome + (motivo ? ': ' + motivo : '') });
+      return fim(atual.numero + ' devolvida para ajustes.');
+    }
+    if (op === 'cancelar') {
+      if (atual.status === COT_STATUS.aprovada) throw falha('Uma cotação aprovada não pode ser cancelada.');
+      Object.assign(obj, { status: COT_STATUS.cancelada });
+      return fim(atual.numero + ' cancelada.');
+    }
+    if (op === 'reabrir') {
+      if (atual.status !== COT_STATUS.cancelada) throw falha('Só uma cotação cancelada pode ser reaberta.');
+      Object.assign(obj, { status: COT_STATUS.cotacao });
+      return fim(atual.numero + ' reaberta.');
+    }
+    throw falha('Operação inválida.');
+  }
+
+  // salvar (criar ou editar): só enquanto estiver "Em cotação"
+  if (atual && atual.status !== COT_STATUS.cotacao) throw falha('Esta cotação está "' + atual.status + '" e não pode ser alterada. Para mudar, ela precisa ser devolvida (recusada) ou reaberta.');
+  const finalidade = cotTxt(v.finalidade, 160);
+  if (!finalidade) throw falha('Informe a finalidade da cotação.');
+  const data = /^\d{4}-\d{2}-\d{2}$/.test(String(v.data || '')) ? String(v.data) : hoje();
+  const solicitante = cotTxt(v.solicitante, 80) || conta.nome;
+  const dados = cotLimpar(v.dados, atual ? cotLer(atual).dados : null);
+  let pendencia = '', pendNumero = '';
+  if (v.pendencia) {
+    const p = linhas(tabela('pend')).find(x => x.id === texto(v.pendencia, 40));
+    if (!p) throw falha('A pendência escolhida não existe mais.');
+    pendencia = p.id; pendNumero = (p.numero ? p.numero + ' · ' : '') + String(p.titulo).slice(0, 80);
+  }
+  const tot = cotTotais(dados), iRec = dados.recomendacao.fornecedor;
+  Object.assign(obj, { finalidade, data, solicitante, pendencia, pendNumero, dados: JSON.stringify(dados),
+    vencedor: iRec >= 0 ? dados.fornecedores[iRec].empresa : '', valorVencedor: iRec >= 0 && tot[iRec].algum ? String(tot[iRec].total) : '' });
+  if (obj.dados.length > 45000) throw falha('A cotação ficou grande demais. Reduza os textos ou o número de itens.');
+  if (!atual) {
+    const ano = data.slice(0, 4);
+    const nums = todas.map(c => { const m = /^COT-(\d{4})-(\d+)$/.exec(c.numero || ''); return m && m[1] === ano ? Number(m[2]) : 0; });
+    Object.assign(obj, { id: novoId('ct'), numero: 'COT-' + ano + '-' + ('00' + (Math.max.apply(null, [0].concat(nums)) + 1)).slice(-3),
+      status: COT_STATUS.cotacao, criadaEm: agora(), criadaPor: conta.nome, aprovGerente: '', aprovSindico: '', recusa: '', mapaId: '', mapaEm: '' });
+    return fim(obj.numero + ' criada.');
+  }
+  return fim(atual.numero + ' salva.');
+}
+
+// orçamento de um fornecedor (PDF ou foto) ou o mapa gerado (.xlsx), na pasta de cotações do Drive
+function cotArquivo(r, conta) {
+  const t = tabela('cot');
+  const c = linhas(t).find(x => x.id === texto(r.id, 40));
+  if (!c) throw falha('Cotação não encontrada. Atualize a tela.');
+  const b64 = String(r.b64 || '');
+  if (!b64 || b64.length > 10000000) throw falha('O arquivo está muito grande (máximo de 7 MB).');
+  const dados = cotLer(c).dados;
+  if (r.tipo === 'mapa') {
+    if (r.mime !== 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') throw falha('Mapa inválido.');
+    const nome = ('Mapa de cotação ' + c.numero + ' - ' + String(c.finalidade).slice(0, 60)).replace(/[\\/:*?"<>|]/g, '-') + '.xlsx';
+    const f = pastaCotacoes().createFile(Utilities.newBlob(Utilities.base64Decode(b64), r.mime, nome));
+    if (c.mapaId) { try { fotoDaPasta(c.mapaId, pastaCotacoes()).setTrashed(true); } catch (e) {} }
+    gravar(t, { mapaId: f.getId(), mapaEm: agora() }, c._row);
+    AUDIT_DET = 'Salvou o mapa da ' + c.numero + ' no Drive';
+    return { texto: 'Mapa salvo no Drive (pasta "Cotações e mapas - Pier Gestão").', cot: cotLer(linhas(t).find(x => x.id === c.id)) };
+  }
+  if (c.status !== COT_STATUS.cotacao) throw falha('Esta cotação não está mais "Em cotação".');
+  const tipos = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'application/pdf': 'pdf' };
+  const ext = tipos[r.mime];
+  if (!ext) throw falha('Envie o orçamento em PDF ou foto (JPG ou PNG).');
+  const forn = dados.fornecedores.find(f => f.id === String(r.fornecedor || ''));
+  if (!forn) throw falha('Salve a cotação com este fornecedor antes de anexar o orçamento.');
+  if (forn.anexos.length >= COT_MAX.anexos) throw falha('Este fornecedor já tem ' + COT_MAX.anexos + ' arquivos.');
+  const nome = ('Orçamento ' + c.numero + ' - ' + (forn.empresa || 'fornecedor') + ' - ' + (forn.anexos.length + 1)).replace(/[\\/:*?"<>|]/g, '-') + '.' + ext;
+  const f = pastaCotacoes().createFile(Utilities.newBlob(Utilities.base64Decode(b64), r.mime, nome));
+  forn.anexos.push({ id: f.getId(), nome: cotTxt(r.nome, 120) || nome, mime: r.mime });
+  gravar(t, { dados: JSON.stringify(dados), atualizadoEm: agora(), atualizadoPor: conta.nome }, c._row);
+  AUDIT_DET = 'Anexou orçamento de ' + (forn.empresa || 'fornecedor') + ' na ' + c.numero;
+  return { texto: 'Orçamento anexado.', cot: cotLer(linhas(t).find(x => x.id === c.id)) };
+}
+
+// abre um anexo ou o mapa: só arquivos que pertencem à cotação e estão na pasta de cotações
+function cotVerArquivo(r) {
+  const c = linhas(tabela('cot')).find(x => x.id === texto(r.id, 40));
+  if (!c) throw falha('Cotação não encontrada.');
+  const fid = String(r.fileId || '');
+  const dados = cotLer(c).dados;
+  const ok = fid && (fid === c.mapaId || dados.fornecedores.some(f => f.anexos.some(a => a.id === fid)));
+  if (!ok) throw falha('Arquivo não encontrado nesta cotação.');
+  return verArquivo(fid, pastaCotacoes());
+}
+
+// ajuda da IA: só existe quando o arquivo IA.gs estiver instalado e a chave da API configurada
+function cotIA(r, conta) {
+  if (!cotIADisponivel()) throw falha('A ajuda da IA ainda não foi ligada. Ela depende de uma conta de API da Anthropic.');
+  return iaCotacao(r, conta);
+}
+
 // ---------- log de segurança: telas vistas, exportações e alertas ----------
 // telas sensíveis (e exportações) que ficam registradas na Auditoria, com a permissão que cada uma exige
 const TELAS_VISTAS = {
   historico: ['Histórico de movimentações', 'historico_ver'], dashboard: ['Dashboard', 'dashboard'],
   usuarios: ['Usuários e permissões', 'usuarios'], pendencias: ['Controle de pendências', 'pendencias'],
-  acessos: ['Histórico de acessos', 'acessos'],
+  acessos: ['Histórico de acessos', 'acessos'], cotacoes: ['Cotações', 'pendencias'],
+  exportar_mapa: ['Mapa de cotação (planilha)', 'pendencias'],
   exportar_movs: ['Movimentações (planilha CSV)', 'exportar'], exportar_consumo: ['Consumo por item (planilha CSV)', 'exportar']
 };
 function registrarVisao(conta, req) {
@@ -2631,6 +2874,7 @@ function limparFalhasLogin(usuario) { if (usuario) PropertiesService.getScriptPr
 
 // --- histórico de auditoria (aba Auditoria) ---
 const ACOES_AUDIT = {
+  cotSalvar: 'Cotação', cotArquivo: 'Arquivo de cotação',
   visao: 'Abriu tela',
   trocarSenha: 'Trocou a própria senha',
   registrar: 'Movimentação', osAbrir: 'Abriu OS', osAtualizar: 'Atualizou OS', osFoto: 'Foto na OS', osFotoRemover: 'Tirou foto da OS',
@@ -2704,7 +2948,7 @@ function verificarArquivos() {
     } catch (e) { avisos.push(rotulo + ': não foi possível conferir (' + e.message + ')'); }
   };
   fechar(DriveApp.getFileById(SpreadsheetApp.getActive().getId()), 'Planilha');
-  [[pastaFotos(), 'Pasta de fotos das OS'], [pastaNF(), 'Pasta de notas fiscais']].forEach(([pasta, rot]) => {
+  [[pastaFotos(), 'Pasta de fotos das OS'], [pastaNF(), 'Pasta de notas fiscais'], [pastaCotacoes(), 'Pasta de cotações']].forEach(([pasta, rot]) => {
     fechar(pasta, rot);
     const it = pasta.getFiles();
     while (it.hasNext()) {
