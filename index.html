@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="estilo.css?v=20261022os">
+<link rel="stylesheet" href="estilo.css?v=20261022senha">
 </head>
 <body>
 <div class="login" id="login" hidden>
@@ -26,6 +26,8 @@
       <div class="field"><label for="l-usuario">Usuário</label><input class="input" id="l-usuario" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Ex.: funcionario1"></div>
       <div class="field"><label for="l-senha">Senha</label><input class="input" id="l-senha" type="password" autocomplete="current-password"></div>
       <div class="actions"><button class="btn primary" type="submit" id="l-entrar">Entrar</button><span class="hint" id="l-msg"></span></div>
+      <div class="l-esqueci"><button type="button" class="link" id="l-esqueci" aria-expanded="false" aria-controls="l-esqueci-box">Esqueci minha senha</button>
+        <p class="hint" id="l-esqueci-box" hidden>Fale com a Administração do Pier para receber uma <b>senha provisória</b>. Ao entrar com ela, você poderá criar a sua própria senha.</p></div>
     </div>
   </form>
 </div>
@@ -67,7 +69,7 @@
     <button type="button" role="menuitem" data-adm-tab="pendencias" data-adm-acao="nova"><b>Incluir pendência</b><span>Registrar uma pendência nova na lista</span></button>
     <div class="mh" data-grupo="equipe">Equipe</div>
     <button type="button" role="menuitem" data-adm-tab="usuarios"><b>Usuários e permissões</b><span>Logins, perfis e o que cada um pode fazer</span></button>
-    <button type="button" role="menuitem" data-adm-tab="acessos"><b>Histórico de acessos</b><span>Quem entrou no sistema, quando e de onde</span></button>
+    <button type="button" role="menuitem" data-adm-tab="acessos"><b>Histórico de acessos</b><span>Entradas, alterações, telas vistas e eventos de segurança</span></button>
   </div>
 </nav>
 
@@ -428,7 +430,7 @@
   <!-- HISTÓRICO DE ACESSOS (menu Administração, só perfil Administração) -->
   <section id="t-acessos" hidden>
     <div class="sec-head"><h2 class="sec">Histórico de acessos</h2><span class="muted" id="ac-desc">Cada entrada no sistema, com data, hora, setor escolhido e aparelho. Tentativas com senha errada aparecem em vermelho.</span></div>
-    <div class="ac-modo" id="ac-modo" role="group" aria-label="O que mostrar"><button type="button" data-m="entradas" aria-pressed="true">Entradas no sistema</button><button type="button" data-m="alteracoes" aria-pressed="false">Alterações</button></div>
+    <div class="ac-modo" id="ac-modo" role="group" aria-label="O que mostrar"><button type="button" data-m="entradas" aria-pressed="true">Entradas no sistema</button><button type="button" data-m="alteracoes" aria-pressed="false">Alterações</button><button type="button" data-m="vistas" aria-pressed="false">Telas vistas</button><button type="button" data-m="seguranca" aria-pressed="false">Segurança</button></div>
     <div class="ac-resumo" id="ac-resumo"></div>
     <div class="toolbar">
       <select class="input" id="ac-pessoa" aria-label="Pessoa"><option value="">Todas as pessoas</option></select>
@@ -470,6 +472,6 @@
 
 <script src="config.js"></script>
 <script src="nfe.js?v=20261015s"></script>
-<script src="app.js?v=20261022os"></script>
+<script src="app.js?v=20261022senha"></script>
 </body>
 </html>
