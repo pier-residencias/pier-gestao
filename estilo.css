@@ -606,3 +606,5 @@ div.ac-pessoa{cursor:default}
 .pd-aprov-info{margin:4px 0 0;padding-left:18px;font-size:.86rem;display:grid;gap:2px}
 .pd-aprov-info span{color:var(--muted)}
 #pd-ord{flex:0 1 250px}
+.pd-resp{cursor:pointer}
+.pd-resp[data-v=""]{color:var(--muted)}
