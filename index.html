@@ -440,7 +440,7 @@
   <!-- COTAÇÕES (menu Administração) -->
   <section id="t-cotacoes" hidden>
     <div id="ct-lista-box">
-      <div class="sec-head"><h2 class="sec">Cotações</h2><span class="muted">Mapas de cotação no modelo do Pier: fornecedores, preços, recomendação e aprovação do gerente e do síndico.</span><button class="btn primary" type="button" id="ct-nova">+ Nova cotação</button></div>
+      <div class="sec-head"><h2 class="sec">Cotações</h2><span class="muted">Mapas de cotação no modelo do Pier: fornecedores, preços, recomendação e aprovação do gerente e do síndico.</span><span class="ct-acoes"><button class="btn" type="button" id="ct-importar">Importar planilha</button><input type="file" id="ct-imp-arq" accept=".xlsx,.xls" hidden><button class="btn primary" type="button" id="ct-nova">+ Nova cotação</button></span></div>
       <div class="pd-stats" id="ct-resumo"></div>
       <div class="toolbar"><input class="input" id="ct-q" type="search" placeholder="Buscar cotação, fornecedor ou pendência"><select class="input" id="ct-fs" aria-label="Filtrar por situação"></select></div>
       <div class="tablebox"><table><thead><tr><th>Nº</th><th>Finalidade</th><th class="hide-s">Fornec.</th><th class="hide-m">Recomendado</th><th>Valor</th><th>Situação</th><th class="hide-s">Data</th></tr></thead><tbody id="ct-body"><tr><td colspan="7"><div class="empty">Carregando…</div></td></tr></tbody></table></div>
@@ -492,6 +492,6 @@
 
 <script src="config.js"></script>
 <script src="nfe.js?v=20261015s"></script>
-<script src="app.js?v=20261023menu"></script>
+<script src="app.js?v=20261023imp"></script>
 </body>
 </html>
