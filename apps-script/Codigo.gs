@@ -2076,17 +2076,16 @@ function pendSalvar(v, conta) {
       });
     }
     gravar(t, obj, atual._row);
-    if (obj.secao) return 'Movida para ' + pendRotuloSecao(obj.secao) + ' como nº ' + obj.numero + '.';
-    const dm = d => String(d).split('-').reverse().slice(0, 2).join('/');
-    if (pedidoConclusao) return 'Conclusão pedida (' + dm(obj.conclData) + '). Falta a aprovação do gerente e do síndico.';
-    if (prazoPeloSindico) return obj.prazo ? 'Prazo inicial alterado para ' + dm(obj.prazo) + ' pelo síndico.' : 'Prazo inicial retirado pelo síndico.';
-    if ('prazoAtualizado' in v && Object.keys(v).length <= 2) return obj.prazoAtualizado ? 'Prazo atualizado para ' + dm(obj.prazoAtualizado) + '.' : 'Atualização de prazo retirada.';
-    if (obj.prazoDefinidoEm && atual.tipo !== 'Constante' && !constFinal) return 'Prazo ' + dm(obj.prazo) + ' definido e bloqueado.';
-    if ('concluidoEm' in v && obj.concluidoEm) return 'Concluída em ' + dm(obj.concluidoEm) + '.';
-    return obj.status && 'status' in v ? 'Situação: ' + obj.status + '.' : 'criticidade' in v && Object.keys(v).length <= 2 ? 'Criticidade: ' + (obj.criticidade || 'sem definição') + '.' : 'Salvo.';
+    // responsável definido ou trocado depois pelo síndico ou pela Administração: o setor recebe o aviso
+    const respNovo = 'responsavel' in obj ? String(obj.responsavel || '').trim() : '';
+    const aviso = respNovo && respNovo !== String(atual.responsavel || '').trim() && (sindico || conta.perfil === PERFIL_TOTAL)
+      ? pendAvisarResponsavel(Object.assign({}, atual, obj), conta) : '';
+    const r = pendMsgAtualizacao(v, obj, atual, constFinal, pedidoConclusao, prazoPeloSindico);
+    return r + aviso;
   }
 
   if (!obj.titulo) throw falha('Descreva a pendência.');
+
   // toda pendência nova (inclusive a do síndico) aguarda a aprovação do gerente e, em seguida, do síndico
   const comuns = { criadaPor: conta.nome, origem: sindico ? 'Síndico' : '', vistaEm: '', vistaPor: '', execucoes: '', ultimaVez: '',
     criadaEm: agora(), prazoAtualizado: obj.prazoAtualizado || '', aprovacao: 'Aguardando gerente', aprovGerente: '', aprovSindico: '',
@@ -2126,6 +2125,19 @@ function pendSalvar(v, conta) {
   });
   gravar(t, obj);
   return (obj.tipo === 'Constante' ? 'Tarefa constante ' : 'Pendência ') + obj.numero + ' adicionada. Aguarda aprovação do gerente e do síndico.' + pendAvisarCriacao(obj, conta, null);
+}
+
+// mensagem de retorno de uma alteração
+function pendMsgAtualizacao(v, obj, atual, constFinal, pedidoConclusao, prazoPeloSindico) {
+  if (obj.secao) return 'Movida para ' + pendRotuloSecao(obj.secao) + ' como nº ' + obj.numero + '.';
+  const dm = d => String(d).split('-').reverse().slice(0, 2).join('/');
+  if (pedidoConclusao) return 'Conclusão pedida (' + dm(obj.conclData) + '). Falta a aprovação do gerente e do síndico.';
+  if (prazoPeloSindico) return obj.prazo ? 'Prazo inicial alterado para ' + dm(obj.prazo) + ' pelo síndico.' : 'Prazo inicial retirado pelo síndico.';
+  if ('prazoAtualizado' in v && Object.keys(v).length <= 2) return obj.prazoAtualizado ? 'Prazo atualizado para ' + dm(obj.prazoAtualizado) + '.' : 'Atualização de prazo retirada.';
+  if (obj.prazoDefinidoEm && atual.tipo !== 'Constante' && !constFinal) return 'Prazo ' + dm(obj.prazo) + ' definido e bloqueado.';
+  if ('concluidoEm' in v && obj.concluidoEm) return 'Concluída em ' + dm(obj.concluidoEm) + '.';
+  if ('responsavel' in v && Object.keys(v).length <= 2) return 'Responsável: ' + (obj.responsavel || 'nenhum') + '.';
+  return obj.status && 'status' in v ? 'Situação: ' + obj.status + '.' : 'criticidade' in v && Object.keys(v).length <= 2 ? 'Criticidade: ' + (obj.criticidade || 'sem definição') + '.' : 'Salvo.';
 }
 
 function pendAprovar(t, atual, v, conta, obj) {
@@ -2207,6 +2219,37 @@ function lerEmails() {
     mapa[k] = (mapa[k] || []).concat(lista);
   });
   return mapa;
+}
+
+// setor responsável definido depois pelo síndico ou pela Administração: avisa só o setor
+function pendAvisarResponsavel(p, conta) {
+  try {
+    const resp = String(p.responsavel || '').trim();
+    const dest = [];
+    (lerEmails()[chaveNome(resp)] || []).forEach(e => { if (dest.indexOf(e.toLowerCase()) < 0) dest.push(e.toLowerCase()); });
+    if (!dest.length) return ' Nenhum e-mail cadastrado na aba Emails para ' + resp + '.';
+    const dt = d => d ? String(d).slice(0, 10).split('-').reverse().join('/') : '';
+    const corpo = [
+      'O setor ' + resp + ' foi definido como responsável por uma pendência do Controle de pendências do Pier Gestão.',
+      '',
+      'Seção: ' + pendRotuloSecao(p.secao),
+      'Nº: ' + (p.numero || '—'),
+      'Pendência: ' + p.titulo,
+      String(p.obs || '').trim() ? 'Detalhes: ' + String(p.obs).trim() : '',
+      'Criticidade: ' + (p.criticidade || 'não definida'),
+      p.prazo ? (p.tipo === 'Constante' ? 'Próxima execução: ' : 'Prazo inicial: ') + dt(p.prazo) : '',
+      p.prazoAtualizado ? 'Atualização de prazo: ' + dt(p.prazoAtualizado) : '',
+      'Situação: ' + (p.status || 'Pendente'),
+      (p.criadaPor ? 'Incluída por ' + p.criadaPor + (p.origem === 'Síndico' ? ' (síndico)' : '') + '. ' : '') + 'Setor definido por ' + conta.nome + '.',
+      '',
+      'Mensagem automática do Pier Gestão. Não responda este e-mail.'
+    ].filter((l, i, a) => l !== '' || (i > 0 && a[i - 1] !== '')).join('\n');
+    MailApp.sendEmail({ to: dest.join(','), subject: 'Pier Gestão – pendência' + (p.numero ? ' nº ' + p.numero : '') + ' para ' + resp + ': ' + String(p.titulo).slice(0, 80), body: corpo, name: 'Pier Gestão' });
+    return ' Aviso enviado por e-mail para ' + resp + ' (' + dest.length + ' destinatário' + (dest.length === 1 ? '' : 's') + ').';
+  } catch (e) {
+    Logger.log('Aviso por e-mail ao responsável não enviado: ' + e.message);
+    return ' O aviso por e-mail não foi enviado (' + String(e.message).slice(0, 120) + ').';
+  }
 }
 
 // envia para o Gerente, o Síndico e o responsável; uma falha no e-mail nunca desfaz a inclusão

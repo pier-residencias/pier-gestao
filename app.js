@@ -2629,6 +2629,13 @@ const pdGuardarFiltros = () => { try { localStorage.setItem("pd-filtros", JSON.s
 const pdGuardarRecolhidas = () => { try { localStorage.setItem("pd-recolhidas", JSON.stringify([...PD.recolhidas])); } catch(e){} };
 // responsáveis sugeridos (o campo continua aceitando outro nome)
 const PD_RESP_PADRAO = ["Gerência","Supervisor","Auxiliar","Síndico","Fornecedor","Manutenção","Limpeza","Jardinagem","Piscina"];
+// menu suspenso do setor responsável; um nome antigo, digitado antes do menu, continua aparecendo como opção
+const pdRespOpcoes = atual => {
+  const lista = PD_RESP_PADRAO.slice().sort((a,b) => a.localeCompare(b,"pt-BR"));
+  atual = String(atual||"").trim();
+  if (atual && !lista.includes(atual)) lista.push(atual);
+  return `<option value="">Sem responsável</option>` + lista.map(r => `<option value="${esc(r)}" ${r === atual ? "selected" : ""}>${esc(r)}</option>`).join("");
+};
 // formas de ordenar a lista dentro de cada seção (subitens sempre logo abaixo do item principal)
 const PD_ORD = [["","Número (padrão)"],["alfa","Ordem alfabética (A–Z)"],["crit","Criticidade (alta primeiro)"],["venc","Vencimento (mais próximo primeiro)"],["novas","Data de criação (mais recentes)"],["antigas","Data de criação (mais antigas)"]];
 // versão 2 do Apps Script: aprovações, atualização de prazo, prazo inicial alterável pelo síndico e aviso por e-mail
@@ -2776,7 +2783,7 @@ function pdLinha(id){
   f.meta = pdEl("div", {class:"pd-meta"});
   f.st = pdEl("select", {class:"input pd-st", "aria-label":"Situação", id:"pds-"+id});
   f.st.innerHTML = PD_STATUS.map(s => `<option>${esc(s)}</option>`).join("");
-  f.resp = pdEl("input", {class:"input", list:"pd-resps", placeholder:"Responsável", "aria-label":"Responsável", id:"pdr-"+id});
+  f.resp = pdEl("select", {class:"input pd-resp", "aria-label":"Responsável", id:"pdr-"+id});
   f.prazo = pdEl("input", {class:"input pd-prazo", type:"date", "aria-label":"Prazo", id:"pdp-"+id});
   f.prazoFixo = pdEl("div", {class:"pd-prazo-fixo", hidden:""});
   f.prazo2 = pdEl("input", {class:"input pd-prazo2", type:"date", "aria-label":"Atualização de prazo", id:"pdu-"+id});
@@ -2803,7 +2810,7 @@ function pdLinha(id){
     if (p && pdTemConcl() && f.st.value !== "Concluído") p.concluidoEm = "";
     pdSalvar(id, {status:f.st.value});
   });
-  f.resp.addEventListener("input", () => pdSalvarDepois(id, "responsavel", f.resp.value.trim()));
+  f.resp.addEventListener("change", () => { f.resp.dataset.v = f.resp.value; pdSalvar(id, {responsavel:f.resp.value}); });
   f.prazo.addEventListener("change", () => {
     const p = pdAchar(id) || {};
     if (pdConst(p)) { pdSalvar(id, {prazo:f.prazo.value}); return; }
@@ -2833,7 +2840,12 @@ const pdPor = (inp, v) => { if (document.activeElement !== inp && inp.value !== 
 function pdAtualizar(p){
   const r = PD.rows.get(p.id) || pdLinha(p.id), f = r.f;
   f.num.textContent = p.numero || "—";
-  pdPor(f.tit, p.titulo||""); pdPor(f.obs, p.obs||""); pdPor(f.resp, p.responsavel||"");
+  pdPor(f.tit, p.titulo||""); pdPor(f.obs, p.obs||"");
+  if (document.activeElement !== f.resp) {
+    const rv = String(p.responsavel||"").trim();
+    if (f.resp.dataset.o !== rv) { f.resp.innerHTML = pdRespOpcoes(rv); f.resp.dataset.o = rv; }
+    f.resp.value = rv; f.resp.dataset.v = rv;
+  }
   if (pdPrazoFixo(p)) {
     f.prazo.hidden = true; f.prazoFixo.hidden = false;
     const ass = p.prazo + "|" + (p.prazoDefinidoEm||"") + "|" + (p.prazoDefinidoPor||"");
@@ -3067,7 +3079,7 @@ function pdAbrirForm(o){
         <span class="hint" id="np-prazo-dica">${ed && pdPrazoFixo(ed) ? `Bloqueado${ed.prazoDefinidoEm ? " desde " + esc(fData(ed.prazoDefinidoEm)) : ""}${ed.prazoDefinidoPor ? " por " + esc(ed.prazoDefinidoPor) : ""}. ${pdV2() ? "Só o síndico pode alterar." : "Correção só direto na planilha."}` : ed && ed.prazo && pdV2() && ehSindico() ? "Bloqueado para os demais. Como síndico, você pode alterar." : pdV2() ? "Depois de salvo, só o síndico pode alterar." : "Depois de salvo, o prazo fica bloqueado."}</span></div>
       ${pdV2() ? `<div class="field" id="np-prazo2-box"><label for="np-prazo2">Atualização de prazo</label><input class="input" id="np-prazo2" type="date" value="${esc((ed && ed.prazoAtualizado)||"")}"><span class="hint">Nova data combinada. Pode ser alterada a qualquer momento.</span></div>` : ""}
       ${ed && pdTemConcl() ? `<div class="field" id="np-concl-box"><label for="np-concl">Concluída em</label><input class="input" id="np-concl" type="date" max="${hoje()}" value="${esc(ed.concluidoEm||(pdConclPend(ed) ? ed.conclData : "")||"")}" ${pdV2() && (pdConclPend(ed) || (ed.status === "Concluído" && !(ehGerente() || ehSindico()))) ? "disabled" : ""}><span class="hint">Obrigatória ao marcar como Concluído.${pdV2() ? " A conclusão passa pela aprovação do gerente e do síndico." : ""}</span></div>` : ""}
-      <div class="field"><label for="np-resp">Responsável</label><input class="input" id="np-resp" list="pd-resps" placeholder="Opcional" value="${esc(v.responsavel||"")}"></div>
+      <div class="field"><label for="np-resp">Responsável</label><select class="input" id="np-resp">${pdRespOpcoes(v.responsavel)}</select></div>
       ${ed && pdV2() ? pdAprovInfo(ed) : ""}
       ${execs.length ? `<div class="field full"><span class="lbl-campo">Últimas execuções</span><ul class="pd-execs">${execs.slice(0,8).map(x => `<li><b>${fData(x.slice(0,10))}</b> ${esc(x.slice(11))}</li>`).join("")}</ul></div>` : ""}
       ${ehSindico() && !ed ? `<p class="hint full">A administração recebe a pendência destacada como "Nova do síndico".</p>` : ""}
