@@ -705,3 +705,38 @@ nav.tabs{display:none!important}
   body.menu-aberto{overflow:hidden}
 }
 .top .wrap{align-items:center}
+
+/* Painel de pendências: cartões com ícone e gráfico dos últimos 12 meses */
+.pp-box{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:20px 22px 22px}
+.pp-tit{display:flex;align-items:center;gap:9px;margin:0 0 16px;font-size:1.15rem;font-weight:600}
+.pp-tit svg{width:22px;height:22px;fill:none;stroke:var(--accent);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.pp-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;margin-bottom:20px}
+.pp-card{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;text-align:left;padding:18px 18px 16px;border:1px solid var(--line);border-radius:10px;background:var(--surface);cursor:pointer;min-height:118px;box-shadow:0 1px 2px rgba(22,40,58,.05)}
+.pp-card:hover{border-color:var(--muted);box-shadow:var(--shadow)}
+.pp-txt{display:flex;flex-direction:column;min-width:0}
+.pp-rot{font-size:.88rem;color:var(--muted);font-weight:500}
+.pp-v{font-size:1.9rem;font-weight:700;line-height:1.15;margin-top:6px}
+.pp-sub{font-size:.8rem;color:var(--muted);margin-top:6px}
+.pp-sub.ok{color:var(--ok);font-weight:600}
+.pp-ico{flex:none;display:grid;place-items:center;width:48px;height:48px;border-radius:50%;color:#fff}
+.pp-ico svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.pp-ico.azul{background:#3b82f6}.pp-ico.verde{background:#10b981}.pp-ico.teal{background:#0d9488}.pp-ico.info{background:#2a74b0}
+.pp-ico.ambar{background:#f59e0b}.pp-ico.vermelho{background:#ef4444}.pp-ico.roxo{background:#8b5cf6}.pp-ico.laranja{background:#eb6834}
+.pp-grafbox{background:var(--bg);border-radius:10px;padding:16px 16px 12px}
+.pp-grafbox h4{margin:0 0 8px;text-align:center;font-size:1rem;font-weight:600;color:var(--muted)}
+.pp-leg{display:flex;flex-wrap:wrap;justify-content:center;gap:6px 16px;font-size:.8rem;color:var(--muted);margin-bottom:8px}
+.pp-leg span{display:inline-flex;align-items:center;gap:6px}
+.pp-leg i{display:inline-block;width:28px;height:10px;border-radius:2px}
+.pp-leg i.inc,.pp-pto.inc{background:#3b82f6;fill:#3b82f6}.pp-leg i.con,.pp-pto.con{background:#10b981;fill:#10b981}.pp-leg i.abe,.pp-pto.abe{background:#f59e0b;fill:#f59e0b}
+.pp-graf{width:100%;overflow:hidden}
+.pp-graf svg{display:block}
+.pp-grade{stroke:var(--line);stroke-width:1}
+.pp-eixo{font-size:11px;fill:var(--muted);font-family:var(--f-body)}
+.pp-linha{fill:none;stroke-width:2.4;stroke-linejoin:round;stroke-linecap:round}
+.pp-linha.inc{stroke:#3b82f6}.pp-linha.con{stroke:#10b981}.pp-linha.abe{stroke:#f59e0b}
+.pp-pto{stroke:var(--surface);stroke-width:1.5}
+.pp-num{margin-top:8px;font-size:.85rem}
+.pp-num summary{cursor:pointer;color:var(--accent-ink)}
+.pp-num .tablebox{margin-top:8px}
+@media (max-width:640px){.pp-box{padding:14px}.pp-cards{grid-template-columns:1fr 1fr;gap:10px}.pp-card{padding:12px;min-height:0;flex-direction:column-reverse}.pp-ico{width:38px;height:38px}.pp-ico svg{width:20px;height:20px}.pp-v{font-size:1.5rem}}
+@media (max-width:360px){.pp-cards{grid-template-columns:1fr}}

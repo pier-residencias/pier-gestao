@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap"></noscript>
-<link rel="stylesheet" href="estilo.css?v=20261023menu">
+<link rel="stylesheet" href="estilo.css?v=20261023painel">
 </head>
 <body>
 <div class="login" id="login" hidden>
@@ -74,6 +74,7 @@
   </div>
   <div class="admmenu" id="adm-menu" role="menu" aria-label="Administração" hidden>
     <div class="mh">Pendências e compras</div>
+    <button type="button" role="menuitem" data-adm-tab="pdpainel"><b>Painel de pendências</b><span>Resumo em cartões e gráfico dos últimos 12 meses</span></button>
     <button type="button" role="menuitem" data-adm-tab="pendencias"><b>Controle de pendências</b><span>Lista do síndico: situação, responsável e prazo</span></button>
     <button type="button" role="menuitem" data-adm-tab="pendencias" data-adm-acao="nova"><b>Incluir pendência</b><span>Registrar uma pendência nova na lista</span></button>
     <button type="button" role="menuitem" data-adm-tab="cotacoes"><b>Cotações</b><span>Mapas de cotação, fornecedores e aprovação</span></button>
@@ -466,6 +467,21 @@
     </table></div>
   </section>
 
+  <!-- PAINEL DE PENDÊNCIAS (menu Administração): números do controle em cartões e gráfico dos últimos 12 meses -->
+  <section id="t-pdpainel" hidden>
+    <div class="sec-head"><h2 class="sec">Painel de pendências</h2><span class="muted">Resumo do Controle de pendências. Toque num cartão para ver a lista já filtrada.</span><button class="btn" type="button" id="pp-abrir">Abrir o controle</button></div>
+    <div class="pp-box">
+      <h3 class="pp-tit"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg>Pendências</h3>
+      <div class="pp-cards" id="pp-cards"><div class="empty">Carregando pendências…</div></div>
+      <div class="pp-grafbox">
+        <h4>Pendências – últimos 12 meses</h4>
+        <div class="pp-leg" id="pp-leg"></div>
+        <div class="pp-graf" id="pp-graf"></div>
+        <details class="pp-num"><summary>Ver os números do gráfico</summary><div id="pp-tab"></div></details>
+      </div>
+    </div>
+  </section>
+
   <!-- PENDÊNCIAS (menu Administração) -->
   <section id="t-pendencias" hidden>
     <div class="sec-head"><h2 class="sec">Controle de pendências</h2><span class="muted">Lista do síndico. Cada alteração vai direto para a aba Pendencias da planilha.</span><button class="btn primary" type="button" id="pd-nova">+ Incluir pendência</button></div>
@@ -493,6 +509,6 @@
 
 <script src="config.js"></script>
 <script src="nfe.js?v=20261015s"></script>
-<script src="app.js?v=20261023rapido"></script>
+<script src="app.js?v=20261023painel"></script>
 </body>
 </html>
