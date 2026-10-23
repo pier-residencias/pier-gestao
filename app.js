@@ -49,6 +49,7 @@ const TIPOS_LIMPEZA = ["saida","entrada"];
 const modo = () => S.adm ? "Administração" : S.setor;
 const abaNoModo = t => S.adm ? ABAS_ADM.includes(t) : S.setor === "Limpeza" ? ABAS_LIMPEZA.includes(t) : !ABAS_ADM.includes(t);
 const ehSindico = () => norm(S.perfil).includes("sindico");
+const ehGerente = () => norm(S.perfil).includes("gerente");
 const setoresReais = () => SETORES_PERM.filter(x => can(x[1])).map(x => x[0]);
 const podeAdm = () => ABAS_ADM.some(t => (ABAS_PERM[t]||[]).some(can));
 const podeAba = t => (ABAS_PERM[t]||[]).some(can) && abaNoModo(t);
@@ -2621,25 +2622,51 @@ const pdTemNovos = () => !S.pend || !S.pend.length || ("tipo" in S.pend[0]);
 const fDia = iso => iso ? fData(iso).slice(0,5) : "—";
 const pdTemCrit = () => !S.pend || !S.pend.length || ("criticidade" in S.pend[0]);
 const pdNova = p => p.origem === "Síndico" && !p.vistaEm;
-const PD = { novas:false, rows:new Map(), secs:new Map(), timers:new Map(), fila:Promise.resolve(), salvando:0, q:"", st:"", crit:"", cst:false, resp:"", hide:false, late:false, carregando:false };
-try { const f = JSON.parse(localStorage.getItem("pd-filtros")||"{}"); ["q","st","crit","resp","hide"].forEach(k => { if (k in f) PD[k] = f[k]; }); } catch(e){}
-const pdGuardarFiltros = () => { try { localStorage.setItem("pd-filtros", JSON.stringify({q:PD.q, st:PD.st, crit:PD.crit, resp:PD.resp, hide:PD.hide})); } catch(e){} };
+const PD = { novas:false, rows:new Map(), secs:new Map(), timers:new Map(), fila:Promise.resolve(), salvando:0, q:"", st:"", crit:"", cst:false, resp:"", hide:false, late:false, aprov:false, ord:"", versao:0, recolhidas:new Set(), carregando:false };
+try { const f = JSON.parse(localStorage.getItem("pd-filtros")||"{}"); ["q","st","crit","resp","hide","ord"].forEach(k => { if (k in f) PD[k] = f[k]; }); } catch(e){}
+try { PD.recolhidas = new Set(JSON.parse(localStorage.getItem("pd-recolhidas")||"[]")); } catch(e){}
+const pdGuardarFiltros = () => { try { localStorage.setItem("pd-filtros", JSON.stringify({q:PD.q, st:PD.st, crit:PD.crit, resp:PD.resp, hide:PD.hide, ord:PD.ord})); } catch(e){} };
+const pdGuardarRecolhidas = () => { try { localStorage.setItem("pd-recolhidas", JSON.stringify([...PD.recolhidas])); } catch(e){} };
+// responsáveis sugeridos (o campo continua aceitando outro nome)
+const PD_RESP_PADRAO = ["Gerência","Supervisor","Auxiliar","Síndico","Fornecedor","Manutenção","Limpeza","Jardinagem","Piscina"];
+// formas de ordenar a lista dentro de cada seção (subitens sempre logo abaixo do item principal)
+const PD_ORD = [["","Número (padrão)"],["alfa","Ordem alfabética (A–Z)"],["crit","Criticidade (alta primeiro)"],["venc","Vencimento (mais próximo primeiro)"],["novas","Data de criação (mais recentes)"],["antigas","Data de criação (mais antigas)"]];
+// versão 2 do Apps Script: aprovações, atualização de prazo, prazo inicial alterável pelo síndico e aviso por e-mail
+const pdV2 = () => PD.versao >= 2;
+const pdAguardando = p => !!p && (p.aprovacao === "Aguardando gerente" || p.aprovacao === "Aguardando síndico");
+const pdConclPend = p => !!p && !!String(p.conclPedida||"").trim() && p.status !== "Concluído";
+// etapa que falta: {tipo:"inclusao"|"conclusao", etapa:"gerente"|"sindico"}
+const pdEtapa = p => pdAguardando(p) ? {tipo:"inclusao", etapa: p.aprovacao === "Aguardando gerente" ? "gerente" : "sindico"}
+  : pdConclPend(p) ? {tipo:"conclusao", etapa: String(p.conclGerente||"").trim() ? "sindico" : "gerente"} : null;
+const pdPossoAprovar = e => !!e && (e.etapa === "gerente" ? (ehGerente() || ehSindico()) : ehSindico());
+const pdPrazoEf = p => (!pdConst(p) && p.prazoAtualizado) || p.prazo;
+const pdMarca = x => { x = String(x||""); const [q, ...quem] = x.split(" · "); return q ? fData(q) + (q.length > 10 ? " " + q.slice(11,16) : "") + (quem.length ? " · " + quem.join(" · ") : "") : ""; };
+// data de criação: a coluna "Incluída em" ou, nas pendências antigas, o instante guardado no próprio ID
+const pdCriado = p => {
+  if (p.criadaEm) { const t = Date.parse(String(p.criadaEm).replace(" ", "T") + (String(p.criadaEm).length <= 16 ? ":00" : "") + "-03:00"); if (!isNaN(t)) return t; }
+  const m = /^pd([0-9a-z]{8})/.exec(String(p.id||"")); return m ? parseInt(m[1], 36) : 0;
+};
 const pdRotulo = s => s.rotulo || s.nome;
 const pdSecaoDe = p => { const s = PD_SECOES.find(s => s.nome === p.secao || (s.antigas||[]).includes(p.secao)); return s ? s.nome : PD_OUTRAS; };
-const pdAtrasada = p => p.prazo && p.status !== "Concluído" && p.prazo < hoje();
-// prazo de pendência pontual fica bloqueado depois de definido (a tarefa constante usa o prazo como próxima execução)
-const pdPrazoFixo = p => !!(p && p.prazo && !pdConst(p));
+const pdAtrasada = p => { const d = pdPrazoEf(p); return d && p.status !== "Concluído" && d < hoje(); };
+// prazo inicial de pendência pontual fica bloqueado depois de definido; com o Apps Script novo, o síndico pode alterar
+// (a tarefa constante usa o prazo como próxima execução)
+const pdPrazoFixo = p => !!(p && p.prazo && !pdConst(p)) && !(pdV2() && ehSindico());
 const pdTemConcl = () => !S.pend || !S.pend.length || ("concluidoEm" in S.pend[0]);
 const PD_CADEADO = '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="7" width="10" height="7" rx="1.5" fill="currentColor" fill-opacity=".15"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>';
 const pdDias = (a, b) => Math.round((new Date(b + "T12:00:00") - new Date(a + "T12:00:00")) / 864e5);
 function pdConfirmarPrazo(id, valor){
   const r = PD.rows.get(id); if (!r) return;
   const velho = r.el.querySelector(".pd-conf[data-prazo]"); if (velho) velho.remove();
-  const box = pdEl("div", {class:"pd-conf", "data-prazo":"1"}, [pdEl("span", {}, ["Definir o prazo para ", pdEl("b", {text:fData(valor)}), "? Depois de salvo, o prazo fica bloqueado."])]);
-  const sim = pdEl("button", {class:"btn small primary", type:"button", text:"Bloquear prazo"});
+  const antes = (pdAchar(id) || {}).prazo || "";
+  const txt = !antes ? ["Definir o prazo inicial para ", pdEl("b", {text:fData(valor)}), "? Depois de salvo, só o síndico pode alterar."]
+    : valor ? ["Alterar o prazo inicial de ", pdEl("b", {text:fData(antes)}), " para ", pdEl("b", {text:fData(valor)}), "?"]
+    : ["Retirar o prazo inicial (", pdEl("b", {text:fData(antes)}), ")?"];
+  const box = pdEl("div", {class:"pd-conf", "data-prazo":"1"}, [pdEl("span", {}, txt)]);
+  const sim = pdEl("button", {class:"btn small primary", type:"button", text: !antes ? "Bloquear prazo inicial" : valor ? "Alterar prazo inicial" : "Retirar prazo inicial"});
   const nao = pdEl("button", {class:"btn small", type:"button", text:"Cancelar"});
   sim.onclick = () => { box.remove(); pdSalvar(id, {prazo:valor}); };
-  nao.onclick = () => { box.remove(); r.f.prazo.value = ""; };
+  nao.onclick = () => { box.remove(); r.f.prazo.value = antes; };
   box.append(sim, nao); r.el.append(box);
 }
 const pdLista = () => (S.pend || []).slice().sort((a,b) => (Number(a.ordem)||9e9) - (Number(b.ordem)||9e9));
@@ -2650,7 +2677,7 @@ const pdAuto = t => { t.style.height = "auto"; t.style.height = t.scrollHeight +
 async function carregarPend(){
   if (!TEM_ADM || !can("pendencias") || PD.carregando) return;
   PD.carregando = true;
-  try { const r = await api("pendencias"); if (!PD.salvando) S.pend = r.pendencias || []; renderPend(); }
+  try { const r = await api("pendencias"); PD.versao = Number(r.pendVersao) || 0; if (!PD.salvando) S.pend = r.pendencias || []; renderPend(); }
   catch(e){ if (!S.pend) $("#pd-body").innerHTML = `<div class="notice crit">${esc(e.message)}</div>`; toast(e.message, true); }
   finally { PD.carregando = false; }
 }
@@ -2662,6 +2689,7 @@ function pdEnviar(acao, extra, aoConcluir){
     try {
       const r = await api(acao, extra);
       if (aoConcluir) aoConcluir(r);
+      if (r && r.pendencias) PD.versao = Number(r.pendVersao) || 0;
       if (PD.salvando === 1) { S.pend = r.pendencias || S.pend; }
       toast(r.msg || "Salvo.");
       return r;
@@ -2688,7 +2716,11 @@ function pdFiltros(){
   const fc = $("#pd-fc");
   if (!fc.options.length) fc.innerHTML = `<option value="">Todas as criticidades</option>` + PD_CRIT.map(s => `<option>${esc(s)}</option>`).join("") + `<option value="__sem">Sem criticidade</option>`;
   fc.value = PD.crit;
-  const resps = [...new Set(pdLista().map(p => (p.responsavel||"").trim()).filter(Boolean))].sort((a,b) => a.localeCompare(b,"pt-BR"));
+  const resps = [...new Set(PD_RESP_PADRAO.concat(pdLista().map(p => (p.responsavel||"").trim())).filter(Boolean))].sort((a,b) => a.localeCompare(b,"pt-BR"));
+  const dl = $("#pd-resps");
+  if (dl && dl.options.length !== resps.length) dl.innerHTML = resps.map(r => `<option value="${esc(r)}"></option>`).join("");
+  const fo = $("#pd-ord");
+  if (fo) { if (!fo.options.length) fo.innerHTML = PD_ORD.map(([v,t]) => `<option value="${v}">Ordenar: ${esc(t)}</option>`).join(""); fo.value = PD_ORD.some(o => o[0] === PD.ord) ? PD.ord : ""; }
   const fr = $("#pd-fr");
   fr.innerHTML = `<option value="">Todos os responsáveis</option><option value="__sem">Sem responsável</option>` + resps.map(r => `<option value="${esc(r)}">${esc(r)}</option>`).join("");
   fr.value = [...fr.options].some(o => o.value === PD.resp) ? PD.resp : "";
@@ -2706,6 +2738,7 @@ function pdPassa(p){
   if (PD.late && !pdAtrasada(p)) return false;
   if (PD.novas && !pdNova(p)) return false;
   if (PD.cst && !pdConst(p)) return false;
+  if (PD.aprov && !pdEtapa(p)) return false;
   if (PD.q && !norm([p.numero, p.titulo, p.obs, p.responsavel].join(" ")).includes(norm(PD.q))) return false;
   return true;
 }
@@ -2722,15 +2755,18 @@ function pdResumo(){
   const altas = all.filter(p => p.criticidade === "Alta" && p.status !== "Concluído").length;
   if (pdTemCrit()) itens.splice(1, 0, {l:"alta criticidade em aberto", v:altas, st:"", crit:"Alta"});
   if (constantes) itens.push({l: constantes === 1 ? "tarefa constante" : "tarefas constantes", v:constantes, st:"", cst:true});
+  const aguardam = pdV2() ? all.filter(pdEtapa).length : 0;
+  if (PD.aprov && !aguardam) PD.aprov = false;
+  if (aguardam) itens.splice(1, 0, {l:"aguardando aprovação", v:aguardam, st:"", aprov:true});
   const novas = all.filter(pdNova).length;
   if (PD.novas && !novas) PD.novas = false;
   if (novas && !ehSindico()) itens.unshift({l: novas === 1 ? "nova do síndico" : "novas do síndico", v:novas, st:"", novas:true});
-  const marcado = it => it.cst ? PD.cst : it.novas ? PD.novas : it.late ? PD.late : it.crit ? (PD.crit === it.crit && PD.hide && !PD.st) : (!PD.late && !PD.novas && !PD.cst && PD.st === it.st && (it.st || (it.l === "pendências" && !PD.crit)));
-  $("#pd-stats").innerHTML = itens.map((it,i) => `<button type="button" class="pd-stat ${it.late?"late":""} ${it.novas?"nova":""} ${it.crit?"alta":""} ${it.cst?"cst":""}" data-i="${i}" aria-pressed="${marcado(it) ? "true" : "false"}"><b>${it.v}</b><span>${esc(it.l)}</span></button>`).join("");
-  $$("#pd-stats .pd-stat").forEach(b => b.onclick = () => { const it = itens[+b.dataset.i]; PD.st = it.st; PD.late = !!it.late; PD.novas = !!it.novas; PD.cst = !!it.cst; PD.crit = it.crit || ""; if (it.crit) PD.hide = true; if (it.st === "Concluído" || it.novas) PD.hide = false; pdGuardarFiltros(); renderPend(); });
+  const marcado = it => it.aprov ? PD.aprov : it.cst ? PD.cst : it.novas ? PD.novas : it.late ? PD.late : it.crit ? (PD.crit === it.crit && PD.hide && !PD.st) : (!PD.late && !PD.novas && !PD.cst && !PD.aprov && PD.st === it.st && (it.st || (it.l === "pendências" && !PD.crit)));
+  $("#pd-stats").innerHTML = itens.map((it,i) => `<button type="button" class="pd-stat ${it.late?"late":""} ${it.novas?"nova":""} ${it.crit?"alta":""} ${it.cst?"cst":""} ${it.aprov?"aprov":""}" data-i="${i}" aria-pressed="${marcado(it) ? "true" : "false"}"><b>${it.v}</b><span>${esc(it.l)}</span></button>`).join("");
+  $$("#pd-stats .pd-stat").forEach(b => b.onclick = () => { const it = itens[+b.dataset.i]; PD.st = it.st; PD.late = !!it.late; PD.novas = !!it.novas; PD.cst = !!it.cst; PD.aprov = !!it.aprov; PD.crit = it.crit || ""; if (it.crit) PD.hide = true; if (it.st === "Concluído" || it.novas || it.aprov) PD.hide = false; pdGuardarFiltros(); renderPend(); });
   const pct = pont.length ? Math.round(feitas/pont.length*100) : 0;
   $("#pd-bar").style.width = pct + "%";
-  $("#pd-prog").textContent = all.length ? `${feitas} de ${pont.length} concluídas (${pct}%)` + (constantes ? ` · ${constantes} tarefa${constantes===1?"":"s"} constante${constantes===1?"":"s"} à parte` : "") + (PD.late ? " · mostrando só as atrasadas" : PD.novas ? " · mostrando só as novas do síndico" : PD.cst ? " · mostrando só as tarefas constantes" : "") : "Nenhuma pendência cadastrada";
+  $("#pd-prog").textContent = all.length ? `${feitas} de ${pont.length} concluídas (${pct}%)` + (constantes ? ` · ${constantes} tarefa${constantes===1?"":"s"} constante${constantes===1?"":"s"} à parte` : "") + (PD.late ? " · mostrando só as atrasadas" : PD.aprov ? " · mostrando só as que aguardam aprovação" : PD.novas ? " · mostrando só as novas do síndico" : PD.cst ? " · mostrando só as tarefas constantes" : "") : "Nenhuma pendência cadastrada";
 }
 function pdLinha(id){
   const f = {};
@@ -2743,6 +2779,8 @@ function pdLinha(id){
   f.resp = pdEl("input", {class:"input", list:"pd-resps", placeholder:"Responsável", "aria-label":"Responsável", id:"pdr-"+id});
   f.prazo = pdEl("input", {class:"input pd-prazo", type:"date", "aria-label":"Prazo", id:"pdp-"+id});
   f.prazoFixo = pdEl("div", {class:"pd-prazo-fixo", hidden:""});
+  f.prazo2 = pdEl("input", {class:"input pd-prazo2", type:"date", "aria-label":"Atualização de prazo", id:"pdu-"+id});
+  f.lblPrazo2 = pdEl("div", {class:"pd-lbl pd-lbl2", text:"Atualização de prazo"});
   f.concl = pdEl("input", {class:"input pd-concl", type:"date", "aria-label":"Concluída em", id:"pdk-"+id});
   f.lblConcl = pdEl("div", {class:"pd-lbl", text:"Concluída em"});
   f.crit = pdEl("select", {class:"input pd-crit", "aria-label":"Criticidade", id:"pdc-"+id});
@@ -2751,28 +2789,33 @@ function pdLinha(id){
   f.del = pdEl("button", {class:"pd-del", type:"button", title:"Excluir pendência", "aria-label":"Excluir pendência", text:"×"});
   f.cst = pdEl("div", {class:"pd-cst", hidden:""});
   f.lblSt = pdEl("div", {class:"pd-lbl", text:"Situação"});
-  f.lblPrazo = pdEl("div", {class:"pd-lbl", text:"Prazo"});
+  f.lblPrazo = pdEl("div", {class:"pd-lbl", text:"Prazo inicial"});
   f.tit.addEventListener("input", () => { pdAuto(f.tit); if (f.tit.value.trim()) pdSalvarDepois(id, "titulo", f.tit.value.trim()); });
   f.obs.addEventListener("input", () => { pdAuto(f.obs); pdSalvarDepois(id, "obs", f.obs.value); });
   f.st.addEventListener("change", () => {
-    f.st.dataset.s = f.st.value;
     const p = pdAchar(id);
-    // espelha na tela o que o servidor faz com a data de conclusão
-    if (p && pdTemConcl()) { if (f.st.value === "Concluído" && p.status !== "Concluído" && !p.concluidoEm) p.concluidoEm = hoje(); if (f.st.value !== "Concluído") p.concluidoEm = ""; }
+    // concluir exige a data de conclusão (e, com o Apps Script novo, vira um pedido para o gerente e o síndico aprovarem)
+    if (p && f.st.value === "Concluído" && p.status !== "Concluído") {
+      f.st.value = PD_STATUS.includes(p.status) ? p.status : "Pendente"; f.st.dataset.s = f.st.value;
+      pdPedirConclusao(id); return;
+    }
+    f.st.dataset.s = f.st.value;
+    if (p && pdTemConcl() && f.st.value !== "Concluído") p.concluidoEm = "";
     pdSalvar(id, {status:f.st.value});
   });
   f.resp.addEventListener("input", () => pdSalvarDepois(id, "responsavel", f.resp.value.trim()));
   f.prazo.addEventListener("change", () => {
     const p = pdAchar(id) || {};
     if (pdConst(p)) { pdSalvar(id, {prazo:f.prazo.value}); return; }
-    if (f.prazo.value) pdConfirmarPrazo(id, f.prazo.value);
+    if (f.prazo.value || p.prazo) pdConfirmarPrazo(id, f.prazo.value);
   });
+  f.prazo2.addEventListener("change", () => pdSalvar(id, {prazoAtualizado:f.prazo2.value}));
   f.concl.addEventListener("change", () => {
     const v = f.concl.value, p = pdAchar(id) || {};
     if (v && v > hoje()) { toast("A data de conclusão não pode ser depois de hoje.", true); f.concl.value = p.concluidoEm || ""; return; }
-    const patch = {concluidoEm: v};
-    if (v && p.status !== "Concluído") patch.status = "Concluído";
-    pdSalvar(id, patch);
+    if (p.status !== "Concluído") { f.concl.value = ""; if (v) pdPedirConclusao(id, v); return; }
+    if (!v) { toast("A data de conclusão é obrigatória.", true); f.concl.value = p.concluidoEm || ""; return; }
+    pdSalvar(id, {concluidoEm: v});
   });
   f.del.addEventListener("click", () => pdConfirmar(id));
   const el = pdEl("div", {class:"pd-row"}, [
@@ -2780,7 +2823,7 @@ function pdLinha(id){
     pdEl("div", {class:"c-st"}, [f.lblSt, f.st, f.cst]),
     pdEl("div", {class:"c-crit"}, [pdEl("div", {class:"pd-lbl", text:"Criticidade"}), f.crit]),
     pdEl("div", {class:"c-resp"}, [pdEl("div", {class:"pd-lbl", text:"Responsável"}), f.resp]),
-    pdEl("div", {class:"c-prazo"}, [f.lblPrazo, f.prazo, f.prazoFixo]),
+    pdEl("div", {class:"c-prazo"}, [f.lblPrazo, f.prazo, f.prazoFixo, f.lblPrazo2, f.prazo2]),
     pdEl("div", {class:"c-concl"}, [f.lblConcl, f.concl]),
     pdEl("div", {class:"c-del"}, [f.del])
   ]);
@@ -2797,7 +2840,7 @@ function pdAtualizar(p){
     if (f.prazoFixo.dataset.a !== ass) {
       f.prazoFixo.dataset.a = ass;
       f.prazoFixo.innerHTML = PD_CADEADO + `<span>${esc(fData(p.prazo))}</span>`;
-      f.prazoFixo.title = "Prazo bloqueado" + (p.prazoDefinidoEm ? ` desde ${fData(p.prazoDefinidoEm)}` : "") + (p.prazoDefinidoPor ? ` por ${p.prazoDefinidoPor}` : "") + ". Correção só direto na planilha.";
+      f.prazoFixo.title = "Prazo inicial bloqueado" + (p.prazoDefinidoEm ? ` desde ${fData(p.prazoDefinidoEm)}` : "") + (p.prazoDefinidoPor ? ` por ${p.prazoDefinidoPor}` : "") + (pdV2() ? ". Só o síndico pode alterar; use a Atualização de prazo." : ". Correção só direto na planilha.");
     }
   } else {
     f.prazoFixo.hidden = true; f.prazo.hidden = false;
@@ -2805,6 +2848,10 @@ function pdAtualizar(p){
   }
   pdPor(f.concl, p.concluidoEm||"");
   f.concl.dataset.cheio = p.concluidoEm ? "1" : "";
+  // com o Apps Script novo, a data de uma pendência já concluída só é corrigida pelo gerente ou pelo síndico
+  f.concl.disabled = pdV2() && p.status === "Concluído" && !(ehGerente() || ehSindico());
+  pdPor(f.prazo2, p.prazoAtualizado||"");
+  f.prazo2.dataset.cheio = p.prazoAtualizado ? "1" : "";
   if (document.activeElement !== f.st) { f.st.value = PD_STATUS.includes(p.status) ? p.status : "Pendente"; f.st.dataset.s = f.st.value; }
   if (document.activeElement !== f.crit) { f.crit.value = PD_CRIT.includes(p.criticidade) ? p.criticidade : ""; f.crit.dataset.c = f.crit.value; }
   f.crit.disabled = !pdTemCrit();
@@ -2812,9 +2859,10 @@ function pdAtualizar(p){
   r.el.classList.toggle("alta", p.criticidade === "Alta" && (cst || p.status !== "Concluído"));
   f.st.hidden = cst; f.cst.hidden = !cst;
   f.lblSt.textContent = cst ? "Tarefa constante" : "Situação";
-  f.lblPrazo.textContent = cst ? "Próxima execução" : "Prazo";
+  f.lblPrazo.textContent = cst ? "Próxima execução" : "Prazo inicial";
   f.concl.hidden = cst || !pdTemConcl(); f.lblConcl.hidden = f.concl.hidden;
-  f.prazo.title = cst ? "Próxima execução" : "Prazo";
+  f.prazo.title = cst ? "Próxima execução" : "Prazo inicial";
+  f.prazo2.hidden = cst || !pdV2(); f.lblPrazo2.hidden = f.prazo2.hidden;
   if (cst) {
     const ass = [p.frequencia, p.ultimaVez, p.prazo, pdAtrasada(p)].join("|");
     if (f.cst.dataset.a !== ass) {
@@ -2825,10 +2873,12 @@ function pdAtualizar(p){
   const nova = pdNova(p);
   const quando = p.atualizadoEm ? `Atualizado em ${fData(p.atualizadoEm)} ${String(p.atualizadoEm).slice(11,16)}${p.atualizadoPor ? " por "+p.atualizadoPor : ""}` : "";
   const fimPrazo = !cst && p.status === "Concluído" && p.concluidoEm && p.prazo ? pdDias(p.prazo, p.concluidoEm) : null;
-  const assinatura = [nova, p.criadaPor, quando, ehSindico(), cst, p.ultimaVez, sub, pdTemNovos(), fimPrazo].join("|");
+  const etapa = pdV2() ? pdEtapa(p) : null;
+  const assinatura = [nova, p.criadaPor, quando, ehSindico(), ehGerente(), cst, p.ultimaVez, sub, pdTemNovos(), fimPrazo, etapa && etapa.tipo, etapa && etapa.etapa, p.conclData].join("|");
   if (f.meta.dataset.a !== assinatura) {
     f.meta.dataset.a = assinatura;
     f.meta.innerHTML = (nova ? `<span class="pd-nova-pill">Nova do síndico</span>${ehSindico() ? "" : `<button type="button" class="btn small pd-ciente" data-ciente="${esc(p.id)}">Ciente</button>`}` : "")
+      + (etapa ? pdAprovHtml(p, etapa) : "")
       + (fimPrazo !== null ? `<span class="pd-fim ${fimPrazo > 0 ? "atraso" : "ok"}">${fimPrazo > 0 ? `Concluída ${fimPrazo} dia${fimPrazo===1?"":"s"} após o prazo` : "Concluída no prazo"}</span>` : "")
       + (cst ? `<span class="pd-ult">Última execução: <b>${p.ultimaVez ? fDia(p.ultimaVez) : "ainda não registrada"}</b></span>` : "")
       + `<span>${p.criadaPor && p.criadaPor !== "undefined" && p.origem && p.origem !== "undefined" ? "Incluída por " + esc(p.criadaPor) + " · " : ""}${esc(quando)}</span>`
@@ -2839,7 +2889,43 @@ function pdAtualizar(p){
   r.el.classList.toggle("late", !!pdAtrasada(p));
   r.el.classList.toggle("sub", sub);
   r.el.classList.toggle("constante", cst);
+  r.el.classList.toggle("aguardando", !!etapa);
   return r.el;
+}
+// selo da aprovação que falta e os botões de quem pode aprovar esta etapa
+function pdAprovHtml(p, e){
+  const quem = e.etapa === "gerente" ? "gerente" : "síndico";
+  const selo = e.tipo === "inclusao" ? `Aguardando aprovação do ${quem}` : `Conclusão em ${fData(p.conclData)} aguardando ${quem}`;
+  let b = "";
+  if (pdPossoAprovar(e)) {
+    const rot = e.etapa === "sindico" ? "Aprovar (síndico)" : ehGerente() ? "Aprovar (gerente)" : "Aprovar em nome do gerente";
+    b += `<button type="button" class="btn small primary pd-aprovar" data-aprovar="${e.tipo}" data-id="${esc(p.id)}">${rot}</button>`;
+  }
+  if (e.tipo === "conclusao" && (ehGerente() || ehSindico())) b += `<button type="button" class="btn small pd-recusar" data-recusar="${esc(p.id)}">Recusar conclusão</button>`;
+  return `<span class="pd-aprov ${e.tipo === "conclusao" ? "concl" : ""}">${esc(selo)}</span>${b}`;
+}
+// concluir: pede a data (obrigatória); com o Apps Script novo, o pedido vai para o gerente e o síndico aprovarem
+function pdPedirConclusao(id, sugestao){
+  const r = PD.rows.get(id), p = pdAchar(id); if (!r || !p) return;
+  if (pdV2() && pdAguardando(p)) { toast("Esta pendência ainda aguarda a aprovação de inclusão (gerente e síndico). A conclusão só pode ser pedida depois.", true); return; }
+  if (pdV2() && pdConclPend(p)) { toast("A conclusão desta pendência já foi pedida e aguarda aprovação.", true); return; }
+  const velho = r.el.querySelector(".pd-conf[data-concl]"); if (velho) velho.remove();
+  const data = pdEl("input", {class:"input", type:"date", max:hoje(), "aria-label":"Data de conclusão", id:"pdcc-"+id});
+  if (sugestao) data.value = sugestao;
+  const box = pdEl("div", {class:"pd-conf", "data-concl":"1"}, [pdEl("label", {for:"pdcc-"+id}, [pdEl("b", {text:"Data de conclusão"}), " (obrigatória)"]), data]);
+  const sim = pdEl("button", {class:"btn small primary", type:"button", text: pdV2() ? "Pedir conclusão" : "Concluir"});
+  const nao = pdEl("button", {class:"btn small", type:"button", text:"Cancelar"});
+  const dica = pdEl("span", {class:"hint", text: pdV2() ? "A pendência só fica concluída depois da aprovação do gerente e do síndico." : ""});
+  sim.onclick = () => {
+    const d = data.value;
+    if (!d) { toast("Informe a data de conclusão.", true); data.focus(); return; }
+    if (d > hoje()) { toast("A data de conclusão não pode ser depois de hoje.", true); data.focus(); return; }
+    box.remove();
+    if (pdV2()) pdEnviar("pendSalvar", {pend:{id, status:"Concluído", concluidoEm:d}});
+    else pdSalvar(id, {status:"Concluído", concluidoEm:d});
+  };
+  nao.onclick = () => box.remove();
+  box.append(sim, nao, dica); r.el.append(box); data.focus();
 }
 function pdConfirmar(id){
   const r = PD.rows.get(id); if (!r || r.el.querySelector(".pd-conf")) return;
@@ -2853,20 +2939,48 @@ function pdConfirmar(id){
   box.append(sim, nao); r.el.append(box);
 }
 function pdSecao(s){
-  const list = pdEl("div", {class:"pd-list"}), cnt = pdEl("span", {class:"cnt"}), bar = pdEl("i");
+  const ix = PD_SECOES.indexOf(s);
+  const list = pdEl("div", {class:"pd-list", id:"pd-lista-"+ix}), cnt = pdEl("span", {class:"cnt"}), bar = pdEl("i");
   const add = pdEl("button", {class:"btn small", type:"button", text:"+ Adicionar item"});
-  const sec = pdEl("section", {class:"pd-sec"}, [pdEl("div", {class:"sh"}, [pdEl("h3", {text:pdRotulo(s)}), cnt, pdEl("span", {class:"sbar", "aria-hidden":"true"}, [bar]), add]), list]);
-  add.onclick = () => pdNovo(s.nome);
-  const o = {sec, list, cnt, bar, vazio:pdEl("div", {class:"empty"})}; PD.secs.set(s.nome, o); return o;
+  // o título é o botão de expandir/recolher a seção
+  const tog = pdEl("button", {class:"pd-tog", type:"button", "aria-expanded":"true", "aria-controls":"pd-lista-"+ix, title:"Expandir ou recolher"}, [pdRotulo(s)]);
+  const sec = pdEl("section", {class:"pd-sec"}, [pdEl("div", {class:"sh"}, [pdEl("h3", {}, [tog]), cnt, pdEl("span", {class:"sbar", "aria-hidden":"true"}, [bar]), add]), list]);
+  tog.onclick = () => { if (PD.recolhidas.has(s.nome)) PD.recolhidas.delete(s.nome); else PD.recolhidas.add(s.nome); pdGuardarRecolhidas(); renderPend(); };
+  add.onclick = () => { if (PD.recolhidas.delete(s.nome)) { pdGuardarRecolhidas(); renderPend(); } pdNovo(s.nome); };
+  const o = {sec, list, cnt, bar, tog, vazio:pdEl("div", {class:"empty"})}; PD.secs.set(s.nome, o); return o;
+}
+// ordena os itens principais pelo critério escolhido; cada subitem continua logo abaixo do seu item principal
+function pdOrdenar(lista){
+  if (!PD.ord) return lista;
+  const ids = new Set(lista.map(p => p.id)), filhos = new Map(), raiz = [];
+  const paiDe = p => p.pai ? lista.find(x => x.id === p.pai) : lista.find(x => !pdEhSub(x) && x.numero && String(p.numero).startsWith(x.numero + "."));
+  for (const p of lista) {
+    const pai = pdEhSub(p) ? paiDe(p) : null;
+    if (pai && ids.has(pai.id) && pai.id !== p.id) { if (!filhos.has(pai.id)) filhos.set(pai.id, []); filhos.get(pai.id).push(p); }
+    else raiz.push(p);
+  }
+  const pos = new Map(lista.map((p,i) => [p.id, i]));
+  const CR = {"Alta":0, "Média":1, "Baixa":2};
+  const aberto = p => pdConst(p) || p.status !== "Concluído";
+  const cmp = {
+    alfa: (a,b) => String(a.titulo||"").trim().localeCompare(String(b.titulo||"").trim(), "pt-BR", {sensitivity:"base", numeric:true}),
+    crit: (a,b) => (CR[a.criticidade] ?? 3) - (CR[b.criticidade] ?? 3),
+    venc: (a,b) => (aberto(b) - aberto(a)) || ((pdPrazoEf(a) ? 0 : 1) - (pdPrazoEf(b) ? 0 : 1)) || String(pdPrazoEf(a)||"").localeCompare(String(pdPrazoEf(b)||"")),
+    novas: (a,b) => pdCriado(b) - pdCriado(a),
+    antigas: (a,b) => pdCriado(a) - pdCriado(b)
+  }[PD.ord];
+  if (!cmp) return lista;
+  raiz.sort((a,b) => cmp(a,b) || pos.get(a.id) - pos.get(b.id));
+  return raiz.flatMap(p => [p].concat(filhos.get(p.id) || []));
 }
 function pdNovo(secao){
   const o = PD.secs.get(secao); const ja = o.list.querySelector(".pd-new"); if (ja) { ja.querySelector("input").focus(); return; }
   const inp = pdEl("input", {class:"input", placeholder:"Descreva a nova pendência", "aria-label":"Nova pendência", id:"pdn-"+PD_SECOES.findIndex(s => s.nome === secao)});
   const ix = PD_SECOES.findIndex(s => s.nome === secao);
-  const prz = pdEl("input", {class:"input", type:"date", id:"pdnp-"+ix, "aria-label":"Prazo (fica bloqueado depois de salvo)"});
+  const prz = pdEl("input", {class:"input", type:"date", id:"pdnp-"+ix, "aria-label":"Prazo inicial (fica bloqueado depois de salvo)"});
   const ok = pdEl("button", {class:"btn small primary", type:"submit", text:"Adicionar"});
   const cancelar = pdEl("button", {class:"btn small", type:"button", text:"Cancelar"});
-  const form = pdEl("form", {class:"pd-new"}, [inp, pdEl("label", {class:"pd-new-prazo", for:"pdnp-"+ix}, [pdEl("span", {text:"Prazo (fica bloqueado)"}), prz]), ok, cancelar]);
+  const form = pdEl("form", {class:"pd-new"}, [inp, pdEl("label", {class:"pd-new-prazo", for:"pdnp-"+ix}, [pdEl("span", {text:"Prazo inicial (fica bloqueado)"}), prz]), ok, cancelar]);
   cancelar.onclick = () => form.remove();
   form.addEventListener("submit", ev => {
     ev.preventDefault();
@@ -2883,11 +2997,15 @@ function renderPend(){
   if (!PD.secs.size) { body.textContent = ""; PD_SECOES.forEach(s => body.append(pdSecao(s).sec)); }
   pdBadge();
   $("#pd-aviso").hidden = pdTemCrit() && pdTemNovos() && pdTemConcl();
-  const all = pdLista(), filtro = !!(PD.q || PD.st || PD.crit || PD.resp || PD.hide || PD.late || PD.novas || PD.cst);
+  const av2 = $("#pd-aviso2"); if (av2) av2.hidden = pdV2() || !can("usuarios");
+  const all = pdLista(), filtro = !!(PD.q || PD.st || PD.crit || PD.resp || PD.hide || PD.late || PD.novas || PD.cst || PD.aprov);
   for (const s of PD_SECOES) {
     const o = PD.secs.get(s.nome);
     const daSecao = all.filter(p => pdSecaoDe(p) === s.nome);
-    const vis = daSecao.filter(pdPassa);
+    const vis = pdOrdenar(daSecao).filter(pdPassa);
+    // seção recolhida (a busca por texto mostra tudo, para nada ficar escondido)
+    const recolhida = PD.recolhidas.has(s.nome) && !PD.q;
+    o.sec.classList.toggle("recolhida", recolhida); o.list.hidden = recolhida; o.tog.setAttribute("aria-expanded", recolhida ? "false" : "true");
     const feitas = daSecao.filter(p => p.status === "Concluído").length;
     o.cnt.textContent = daSecao.length ? `${feitas}/${daSecao.length} concluídas` : "sem itens";
     o.bar.style.width = (daSecao.length ? feitas/daSecao.length*100 : 0) + "%";
@@ -2902,13 +3020,17 @@ function renderPend(){
     else if (o.vazio.isConnected) o.vazio.remove();
   }
   for (const id of [...PD.rows.keys()]) if (!pdAchar(id)) { PD.rows.get(id).el.remove(); PD.rows.delete(id); }
+  const rb = $("#pd-recolher");
+  if (rb) { const todas = PD_SECOES.every(s => PD.recolhidas.has(s.nome)); rb.textContent = todas ? "Expandir todas" : "Recolher todas"; rb.setAttribute("aria-pressed", todas ? "true" : "false"); }
   requestAnimationFrame(() => $$("#pd-body .pd-tit, #pd-body .pd-obs").forEach(pdAuto));
 }
 function pdBadge(){
   const b = $("#b-adm"); if (!b) return;
-  const n = S.pend && !ehSindico() ? S.pend.filter(pdNova).length : 0;
+  const novas = S.pend && !ehSindico() ? S.pend.filter(pdNova).length : 0;
+  const aprovar = S.pend && pdV2() ? S.pend.filter(p => pdPossoAprovar(pdEtapa(p))).length : 0;
+  const n = novas + aprovar;
   b.textContent = n; b.hidden = !n;
-  b.title = n ? `${n} pendência${n===1?"":"s"} nova${n===1?"":"s"} do síndico` : "";
+  b.title = [novas ? `${novas} pendência${novas===1?"":"s"} nova${novas===1?"":"s"} do síndico` : "", aprovar ? `${aprovar} aguardando a sua aprovação` : ""].filter(Boolean).join(" · ");
 }
 // formulário único: incluir pendência, incluir subitem ou editar uma pendência
 function pdAbrirNova(secaoPadrao){ pdAbrirForm({secao:secaoPadrao}); }
@@ -2941,12 +3063,15 @@ function pdAbrirForm(o){
       <div class="field"><label for="np-crit">Criticidade <span class="req">*</span></label>
         <select class="input" id="np-crit"><option value="">Escolha</option>${["Baixa","Média","Alta"].map(x => `<option ${x===v.criticidade?"selected":""}>${x}</option>`).join("")}</select></div>
       <div class="field" id="np-st-box"><label for="np-st">Situação</label><select class="input" id="np-st">${PD_STATUS.map(x => `<option ${x===v.status?"selected":""}>${x}</option>`).join("")}</select></div>
-      <div class="field"><label for="np-prazo" id="np-prazo-lbl">Prazo</label><input class="input" id="np-prazo" type="date" value="${esc(v.prazo||"")}" ${ed && pdPrazoFixo(ed) ? "disabled" : ""}>
-        <span class="hint" id="np-prazo-dica">${ed && pdPrazoFixo(ed) ? `Bloqueado${ed.prazoDefinidoEm ? " desde " + esc(fData(ed.prazoDefinidoEm)) : ""}${ed.prazoDefinidoPor ? " por " + esc(ed.prazoDefinidoPor) : ""}. Correção só direto na planilha.` : "Depois de salvo, o prazo fica bloqueado."}</span></div>
-      ${ed && pdTemConcl() ? `<div class="field" id="np-concl-box"><label for="np-concl">Concluída em</label><input class="input" id="np-concl" type="date" max="${hoje()}" value="${esc(ed.concluidoEm||"")}"><span class="hint">Entra sozinha ao marcar como Concluído.</span></div>` : ""}
+      <div class="field"><label for="np-prazo" id="np-prazo-lbl">Prazo inicial</label><input class="input" id="np-prazo" type="date" value="${esc(v.prazo||"")}" ${ed && pdPrazoFixo(ed) ? "disabled" : ""}>
+        <span class="hint" id="np-prazo-dica">${ed && pdPrazoFixo(ed) ? `Bloqueado${ed.prazoDefinidoEm ? " desde " + esc(fData(ed.prazoDefinidoEm)) : ""}${ed.prazoDefinidoPor ? " por " + esc(ed.prazoDefinidoPor) : ""}. ${pdV2() ? "Só o síndico pode alterar." : "Correção só direto na planilha."}` : ed && ed.prazo && pdV2() && ehSindico() ? "Bloqueado para os demais. Como síndico, você pode alterar." : pdV2() ? "Depois de salvo, só o síndico pode alterar." : "Depois de salvo, o prazo fica bloqueado."}</span></div>
+      ${pdV2() ? `<div class="field" id="np-prazo2-box"><label for="np-prazo2">Atualização de prazo</label><input class="input" id="np-prazo2" type="date" value="${esc((ed && ed.prazoAtualizado)||"")}"><span class="hint">Nova data combinada. Pode ser alterada a qualquer momento.</span></div>` : ""}
+      ${ed && pdTemConcl() ? `<div class="field" id="np-concl-box"><label for="np-concl">Concluída em</label><input class="input" id="np-concl" type="date" max="${hoje()}" value="${esc(ed.concluidoEm||(pdConclPend(ed) ? ed.conclData : "")||"")}" ${pdV2() && (pdConclPend(ed) || (ed.status === "Concluído" && !(ehGerente() || ehSindico()))) ? "disabled" : ""}><span class="hint">Obrigatória ao marcar como Concluído.${pdV2() ? " A conclusão passa pela aprovação do gerente e do síndico." : ""}</span></div>` : ""}
       <div class="field"><label for="np-resp">Responsável</label><input class="input" id="np-resp" list="pd-resps" placeholder="Opcional" value="${esc(v.responsavel||"")}"></div>
+      ${ed && pdV2() ? pdAprovInfo(ed) : ""}
       ${execs.length ? `<div class="field full"><span class="lbl-campo">Últimas execuções</span><ul class="pd-execs">${execs.slice(0,8).map(x => `<li><b>${fData(x.slice(0,10))}</b> ${esc(x.slice(11))}</li>`).join("")}</ul></div>` : ""}
       ${ehSindico() && !ed ? `<p class="hint full">A administração recebe a pendência destacada como "Nova do síndico".</p>` : ""}
+      ${!ed && pdV2() ? `<p class="hint full">A pendência nova fica aguardando a aprovação do gerente e, em seguida, do síndico. Gerente, síndico e responsável recebem um aviso por e-mail.</p>` : ""}
       <div class="full actions"><button class="btn primary" type="submit" id="np-ok">${ed ? "Salvar alterações" : pai ? "Incluir subitem" : "Incluir pendência"}</button><button class="btn" type="button" id="np-no">Cancelar</button><span class="hint" id="np-msg"></span></div>
     </form>`;
   $("#modal").hidden = false;
@@ -2955,7 +3080,8 @@ function pdAbrirForm(o){
     const cst = tipoSel() === "Constante";
     if ($("#np-freq-box")) $("#np-freq-box").hidden = !cst;
     $("#np-st-box").hidden = cst || !ed;
-    $("#np-prazo-lbl").textContent = cst ? (ed ? "Próxima execução" : "Primeira execução") : "Prazo";
+    $("#np-prazo-lbl").textContent = cst ? (ed ? "Próxima execução" : "Primeira execução") : "Prazo inicial";
+    if ($("#np-prazo2-box")) $("#np-prazo2-box").hidden = cst;
     const fixo = !!(ed && pdPrazoFixo(ed) && !cst);
     $("#np-prazo").disabled = fixo;
     $("#np-prazo-dica").hidden = cst;
@@ -2975,11 +3101,17 @@ function pdAbrirForm(o){
     if (!criticidade && !(ed && !ed.criticidade && !pdTemCrit())) { if (pdTemCrit()) { msg.textContent = "Escolha a criticidade."; $("#np-crit").focus(); return; } }
     const dados = {titulo, obs:$("#np-obs").value.trim(), prazo:$("#np-prazo").value, responsavel:$("#np-resp").value.trim(), criticidade};
     if (novos) { dados.tipo = tipoSel(); if (dados.tipo === "Constante") dados.frequencia = $("#np-freq").value; }
+    if ($("#np-prazo2-box") && !$("#np-prazo2-box").hidden) dados.prazoAtualizado = $("#np-prazo2").value;
     if (ed && !$("#np-st-box").hidden) dados.status = $("#np-st").value;
-    if ($("#np-concl") && !$("#np-concl-box").hidden) {
-      const c = $("#np-concl").value;
+    if ($("#np-concl") && !$("#np-concl-box").hidden && !$("#np-concl").disabled) {
+      const c = $("#np-concl").value, concluir = dados.status === "Concluído" && ed.status !== "Concluído";
       if (c && c > hoje()) { msg.textContent = "A data de conclusão não pode ser depois de hoje."; $("#np-concl").focus(); return; }
-      if (c !== String(ed.concluidoEm || "")) { dados.concluidoEm = c; if (c && !dados.status) dados.status = "Concluído"; }
+      if (concluir && pdV2() && pdAguardando(ed)) { msg.textContent = "Esta pendência ainda aguarda a aprovação de inclusão. A conclusão só pode ser pedida depois."; return; }
+      if (concluir && !c) { msg.textContent = "Informe a data de conclusão."; $("#np-concl").focus(); return; }
+      if (!concluir && ed.status === "Concluído" && dados.status === "Concluído" && !c) { msg.textContent = "A data de conclusão é obrigatória."; $("#np-concl").focus(); return; }
+      if (c !== String(ed.concluidoEm || "") || concluir) { dados.concluidoEm = c; if (c && !dados.status) dados.status = "Concluído"; }
+    } else if (ed && dados.status === "Concluído" && ed.status !== "Concluído") {
+      msg.textContent = pdConclPend(ed) ? "A conclusão já foi pedida e aguarda aprovação." : "Informe a data de conclusão."; return;
     }
     let pend;
     if (ed) {
@@ -2993,13 +3125,23 @@ function pdAbrirForm(o){
     pdEnviar("pendSalvar", {pend}).then(res => {
       if (!res) { ok.disabled = false; msg.className = "hint err"; msg.textContent = "Não foi possível salvar. Tente de novo."; return; }
       fecharModal();
-      PD.q = ""; PD.st = ""; PD.crit = ""; PD.resp = ""; PD.late = false; PD.novas = false; PD.cst = false; pdGuardarFiltros();
+      PD.q = ""; PD.st = ""; PD.crit = ""; PD.resp = ""; PD.late = false; PD.novas = false; PD.cst = false; PD.aprov = false; pdGuardarFiltros();
       if (S.tab !== "pendencias") setTab("pendencias"); else renderPend();
       const alvo = ed ? ed : (res.pendencias||[]).find(p => !antes.has(p.id));
       const r = alvo && PD.rows.get(alvo.id);
       if (r) { r.el.scrollIntoView({block:"center", behavior:"smooth"}); r.el.classList.remove("flash"); void r.el.offsetWidth; r.el.classList.add("flash"); }
     });
   });
+}
+// histórico das aprovações, no formulário de edição
+function pdAprovInfo(p){
+  const lin = (rot, val, falta) => `<li><span>${rot}</span> <b>${val ? esc(pdMarca(val)) : falta}</b></li>`;
+  let h = `<div class="field full"><span class="lbl-campo">Aprovações</span><ul class="pd-aprov-info">`;
+  if (p.criadaEm) h += lin("Incluída em", p.criadaEm + (p.criadaPor ? " · " + p.criadaPor : ""), "");
+  if (!p.aprovacao) h += `<li>Pendência anterior ao processo de aprovação: já é válida.</li>`;
+  else h += lin("Inclusão – gerente:", p.aprovGerente, "aguardando") + lin("Inclusão – síndico:", p.aprovSindico, "aguardando");
+  if (String(p.conclPedida||"").trim()) h += lin("Conclusão pedida:", p.conclPedida + " · data informada " + fData(p.conclData), "") + lin("Conclusão – gerente:", p.conclGerente, "aguardando") + lin("Conclusão – síndico:", p.conclSindico, "aguardando");
+  return h + `</ul></div>`;
 }
 function pdTextoEmail(){
   const all = pdLista(), L = ["Prezado Sr. Fernando,", "", "Segue o status atualizado das pendências:", ""];
@@ -3012,7 +3154,10 @@ function pdTextoEmail(){
       const x = [];
       if (p.criticidade) x.push("criticidade " + String(p.criticidade).toLowerCase());
       if (String(p.obs||"").trim()) x.push(String(p.obs).trim());
-      if (p.prazo && (pdConst(p) || p.status !== "Concluído")) x.push((pdConst(p) ? "próxima " : "prazo ") + fData(p.prazo).slice(0,5));
+      if (p.prazo && (pdConst(p) || p.status !== "Concluído")) x.push((pdConst(p) ? "próxima " : "prazo inicial ") + fData(p.prazo).slice(0,5));
+      if (!pdConst(p) && p.prazoAtualizado && p.status !== "Concluído") x.push("prazo atualizado " + fData(p.prazoAtualizado).slice(0,5));
+      if (pdAguardando(p)) x.push("aguardando aprovação do " + (p.aprovacao === "Aguardando gerente" ? "gerente" : "síndico"));
+      if (pdConclPend(p)) x.push("conclusão em " + fData(p.conclData).slice(0,5) + " aguardando aprovação");
       if (!pdConst(p) && p.status === "Concluído" && p.concluidoEm) x.push("concluída em " + fData(p.concluidoEm).slice(0,5));
       if (String(p.responsavel||"").trim()) x.push("resp.: " + String(p.responsavel).trim());
       if (x.length) ln += " (" + x.join("; ") + ")";
@@ -3026,8 +3171,10 @@ function pdTextoEmail(){
 if (TEM_ADM) {
 $("#pd-nova").addEventListener("click", () => pdAbrirNova());
 $("#pd-body").addEventListener("click", e => {
-  const b = e.target.closest("[data-ciente],[data-feito],[data-sub],[data-editar]"); if (!b) return;
-  if (b.dataset.ciente) { b.disabled = true; pdEnviar("pendSalvar", {pend:{id:b.dataset.ciente, ciente:true}}); }
+  const b = e.target.closest("[data-ciente],[data-feito],[data-sub],[data-editar],[data-aprovar],[data-recusar]"); if (!b) return;
+  if (b.dataset.aprovar) { b.disabled = true; pdEnviar("pendSalvar", {pend:{id:b.dataset.id, aprovar:b.dataset.aprovar}}); }
+  else if (b.dataset.recusar) { b.disabled = true; pdEnviar("pendSalvar", {pend:{id:b.dataset.recusar, recusarConclusao:true}}); }
+  else if (b.dataset.ciente) { b.disabled = true; pdEnviar("pendSalvar", {pend:{id:b.dataset.ciente, ciente:true}}); }
   else if (b.dataset.feito) { b.disabled = true; pdEnviar("pendSalvar", {pend:{id:b.dataset.feito, feito:true, data:hoje()}}); }
   else if (b.dataset.sub) pdAbrirForm({pai:b.dataset.sub});
   else if (b.dataset.editar) pdAbrirForm({editar:b.dataset.editar});
@@ -3037,6 +3184,11 @@ $("#pd-fs").addEventListener("change", e => { PD.st = e.target.value; PD.late = 
 $("#pd-fc").addEventListener("change", e => { PD.crit = e.target.value; pdGuardarFiltros(); renderPend(); });
 $("#pd-fr").addEventListener("change", e => { PD.resp = e.target.value; pdGuardarFiltros(); renderPend(); });
 $("#pd-hide").addEventListener("change", e => { PD.hide = e.target.checked; pdGuardarFiltros(); renderPend(); });
+if ($("#pd-ord")) $("#pd-ord").addEventListener("change", e => { PD.ord = e.target.value; pdGuardarFiltros(); renderPend(); });
+if ($("#pd-recolher")) $("#pd-recolher").addEventListener("click", () => {
+  const todas = PD_SECOES.every(s => PD.recolhidas.has(s.nome));
+  PD.recolhidas = todas ? new Set() : new Set(PD_SECOES.map(s => s.nome)); pdGuardarRecolhidas(); renderPend();
+});
 $("#pd-mail").addEventListener("click", () => {
   if (!S.pend) return;
   $("#modal-box").classList.add("largo");

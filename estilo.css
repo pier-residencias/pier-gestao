@@ -587,3 +587,22 @@ div.ac-pessoa{cursor:default}
 .ac-det{font-size:.86rem;color:var(--fg);min-width:0;word-break:break-word}
 .u-acesso .actions{align-items:center;gap:8px;flex-wrap:wrap}
 #f-u .field{align-content:start}
+
+/* pendências: aprovação, atualização de prazo, ordenação e seções recolhíveis */
+.pd-tog{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:8px;border-radius:4px}
+.pd-tog::before{content:"";width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid currentColor;transition:transform .15s}
+.pd-sec.recolhida .pd-tog::before{transform:rotate(-90deg)}
+.pd-tog:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.pd-tog:hover{color:var(--accent)}
+.pd-sec.recolhida{gap:0}
+.pd-lbl2{margin-top:6px}
+.pd-prazo2[data-cheio="1"]{color:var(--info);border-color:color-mix(in srgb,var(--info) 45%,var(--line));font-weight:700}
+.pd-row.late .pd-prazo2[data-cheio="1"]{border-color:var(--crit);color:var(--crit)}
+.pd-aprov{display:inline-flex;align-items:center;font-size:.68rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:4px;background:var(--warn-bg);color:var(--warn)}
+.pd-aprov.concl{background:var(--ok-bg);color:var(--ok)}
+.pd-aprovar,.pd-recusar{font-size:.78rem;padding:2px 9px}
+.pd-row.aguardando{box-shadow:inset 3px 0 0 var(--warn)}
+.pd-stat.aprov b{color:var(--warn)}
+.pd-aprov-info{margin:4px 0 0;padding-left:18px;font-size:.86rem;display:grid;gap:2px}
+.pd-aprov-info span{color:var(--muted)}
+#pd-ord{flex:0 1 250px}
