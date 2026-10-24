@@ -144,6 +144,28 @@ const ABAS = {
       ['ciclo', 'Leitura da concessionária?']],
     num: ['leitura']
   },
+  esp: {
+    nome: 'Espaços',
+    criar: true,
+    cols: [['id', 'ID'], ['nome', 'Espaço'], ['capacidade', 'Capacidade'], ['horario', 'Horário'], ['regras', 'Regras'], ['itens', 'Itens do checklist (JSON)'],
+      ['ativo', 'Ativo'], ['criadoEm', 'Criado em'], ['criadoPor', 'Criado por']],
+    num: []
+  },
+  esr: {
+    nome: 'Reservas',
+    criar: true,
+    cols: [['id', 'ID'], ['solicitacao', 'Nº da solicitação'], ['espaco', 'Espaço'], ['data', 'Data'], ['bloco', 'Bloco'], ['unidade', 'Unidade'], ['status', 'Status'],
+      ['origem', 'Origem'], ['obs', 'Observação'], ['emailEm', 'E-mail de'], ['registradoEm', 'Registrado em'], ['registradoPor', 'Registrado por'],
+      ['atualizadoEm', 'Atualizado em'], ['atualizadoPor', 'Atualizado por']],
+    num: []
+  },
+  esc: {
+    nome: 'Vistorias de espaços',
+    criar: true,
+    cols: [['id', 'ID'], ['reserva', 'ID da reserva'], ['espaco', 'Espaço'], ['fase', 'Fase'], ['data', 'Data'], ['itens', 'Itens (JSON)'], ['problemas', 'Problemas'],
+      ['responsavel', 'Responsável (morador)'], ['obs', 'Observação'], ['feitoEm', 'Feito em'], ['feitoPor', 'Feito por']],
+    num: ['problemas']
+  },
   medc: {
     nome: 'Contas de consumo',
     criar: true,
@@ -301,7 +323,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-10-24 medições';
+const VERSAO = '2026-10-24 espaços';
 
 function doGet() {
   return json({ ok: true, app: 'Pier Gestão', versao: VERSAO });
@@ -364,6 +386,7 @@ function doPost(e) {
     if (req.acao === 'cotLista') { pode('pendencias'); return json(Object.assign(base, cotLista())); }
     if (req.acao === 'cotVerArquivo') { pode('pendencias'); const f = cotVerArquivo(req); auditar(conta, 'Abriu arquivo de cotação', f.nome); delete f.nome; return json(Object.assign(base, { arquivo: f })); }
     if (req.acao === 'unidades') { unExigir(conta, false); return json(Object.assign(base, unLista())); }
+    if (req.acao === 'espacos') { espExigir(conta); return json(Object.assign(base, espLista())); }
     if (req.acao === 'medicoes') { medExigir(conta, false); return json(Object.assign(base, medLista())); }
     if (req.acao === 'rondas') { rondaExigir(conta, false); return json(Object.assign(base, rondaLista())); }
     if (req.acao === 'rondaFotoVer') { rondaExigir(conta, false); const f = rondaFotoVer(req); delete f.nome; return json(Object.assign(base, { foto: f })); }
@@ -413,6 +436,12 @@ function doPost(e) {
         case 'medMedidor': medExigir(conta, true); msg = medMedidor(req, conta); extra.med = true; extra.semDados = true; break;
         case 'medLeituras': medExigir(conta, true); msg = medLeituras(req, conta); extra.med = true; extra.semDados = true; break;
         case 'medContas': medExigir(conta, true); msg = medContas(req, conta); extra.med = true; extra.semDados = true; break;
+        case 'espReserva': espExigir(conta); msg = espReserva(req, conta); extra.esp = true; extra.semDados = true; break;
+        case 'espEspaco': espExigir(conta); msg = espEspaco(req, conta); extra.esp = true; extra.semDados = true; break;
+        case 'espVistoria': espExigir(conta); msg = espVistoria(req, conta); extra.esp = true; extra.semDados = true; break;
+        case 'espColar': espExigir(conta); msg = espColar(req, conta); if (msg.lida) { extra.lida = msg.lida; msg = 'ok'; } else { msg = msg.texto; extra.esp = true; } extra.semDados = true; break;
+        case 'espImportar': espExigir(conta); msg = espImportar(req, conta); extra.esp = true; extra.semDados = true; break;
+        case 'espEmails': espExigir(conta); msg = espLerEmails(conta); extra.esp = true; extra.semDados = true; break;
         case 'medImportar': medExigir(conta, true); msg = medImportar(req, conta); extra.med = true; extra.semDados = true; break;
         case 'rondaSalvar': rondaExigir(conta, true); msg = rondaSalvar(req, conta); extra.ronda = msg.ronda; msg = msg.texto; extra.semDados = true; break;
         case 'rondaFoto': rondaExigir(conta, true); msg = rondaFoto(req, conta); extra.ronda = msg.ronda; msg = msg.texto; extra.semDados = true; break;
@@ -429,7 +458,7 @@ function doPost(e) {
     }
     if (extra.pendencias) return json(Object.assign(base, { msg, pendencias: pendLista(), pendVersao: PEND_VERSAO }));
     if (extra.equipe) return json(Object.assign(base, { msg }, extra));
-    if (extra.semDados) return json(Object.assign(base, { msg }, extra.cot ? { cot: extra.cot } : {}, extra.ronda ? { ronda: extra.ronda } : {}, extra.med ? medLista() : {}));
+    if (extra.semDados) return json(Object.assign(base, { msg }, extra.cot ? { cot: extra.cot } : {}, extra.ronda ? { ronda: extra.ronda } : {}, extra.med ? medLista() : {}, extra.esp ? espLista() : {}, extra.lida ? { lida: extra.lida } : {}));
     return json(Object.assign(base, { msg, dados: dados(req.meses, conta) }, extra));
   } catch (err) {
     // tentativas sem permissão ficam no histórico de auditoria
@@ -808,7 +837,8 @@ const PERMISSOES = [
   ['un_ver', 'Ver unidades e moradores', 'Ver a lista de unidades, moradores, pets e veículos (setor Administração; dados pessoais)', 'Unidades'],
   ['un_editar', 'Editar unidades e moradores', 'Atualizar o cadastro das unidades, configurar blocos e unidades e importar a planilha (setor Administração)', 'Unidades'],
   ['med_lancar', 'Lançar medições', 'Lançar as leituras dos medidores e as contas de água, energia e gás, cadastrar medidores e importar planilha (setor Administração)', 'Medições'],
-  ['med_ver', 'Ver relatórios de medições', 'Ver os medidores, os lançamentos e os relatórios de consumo (setor Administração)', 'Medições']
+  ['med_ver', 'Ver relatórios de medições', 'Ver os medidores, os lançamentos e os relatórios de consumo (setor Administração)', 'Medições'],
+  ['espacos', 'Espaços e reservas', 'Reservas do Espaço Gourmet e outros espaços, vistoria de entrega/devolução e cadastro dos espaços (setor Administração)', 'Espaços']
 ];
 const PADRAO_MANUTENCAO = ['painel', 'itens_ver', 'historico_ver', 'registrar_saida', 'registrar_entrada',
   'registrar_troca', 'registrar_emprestimo', 'devolver', 'itens_cadastrar', 'os_ver', 'os_abrir', 'os_atender', 'dem_ver', 'dem_executar',
@@ -2330,6 +2360,179 @@ function medImportar(r, conta) {
     erros.length ? erros.length + ' linha' + (erros.length === 1 ? '' : 's') + ' com erro (' + erros.slice(0, 5).join('; ') + (erros.length > 5 ? '; …' : '') + ').' : ''].filter(Boolean).join(' ') || 'Nada foi alterado.';
 }
 
+// ---------- espaços (Espaço Gourmet etc.): reservas, vistoria de entrega/devolução e cadastro (setor Administração) ----------
+// As reservas chegam pelos e-mails do site da administradora ("Reserva - PRÉ RESERVA ESPAÇO GOURMET", com o número da
+// solicitação): lidos no Gmail desta conta (acionador a cada 15 min ou botão "Ler e-mails agora") ou colados na tela.
+const ESP_STATUS = ['Solicitada', 'Pré-reserva', 'Confirmada', 'Cancelada', 'Recusada', 'Realizada'];
+const ESP_ROTULO = 'Pier Gestão/Reservas lidas';
+const ESP_ITENS_PADRAO = ['Chaves entregues / devolvidas', 'Limpeza do salão e dos banheiros', 'Louças, copos e talheres (quantidade)', 'Geladeira e freezer',
+  'Fogão, forno e cooktop', 'Churrasqueira', 'Mesas e cadeiras', 'Ar-condicionado e ventiladores', 'Iluminação e tomadas', 'Som e TV', 'Lixo retirado',
+  'Paredes, piso, vidros e mobiliário sem danos'];
+function espExigir(conta) {
+  if (!(conta.perms || {}).espacos) { const e = falha('Seu perfil não tem permissão para os espaços e reservas.'); e.negado = true; throw e; }
+}
+const espJSON = (v, p) => { try { const x = JSON.parse(String(v || '')); return Array.isArray(x) ? x : p; } catch (e) { return p; } };
+function espLista() {
+  const es = linhas(tabela('esp')).map(unLimpa).map(e => Object.assign(e, { itens: espJSON(e.itens, []) }));
+  const rs = linhas(tabela('esr')).map(unLimpa).sort((a, b) => String(a.data).localeCompare(String(b.data)));
+  const cs = linhas(tabela('esc')).map(unLimpa).map(c => Object.assign(c, { itens: espJSON(c.itens, []) })).sort((a, b) => String(b.feitoEm).localeCompare(String(a.feitoEm)));
+  return { espacos: es, reservas: rs, vistorias: cs };
+}
+const espNome = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+// acha o espaço pelo nome (ou cria, com o checklist padrão)
+function espAchar(nome, conta) {
+  const t = tabela('esp'), es = linhas(t), n = espNome(nome);
+  const e = es.find(x => espNome(x.nome) === n) || es.find(x => n && (n.indexOf(espNome(x.nome)) >= 0 || espNome(x.nome).indexOf(n) >= 0));
+  if (e) return e.nome;
+  const o = { id: novoId('ES'), nome: texto(nome, 60) || 'Espaço', capacidade: '', horario: '', regras: '', itens: JSON.stringify(ESP_ITENS_PADRAO), ativo: 'Sim', criadoEm: agora(), criadoPor: conta.nome };
+  gravar(t, o);
+  return o.nome;
+}
+// lê o texto de um e-mail de reserva; null se não for um
+function espLerTexto(assunto, corpo) {
+  const s = (String(assunto || '') + '\n' + String(corpo || '')).replace(/\r/g, '').replace(/[ \t]+/g, ' ');
+  const g = re => { const m = re.exec(s); return m ? m[1].trim() : ''; };
+  const sol = g(/N[úu]mero da Solicita[çc][ãa]o:?\s*(\d+)/i);
+  if (!sol) return null;
+  const tit = g(/Reserva\s*[-–]\s*([^\n]+)/i) || g(/^([^\n]+)/);
+  const d = /para o dia\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/i.exec(s) || /(?:dia|data)[^\d\n]{0,15}(\d{1,2})\/(\d{1,2})\/(\d{4})/i.exec(s);
+  const T = espNome(tit);
+  const status = /cancel/.test(T) ? 'Cancelada' : /recus|negad|reprov|indefer/.test(T) ? 'Recusada' : /pre[\s-]*reserva/.test(T) ? 'Pré-reserva'
+    : /confirm|aprov|efetiv|deferid/.test(T) ? 'Confirmada' : 'Solicitada';
+  let esp = tit.replace(/pr[ée][\s-]*reserva|cancelamento( da| de)?( reserva)?|reserva (confirmada|cancelada|aprovada|recusada)|confirma[çc][ãa]o( da| de)?|reserva/gi, '').replace(/^[\s:–-]+|[\s:–-]+$/g, '').trim();
+  esp = esp ? esp.toLowerCase().replace(/(^|\s)\S/g, x => x.toUpperCase()).replace(/\b(De|Da|Do|E)\b/g, x => x.toLowerCase()) : 'Espaço Gourmet';
+  return { solicitacao: sol, espaco: texto(esp, 60), status, data: d ? d[3] + '-' + ('0' + d[2]).slice(-2) + '-' + ('0' + d[1]).slice(-2) : '',
+    bloco: texto(g(/Bloco:?\s*([^\n]+)/i), 60), unidade: texto(g(/Unidade:?\s*([^\n]+)/i), 20), titulo: texto(tit, 120) };
+}
+// grava (ou atualiza pelo número da solicitação) as reservas lidas; mensagens mais antigas não desfazem as mais novas
+function espProcessar(msgs, conta, origem) {
+  const t = tabela('esr'), rs = linhas(t);
+  let novas = 0, atual = 0, ign = 0;
+  msgs.slice().sort((a, b) => String(a.data).localeCompare(String(b.data))).forEach(m => {
+    const r = espLerTexto(m.assunto, m.corpo);
+    if (!r) { ign++; return; }
+    const quando = String(m.data || agora());
+    const ja = rs.find(x => String(x.solicitacao) === r.solicitacao);
+    if (ja) {
+      if (String(ja.emailEm || '') > quando) { ign++; return; }
+      const o = { status: ja.status === 'Realizada' ? 'Realizada' : r.status, emailEm: quando, atualizadoEm: agora(), atualizadoPor: conta.nome + ' (' + origem + ')' };
+      if (r.data) o.data = r.data;
+      gravar(t, o, ja._row); Object.assign(ja, o); atual++;
+    } else {
+      const o = { id: novoId('RS'), solicitacao: r.solicitacao, espaco: espAchar(r.espaco, conta), data: r.data, bloco: r.bloco, unidade: r.unidade, status: r.status,
+        origem, obs: '', emailEm: quando, registradoEm: agora(), registradoPor: conta.nome };
+      gravar(t, o); o._row = 0; rs.push(o); novas++;
+    }
+  });
+  return { novas, atual, ign };
+}
+// lê no Gmail desta conta os e-mails de reserva ainda não lidos pelo sistema e marca com o rótulo
+function espLerEmails(conta) {
+  let lbl = GmailApp.getUserLabelByName(ESP_ROTULO);
+  if (!lbl) lbl = GmailApp.createLabel(ESP_ROTULO);
+  const ths = GmailApp.search('"Solicitação" Reserva newer_than:90d -label:"' + ESP_ROTULO + '"', 0, 60), msgs = [];
+  ths.forEach(th => th.getMessages().forEach(m => msgs.push({ assunto: m.getSubject(), corpo: m.getPlainBody(), data: Utilities.formatDate(m.getDate(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss') })));
+  const r = espProcessar(msgs, conta, 'e-mail');
+  ths.forEach(th => th.addLabel(lbl));
+  AUDIT_DET = 'Leu e-mails de reserva: ' + r.novas + ' nova(s), ' + r.atual + ' atualizada(s)';
+  return r.novas || r.atual ? (r.novas ? r.novas + ' reserva' + (r.novas === 1 ? '' : 's') + ' nova' + (r.novas === 1 ? '' : 's') + '. ' : '') + (r.atual ? r.atual + ' atualizada' + (r.atual === 1 ? '' : 's') + '.' : '') : 'Nenhum e-mail de reserva novo.';
+}
+// para o acionador de tempo (a cada 15 minutos): Acionadores → Adicionar → lerReservasAutomatico → Baseado no tempo
+function lerReservasAutomatico() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return;
+  try { espLerEmails({ nome: 'Leitura automática' }); } finally { lock.releaseLock(); }
+}
+// e-mail colado na tela: "previa" só mostra o que foi lido
+function espColar(r, conta) {
+  const x = espLerTexto('', texto(r.texto, 20000));
+  if (!x) throw falha('Não achei o "Número da Solicitação" nesse texto. Copie o e-mail inteiro da reserva.');
+  if (r.previa) { AUDIT_DET = 'Conferiu e-mail de reserva colado (solicitação ' + x.solicitacao + ')'; return { lida: x }; }
+  const p = espProcessar([{ assunto: '', corpo: texto(r.texto, 20000), data: agora() }], conta, 'colado');
+  AUDIT_DET = 'Reserva colada do e-mail: solicitação ' + x.solicitacao + ' (' + x.status + ')';
+  return { texto: p.novas ? 'Reserva ' + x.solicitacao + ' cadastrada.' : 'Reserva ' + x.solicitacao + ' atualizada (' + x.status + ').' };
+}
+// chave para achar a mesma reserva sem o número da solicitação: data + espaço + nº do bloco + nº da unidade
+const espChave = x => [String(x.data || ''), espNome(x.espaco), (/BL\s*0*(\d+)/i.exec(String(x.bloco || '')) || [, espNome(x.bloco)])[1], String(x.unidade || '').replace(/\D/g, '').replace(/^0+/, '')].join('|');
+// lista de reservas do site da administradora (PDF lido no navegador): cria as que faltam e atualiza o status das que já existem
+function espImportar(r, conta) {
+  const lista = Array.isArray(r.lista) ? r.lista.slice(0, 1000) : [];
+  if (!lista.length) throw falha('O PDF não tem reservas.');
+  const t = tabela('esr'), rs = linhas(t), porChave = {};
+  rs.forEach(x => { porChave[espChave(x)] = x; });
+  let novas = 0, atual = 0, iguais = 0;
+  lista.forEach(v => {
+    const data = String(v.data || ''); if (!dataOk(data)) return;
+    const status = ESP_STATUS.indexOf(v.status) >= 0 ? v.status : 'Solicitada';
+    const o = { data, espaco: espAchar(texto(v.espaco, 60) || 'Espaço Gourmet', conta), bloco: texto(v.bloco, 60), unidade: texto(v.unidade, 20) };
+    const ja = porChave[espChave(o)];
+    if (ja) {
+      if (ja.status === status || ja.status === 'Realizada') { iguais++; return; }
+      gravar(t, { status, atualizadoEm: agora(), atualizadoPor: conta.nome + ' (PDF da administradora)' }, ja._row); ja.status = status; atual++;
+    } else {
+      Object.assign(o, { id: novoId('RS'), solicitacao: '', status, origem: 'PDF', obs: texto([v.hora, v.obs].filter(Boolean).join(' · '), 300), registradoEm: agora(), registradoPor: conta.nome });
+      gravar(t, o); porChave[espChave(o)] = o; novas++;
+    }
+  });
+  AUDIT_DET = 'Importou PDF de reservas: ' + novas + ' nova(s), ' + atual + ' atualizada(s), ' + iguais + ' sem mudança';
+  return (novas ? novas + ' reserva' + (novas === 1 ? '' : 's') + ' nova' + (novas === 1 ? '' : 's') + '. ' : '') + (atual ? atual + ' com status atualizado. ' : '') + (iguais ? iguais + ' já estava' + (iguais === 1 ? '' : 'm') + ' em dia.' : '') || 'Nada para importar.';
+}
+function espReserva(r, conta) {
+  const t = tabela('esr'), rs = linhas(t), v = r.reserva || {};
+  const ja = v.id ? rs.find(x => x.id === String(v.id)) : null;
+  if (v.id && !ja) throw falha('Reserva não encontrada. Atualize a tela.');
+  if (r.op === 'excluir') { if (!ja) throw falha('Reserva não encontrada.'); t.sh.deleteRow(ja._row); AUDIT_DET = 'Excluiu a reserva ' + (ja.solicitacao || ja.id); return 'Reserva excluída.'; }
+  const data = String(v.data || '');
+  if (!dataOk(data)) throw falha('Informe a data da reserva.');
+  const status = ESP_STATUS.indexOf(v.status) >= 0 ? v.status : 'Confirmada';
+  const sol = texto(v.solicitacao, 20);
+  if (sol && rs.some(x => x !== ja && String(x.solicitacao) === sol)) throw falha('Já existe uma reserva com a solicitação ' + sol + '.');
+  const o = { solicitacao: sol, espaco: espAchar(texto(v.espaco, 60) || 'Espaço Gourmet', conta), data, bloco: texto(v.bloco, 60), unidade: texto(v.unidade, 20), status,
+    obs: texto(v.obs, 300), atualizadoEm: agora(), atualizadoPor: conta.nome };
+  if (ja) { gravar(t, o, ja._row); AUDIT_DET = 'Alterou a reserva ' + (sol || ja.id) + ' (' + status + ')'; return 'Reserva salva.'; }
+  Object.assign(o, { id: novoId('RS'), origem: 'manual', registradoEm: agora(), registradoPor: conta.nome });
+  gravar(t, o); AUDIT_DET = 'Cadastrou reserva ' + (sol || '') + ' em ' + data + ' (' + status + ')';
+  return 'Reserva cadastrada.';
+}
+function espEspaco(r, conta) {
+  const t = tabela('esp'), es = linhas(t), v = r.espaco || {};
+  const ja = v.id ? es.find(x => x.id === String(v.id)) : null;
+  if (v.id && !ja) throw falha('Espaço não encontrado. Atualize a tela.');
+  const nome = texto(v.nome, 60);
+  if (!nome) throw falha('Dê um nome ao espaço.');
+  if (es.some(x => x !== ja && espNome(x.nome) === espNome(nome))) throw falha('Já existe um espaço com esse nome.');
+  const itens = (Array.isArray(v.itens) ? v.itens : []).map(x => texto(x, 100)).filter(Boolean).slice(0, 60);
+  const o = { nome, capacidade: texto(v.capacidade, 20), horario: texto(v.horario, 60), regras: texto(v.regras, 3000), itens: JSON.stringify(itens), ativo: v.ativo === false ? 'Não' : 'Sim' };
+  if (ja) {
+    gravar(t, o, ja._row);
+    if (espNome(ja.nome) !== espNome(nome)) { const tr = tabela('esr'); linhas(tr).filter(x => x.espaco === ja.nome).forEach(x => gravar(tr, { espaco: nome }, x._row)); }
+    AUDIT_DET = 'Alterou o espaço ' + nome; return 'Espaço salvo.';
+  }
+  Object.assign(o, { id: novoId('ES'), criadoEm: agora(), criadoPor: conta.nome }); gravar(t, o);
+  AUDIT_DET = 'Cadastrou o espaço ' + nome; return 'Espaço cadastrado.';
+}
+// vistoria de entrega (antes do evento) ou devolução (depois), item a item
+function espVistoria(r, conta) {
+  const v = r.vistoria || {}, rs = linhas(tabela('esr'));
+  const res = v.reserva ? rs.find(x => x.id === String(v.reserva)) : null;
+  if (v.reserva && !res) throw falha('Reserva não encontrada. Atualize a tela.');
+  const fase = v.fase === 'Devolução' ? 'Devolução' : 'Entrega';
+  const itens = (Array.isArray(v.itens) ? v.itens : []).slice(0, 60).map(x => ({ i: texto(x.i, 100), st: ['OK', 'Problema', 'N/A'].indexOf(x.st) >= 0 ? x.st : '', obs: texto(x.obs, 200) }));
+  if (!itens.length) throw falha('O checklist não tem itens.');
+  const falt = itens.filter(x => !x.st);
+  if (falt.length) throw falha('Marque todos os itens (falta: ' + falt.slice(0, 3).map(x => x.i).join(', ') + (falt.length > 3 ? '…' : '') + ').');
+  const semObs = itens.filter(x => x.st === 'Problema' && !x.obs);
+  if (semObs.length) throw falha('Descreva o problema em: ' + semObs.slice(0, 3).map(x => x.i).join(', ') + '.');
+  if (res && linhas(tabela('esc')).some(x => x.reserva === res.id && x.fase === fase)) throw falha('Esta reserva já tem a vistoria de ' + fase.toLowerCase() + '.');
+  const prob = itens.filter(x => x.st === 'Problema').length;
+  const o = { id: novoId('VC'), reserva: res ? res.id : '', espaco: res ? res.espaco : texto(v.espaco, 60), fase, data: dataOk(v.data) ? v.data : hoje(),
+    itens: JSON.stringify(itens), problemas: prob, responsavel: texto(v.responsavel, 80), obs: texto(v.obs, 500), feitoEm: agora(), feitoPor: conta.nome };
+  gravar(tabela('esc'), o);
+  if (res && fase === 'Devolução' && res.status !== 'Cancelada') gravar(tabela('esr'), { status: 'Realizada', atualizadoEm: agora(), atualizadoPor: conta.nome }, res._row);
+  AUDIT_DET = 'Vistoria de ' + fase.toLowerCase() + ' do ' + o.espaco + (res ? ' (reserva ' + (res.solicitacao || res.data) + ')' : '') + ': ' + prob + ' problema(s)';
+  return 'Vistoria de ' + fase.toLowerCase() + ' salva' + (prob ? ' com ' + prob + ' problema(s).' : ', tudo OK.');
+}
+
 // ---------- ronda (vistorias preventivas do condomínio) ----------
 // Fichas: por bloco (níveis × categorias), diária das áreas comuns e checklist-mestre A a I (modelo do Checklist Consolidado).
 // Códigos: OK, P (pendente), C (crítico), NA (não se aplica), NV (não verificado). P, C e NV pedem observação/motivo.
@@ -3750,6 +3953,7 @@ const ACOES_AUDIT = {
   cotSalvar: 'Cotação', cotArquivo: 'Arquivo de cotação',
   prestSalvar: 'Prestador de serviço', prestVisita: 'Visita de prestador', prestDoc: 'Documento de prestador', prestDocRemover: 'Tirou documento de prestador', prestImportar: 'Importou planilha de prestadores',
   unSalvar: 'Unidade', unConfig: 'Configuração das unidades', unOcupadas: 'Marcou unidades ocupadas', unImportar: 'Importou cadastro de moradores',
+  espReserva: 'Reserva de espaço', espEspaco: 'Espaço', espVistoria: 'Vistoria de espaço', espColar: 'Reserva colada do e-mail', espImportar: 'Importou PDF de reservas', espEmails: 'Leu e-mails de reserva',
   medMedidor: 'Medidor', medLeituras: 'Leitura de medidor', medContas: 'Conta de consumo', medImportar: 'Importou planilha de medições',
   rondaSalvar: 'Ronda', rondaFoto: 'Foto na ronda', rondaFotoRemover: 'Tirou foto da ronda', rondaResolver: 'Resolveu pendência da ronda',
   visao: 'Abriu tela',
