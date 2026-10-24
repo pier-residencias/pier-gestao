@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap"></noscript>
-<link rel="stylesheet" href="estilo.css?v=20261024prest2">
+<link rel="stylesheet" href="estilo.css?v=20261024ronda">
 </head>
 <body>
 <div class="login" id="login" hidden>
@@ -70,6 +70,7 @@
     <button role="tab" data-tab="dashboard" aria-selected="false">Dashboard</button>
     <button role="tab" data-tab="usuarios" aria-selected="false">Usuários</button>
     <span class="badge alert" id="b-prest" hidden>0</span>
+    <span class="badge" id="b-ronda" hidden>0</span>
    </div>
     <button type="button" class="admbtn" id="tab-adm" aria-haspopup="true" aria-expanded="false" aria-controls="adm-menu" hidden aria-label="Administração"><span class="lbl-l">Administração</span><span class="lbl-c" aria-hidden="true">Adm.</span> <span class="badge alert" id="b-adm" hidden>0</span> <span class="car" aria-hidden="true">▾</span></button>
   </div>
@@ -234,6 +235,21 @@
     </div>
     <div id="ind-kanban" hidden></div>
     <div id="ind-agenda" hidden></div>
+  </section>
+
+  <!-- RONDA (setor Administração): vistorias preventivas no modelo do Checklist Consolidado -->
+  <section id="t-rondas" hidden>
+    <div id="rd-lista-box">
+      <div class="sec-head"><h2 class="sec">Ronda</h2><span class="muted">Vistorias preventivas do condomínio: ficha semanal por bloco, ficha diária das áreas comuns, checklist-mestre A a I, pendências e fechamento semanal.</span></div>
+      <div class="ind-vistas" id="rd-vistas" role="tablist" aria-label="Ronda">
+        <button type="button" role="tab" data-v="hoje" aria-selected="true">Hoje</button>
+        <button type="button" role="tab" data-v="rondas" aria-selected="false">Rondas</button>
+        <button type="button" role="tab" data-v="pend" aria-selected="false">Pendências <span class="badge alert" id="rd-n-pend" hidden>0</span></button>
+        <button type="button" role="tab" data-v="fech" aria-selected="false">Fechamento semanal</button>
+      </div>
+      <div id="rd-corpo"><div class="empty">Carregando as rondas…</div></div>
+    </div>
+    <div id="rd-editor" hidden></div>
   </section>
 
   <!-- PRESTADORES DE SERVIÇO (só no setor Manutenção) -->
@@ -609,6 +625,6 @@
 
 <script src="config.js"></script>
 <script src="nfe.js?v=20261015s"></script>
-<script src="app.js?v=20261024cotap"></script>
+<script src="app.js?v=20261024ronda"></script>
 </body>
 </html>

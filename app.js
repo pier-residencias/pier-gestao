@@ -35,19 +35,20 @@ const SETORES_PERM = [["Manutenção","setor_manutencao"],["Limpeza","setor_limp
 const setoresDasPerms = p => { const l = SETORES_PERM.filter(x => p && p[x[1]]).map(x => x[0]); return l.length ? l : ["Manutenção"]; };
 const doSetor = x => setorDe(x) === S.setor;
 const can = p => !!(S.perms && S.perms[p]);
-const ABAS_PERM = {painel:["painel"], demandas:["dem_ver","dem_executar","dem_delegar"], os:["os_ver","os_abrir","os_atender","os_gerenciar"], registrar:["registrar_saida","registrar_entrada","registrar_troca","registrar_emprestimo"], itens:["itens_ver"], historico:["historico_ver"], emprestimos:["devolver","registrar_emprestimo"], dashboard:["dashboard"], indicadores:["dashboard"], categorias:["itens_ver"], prestadores:["os_ver","os_abrir","os_atender","os_gerenciar","dem_ver","dem_executar","dem_delegar"], equipe:["os_gerenciar","dem_delegar"], minhaequipe:["os_gerenciar","dem_delegar"], usuarios:["usuarios"], inicio:["pendencias","usuarios","acessos"], pendencias:["pendencias"], pdpainel:["pendencias"], cotacoes:["pendencias"], acessos:["acessos"]};
+const ABAS_PERM = {painel:["painel"], demandas:["dem_ver","dem_executar","dem_delegar"], os:["os_ver","os_abrir","os_atender","os_gerenciar"], registrar:["registrar_saida","registrar_entrada","registrar_troca","registrar_emprestimo"], itens:["itens_ver"], historico:["historico_ver"], emprestimos:["devolver","registrar_emprestimo"], dashboard:["dashboard"], indicadores:["dashboard"], categorias:["itens_ver"], prestadores:["os_ver","os_abrir","os_atender","os_gerenciar","dem_ver","dem_executar","dem_delegar"], equipe:["os_gerenciar","dem_delegar"], minhaequipe:["os_gerenciar","dem_delegar"], usuarios:["usuarios"], inicio:["pendencias","usuarios","acessos"], pendencias:["pendencias"], pdpainel:["pendencias"], rondas:["ronda_ver","ronda_fazer"], cotacoes:["pendencias"], acessos:["acessos"]};
 // Se o navegador ainda estiver com a página antiga guardada, o menu Administração não existe nela:
 // o resto do sistema continua funcionando normalmente.
 const TEM_ADM = !!(document.getElementById("tab-adm") && document.getElementById("adm-menu") && document.getElementById("t-pendencias"));
 if (!TEM_ADM) delete ABAS_PERM.pendencias;
 if (!TEM_ADM || !document.getElementById("t-pdpainel")) delete ABAS_PERM.pdpainel;
 if (!TEM_ADM || !document.getElementById("t-inicio")) delete ABAS_PERM.inicio;
+if (!TEM_ADM || !document.getElementById("t-rondas")) delete ABAS_PERM.rondas;
 if (!document.getElementById("t-indicadores")) delete ABAS_PERM.indicadores;
 if (!TEM_ADM || !document.getElementById("t-acessos")) delete ABAS_PERM.acessos;
 // O que aparece depende de como a pessoa entrou: Manutenção (tudo do estoque, OS e demandas),
 // Limpeza (só o estoque da limpeza) ou Administração (só o menu Administração).
 // "inicio" primeiro: é a tela que abre ao entrar pela Administração
-const ABAS_ADM = ["inicio","pendencias","pdpainel","cotacoes","usuarios","acessos"];
+const ABAS_ADM = ["inicio","pendencias","pdpainel","cotacoes","rondas","usuarios","acessos"];
 const TIPOS_LIMPEZA = ["saida","entrada"];
 const modo = () => S.adm ? "Administração" : S.setor;
 // Mesmo menu nos três setores (pedido de 24/10/2026); cada pessoa vê só o que o perfil permite.
@@ -55,7 +56,8 @@ const modo = () => S.adm ? "Administração" : S.setor;
 // No setor Limpeza não há demandas nem empréstimos.
 // Prestadores de serviço: só no setor Manutenção (pedido de 24/10/2026).
 // Pendências e compras (controle de pendências e cotações) só no setor Administração (pedidos de 24/10/2026).
-const SO_ADM = ["inicio","pdpainel","pendencias","cotacoes"], FORA_LIMPEZA = ["demandas","emprestimos","minhaequipe"], SO_MANUT = ["prestadores"];
+// Ronda: só no setor Administração (pedido de 24/10/2026)
+const SO_ADM = ["inicio","pdpainel","pendencias","cotacoes","rondas"], FORA_LIMPEZA = ["demandas","emprestimos","minhaequipe"], SO_MANUT = ["prestadores"];
 const naManut = () => !S.adm && S.setor !== "Limpeza";
 const abaNoModo = t => t === "painel" ? !S.adm : SO_ADM.includes(t) ? S.adm : SO_MANUT.includes(t) ? naManut() : !(!S.adm && S.setor === "Limpeza" && FORA_LIMPEZA.includes(t));
 const ehSindico = () => norm(S.perfil).includes("sindico");
@@ -142,7 +144,7 @@ function renderSync(){
   const el = $("#sync"); if (!el) return;
   el.innerHTML = S.ocupado ? `<span class="spin" aria-hidden="true"></span> Atualizando…` : S.ultima ? `Atualizado às ${S.ultima.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}` : "";
 }
-setInterval(() => { if (document.visibilityState==="visible" && $("#modal").hidden && S.token) { atualizar(true); if ((S.tab==="pendencias" || S.tab==="pdpainel" || S.tab==="inicio") && TEM_ADM) carregarPend(); } }, 45000);
+setInterval(() => { if (document.visibilityState==="visible" && $("#modal").hidden && S.token) { atualizar(true); if ((S.tab==="pendencias" || S.tab==="pdpainel" || S.tab==="inicio") && TEM_ADM) carregarPend(); if (S.tab==="rondas" && TEM_ADM && !RD.sujo) carregarRondas(true); } }, 45000);
 document.addEventListener("visibilitychange", () => { if (document.visibilityState==="visible" && S.token && (!S.ultima || Date.now()-S.ultima > 20000)) atualizar(true); });
 
 // ---------- avisos ----------
@@ -270,7 +272,7 @@ function renderMe(){
 
 // ---------- abas ----------
 // log de segurança: telas sensíveis e exportações ficam na Auditoria (no máximo 1 registro por tela a cada 30 min)
-const TELAS_LOG = ["historico","dashboard","usuarios","pendencias","acessos","cotacoes"];
+const TELAS_LOG = ["historico","dashboard","usuarios","pendencias","acessos","cotacoes","rondas"];
 const telasVistas = new Map();
 function registrarTela(tela, detalhe){
   if (!S.token) return;
@@ -300,6 +302,7 @@ function setTab(t){
   if (t==="usuarios") carregarEquipe();
   if (t==="pendencias") carregarPend();
   if (t==="pdpainel") { renderPdPainel(); carregarPend(); }
+  if (t==="rondas") { renderRondas(); carregarRondas(true); }
   if (t==="inicio") { renderInicio(); if (can("pendencias")) carregarPend(); }
   if (t==="acessos") carregarAcessos();
   if (t==="cotacoes") { renderCot(); carregarCot(); }
@@ -400,7 +403,7 @@ const MENU = [
   {g:"Estoque", ico:'<path d="M4 8.5 12 4l8 4.5v7L12 20l-8-4.5zM4 8.5l8 4.5 8-4.5M12 13v7"/>', itens:[
     {t:"itens", rot:"Materiais", b:"b-itens"}, {t:"categorias", rot:"Categorias de materiais"}, {t:"registrar", rot:"Registrar movimentação"}, {t:"historico", rot:"Histórico"}, {t:"emprestimos", rot:"Empréstimos", b:"b-emp"}]},
   {g:"Manutenção e rotinas", ico:'<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3.6 17.4a1.9 1.9 0 0 0 2.7 2.7l5.7-5.7a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.3-.3-2.4z"/>', itens:[
-    {t:"indicadores", rot:"Indicadores"}, {t:"os", acao:"osnova", perm:"os_abrir", rot:"Abrir OS"}, {t:"demandas", acao:"preventiva", perm:"dem_delegar", rot:"Manutenção preventiva"}, {t:"prestadores", rot:"Prestadores de serviço", b:"b-prest"},
+    {t:"indicadores", rot:"Indicadores"}, {t:"os", acao:"osnova", perm:"os_abrir", rot:"Abrir OS"}, {t:"demandas", acao:"preventiva", perm:"dem_delegar", rot:"Manutenção preventiva"}, {t:"rondas", rot:"Ronda", b:"b-ronda"}, {t:"prestadores", rot:"Prestadores de serviço", b:"b-prest"},
     {t:"os", rot:"Ordens de serviço (OS)", b:"b-os"}, {t:"demandas", rot:"Demandas", b:"b-dem"}]},
   {g:"Pendências e compras", ico:'<path d="M8 5h11M8 12h11M8 19h11M4 5h.01M4 12h.01M4 19h.01"/>', itens:[
     {t:"pendencias", rot:"Controle de pendências", b:"b-adm"}, {t:"pendencias", acao:"nova", rot:"Incluir pendência"}, {t:"cotacoes", rot:"Cotações"}]},
@@ -1017,6 +1020,8 @@ function renderAll(){
   if (S.tab==="equipe") renderEquipeDir();
   if (S.tab==="minhaequipe") renderMinhaEquipe();
   if (S.tab==="prestadores") renderPrest();
+  // pendências da ronda: carrega uma vez ao entrar na Administração (contador do menu)
+  if (S.adm && TEM_ADM && S.token && podeAba("rondas") && !RD.lista && !RD.carregando && !RD.erro) carregarRondas(true);
   renderPrestBadge();
   renderAvisoDem();
   renderOsRef();
@@ -5117,6 +5122,474 @@ if ($("#t-prestadores")) {
   $("#pr-serv").addEventListener("change", e => { PR.serv = e.target.value; renderPrest(); });
   $("#pr-resumo").addEventListener("click", e => { const b = e.target.closest("[data-f]"); if (!b) return; PR.f = PR.f === b.dataset.f && b.dataset.f !== "ativos" ? "ativos" : b.dataset.f; renderPrest(); });
   $("#pr-cards").addEventListener("click", e => { const b = e.target.closest("[data-pr]"); if (b) prDetalhe(b.dataset.pr); });
+}
+
+// ---------- ronda: modelo do "Checklist Consolidado de Vistorias Preventivas" (Revisão 01 - 09/09/2026) ----------
+const RD_COD = [
+  ["OK", "Conforme", "Item vistoriado e sem anormalidade visual."],
+  ["P", "Pendente", "Não conforme sem risco imediato: acompanhar até resolver."],
+  ["C", "Crítico", "Comunicar a Gerência de imediato; isolar/proteger o local por equipe competente."],
+  ["NA", "Não se aplica", "Item inexistente ou não pertinente ao local, após confirmação."],
+  ["NV", "Não verificado", "Registrar o motivo e programar retorno."]
+];
+// programação semanal otimizada (02): manhã Supervisor + Auxiliar nos blocos; tarde Auxiliar nas áreas comuns
+const RD_PROG = {
+  1: {dia:"Segunda", blocos:["Bloco 1","Bloco 2"], tempo:"30 min cada", tarde:"Piscina, jardins, chafariz, cascatas e áreas esportivas", foco:"Cobertura dos pavimentos + shafts/halls dos blocos", areas:[0,1,2]},
+  2: {dia:"Terça", blocos:["Bloco 3"], tempo:"60 min", tarde:"Game House, Casa do Pirata, sala de jogos e convivência", foco:"Ambientes infantis e recreativos", areas:[3,5]},
+  3: {dia:"Quarta", blocos:["Bloco 4"], tempo:"60 min", tarde:"Academia, hidromassagem, spa, sauna e áreas de apoio", foco:"Áreas molhadas e equipamentos aparentes", areas:[4,0]},
+  4: {dia:"Quinta", blocos:["Bloco 5","Bloco 6"], tempo:"30 min cada", tarde:"Garagem, Portarias Norte/Sul e áreas técnicas do subsolo", foco:"Casa de bombas, elétrica, CFTV, acesso e drenagem", areas:[6,7]},
+  5: {dia:"Sexta", blocos:["Bloco 7"], tempo:"60 min", tarde:"Salão Gourmet, guarderia náutica, perímetro, gradis, jardins frontais e pendências", foco:"Fechamento semanal e reinspeções", areas:[5,8,9]}
+};
+// rodízio mensal de aprofundamento (J)
+const RD_RODIZIO = ["Prismas, shafts, drenagem, infiltrações, terraços e pontos de cobertura com histórico.",
+  "Portarias, elétrica/fiação aparente, CFTV, interfonia, acessos, portões, cancelas e organização.",
+  "Garagem, casa de bombas, salas técnicas, reservatórios, bombas, drenagem e áreas operacionais.",
+  "Áreas de lazer, áreas molhadas, jardins, gradis, chafariz, cascatas e pendências recorrentes.",
+  "Reinspeções, locais NV e prioridades definidas pela Gerência."];
+// ficha semanal por bloco (L)
+const RD_BLOCOS = ["Bloco 1","Bloco 2","Bloco 3","Bloco 4","Bloco 5","Bloco 6","Bloco 7"];
+const RD_NIVEIS = ["Subsolo/garagem do bloco","Térreo/hall/acessos","1º pavimento","2º pavimento","3º pavimento","Escadarias/rotas de fuga","Prismas de ventilação","Terraço/cobertura","Áreas técnicas acessíveis"];
+const RD_CATS = [["LIM","Limpeza"],["CON","Conservação/pintura"],["ELE","Elétrica/iluminação"],["HID","Hidráulica/drenagem"],["RES","Resíduos/lixeiras"],["SEG","Segurança/circulação"],["GAS","Shaft gás"],["SEL","Shaft elétrica"]];
+// ficha diária das áreas comuns (M)
+const RD_AREAS = ["Piscina/deck/hidromassagem/sauna","Jardins/chafariz/cascatas/áreas externas","Quadra/campinho/áreas esportivas","Game House/Casa do Pirata/sala de jogos",
+  "Academia/áreas molhadas","Salão Gourmet/convivência","Portarias Norte/Sul","Garagem/mensageria/bicicletários","Guarderia náutica/perímetro/gradis","Pendências/reinspeções"];
+// checklist-mestre consolidado (A a I)
+const RD_CHECK = {
+  A: {t:"Blocos, halls, pavimentos, escadarias e garagem vinculada", d:"Aplicar aos 7 blocos, registrando separadamente térreo, 1º, 2º e 3º pavimentos, escadarias, áreas de apoio e garagem do bloco.", locais:RD_BLOCOS, itens:[
+    "Identificação do bloco, pavimento e ambiente registrada antes do início.",
+    "Halls, corredores e circulações livres de objetos indevidos e obstruções.",
+    "Pisos limpos, sem resíduos, manchas relevantes, peças soltas ou acúmulo de água.",
+    "Paredes, pintura e revestimentos sem descascamentos, manchas, trincas aparentes ou danos.",
+    "Tetos e forros sem infiltrações, placas soltas, fissuras aparentes ou sinais de umidade.",
+    "Rodapés, batentes, portas, esquadrias, vidros e fechaduras conservados.",
+    "Corrimãos, guarda-corpos, escadarias e rotas de fuga conservados e desobstruídos.",
+    "Portas corta-fogo e portas de acesso íntegras, fechadas/desobstruídas e sem anormalidade aparente.",
+    "Sinalização e iluminação de emergência presentes, acessíveis e visualmente íntegras.",
+    "Extintores/equipamentos de incêndio presentes, acessíveis, sinalizados e sem danos aparentes.",
+    "Luminárias funcionando, sem peças soltas, lâmpadas queimadas ou danos aparentes.",
+    "Sensores de presença, interruptores, tomadas e respectivas tampas íntegros.",
+    "Fios, cabos, eletrodutos, canaletas e caixas aparentes organizados, fixados e protegidos.",
+    "Ausência de emendas improvisadas, fios expostos, cheiro de queimado, ruído elétrico ou aquecimento aparente.",
+    "Quadros elétricos externos fechados, identificados e sem danos aparentes.",
+    "Hidrômetros, registros, conexões e tubulações aparentes sem vazamentos ou danos visíveis.",
+    "Abrigos de hidrômetros limpos, identificados, fechados e conservados.",
+    "Lixeiras limpas, íntegras, sem transbordamento e com resíduos corretamente acondicionados.",
+    "Ralos, grelhas e pontos de drenagem limpos, visíveis e sem obstrução.",
+    "Elevadores sem ruídos, danos, mau funcionamento aparente ou reclamações pendentes relacionadas.",
+    "Garagem vinculada ao bloco: piso, pintura, demarcações, sinalização, iluminação, ventilação e drenagem em ordem.",
+    "Térreo do bloco: hall, acessos, lixeiras, apoios, espelhos/chafariz vinculados ao bloco quando existentes em ordem.",
+    "Ausência de odores anormais, mofo, sinais de infestação ou materiais indevidos."]},
+  B: {t:"Shafts de gás, elétrica e iluminação", d:"Verificação específica dos shafts por bloco/pavimento.", locais:RD_BLOCOS, itens:[
+    "Shafts de gás e elétrica identificados por bloco/pavimento e acessíveis por ponto seguro.",
+    "Portas, tampas, fechaduras e vedações dos shafts íntegras e fechadas.",
+    "Identificação, sinalização e restrição de acesso visíveis e conservadas.",
+    "Shaft de gás: tubulações, registros e conexões aparentes conservados, sem danos visíveis.",
+    "Shaft de gás: ausência de odor de gás, indício de vazamento, corrosão relevante ou interferência indevida.",
+    "Shaft elétrico/iluminação: cabos, caixas, componentes e eletrodutos aparentes fixados e organizados.",
+    "Shaft elétrico/iluminação: ausência de fios expostos, emendas improvisadas, sobrecarga aparente ou aquecimento.",
+    "Ventilação dos shafts livre, sem obstrução por objetos, resíduos ou materiais de terceiros.",
+    "Ausência de infiltração, umidade, gotejamento ou mofo no interior/acesso dos shafts.",
+    "Limpeza e organização adequadas; ausência de entulho, objetos guardados ou descarte irregular.",
+    "Qualquer odor de gás, fio exposto ou aquecimento classificado como C e comunicado imediatamente."]},
+  C: {t:"Prismas de ventilação", d:"Aplicar a todos os prismas cadastrados, apenas por acesso seguro e de forma visual.", locais:RD_BLOCOS, itens:[
+    "Prismas cadastrados, identificados e vistoriados pelo ponto de acesso seguro.",
+    "Limpeza geral; ausência de resíduos, entulho, objetos descartados e materiais soltos.",
+    "Ausência de acúmulo de água, empoçamentos, gotejamentos e drenagem comprometida.",
+    "Ralos, grelhas, calhas e pontos de drenagem visíveis e sem obstrução.",
+    "Paredes, pintura e revestimentos sem danos aparentes, mofo ou umidade anormal.",
+    "Tubulações e instalações aparentes sem vazamentos, corrosão relevante ou danos visíveis.",
+    "Grades, telas, proteções, fechamentos e guarda-corpos íntegros.",
+    "Ausência de objetos que prejudiquem ventilação, acesso ou ofereçam risco de queda.",
+    "Ausência de vegetação invasiva, ninhos, pragas ou sinais de infestação.",
+    "Pontos não acessados registrados como NV com motivo e retorno programado."]},
+  D: {t:"Terraços, coberturas e áreas técnicas superiores", d:"Coberturas, terraços, casas de máquinas, reservatórios superiores e instalações técnicas existentes.", locais:RD_BLOCOS, itens:[
+    "Pisos, revestimentos e impermeabilização aparente sem danos relevantes.",
+    "Ausência de empoçamentos, infiltrações, umidade anormal ou sinais de falha de drenagem.",
+    "Ralos, grelhas, calhas, drenos e condutores pluviais desobstruídos visualmente.",
+    "Platibandas, muretas, guarda-corpos, fechamentos e gradis conservados.",
+    "Portas, alçapões e acessos fechados, íntegros e com controle de acesso.",
+    "Ausência de entulho, materiais soltos ou objetos sujeitos à ação do vento.",
+    "Tubulações, suportes, antenas, equipamentos e instalações aparentes conservados.",
+    "Casas de máquinas/compartimentos técnicos limpos, organizados e com acesso livre.",
+    "Reservatórios superiores: tampas, fechamentos, acessos e tubulações aparentes íntegros.",
+    "Barriletes, registros, bombas, válvulas, ventilação/exaustão, climatização e SPDA sem anormalidades aparentes.",
+    "Quadros elétricos externos fechados, identificados e sem danos; cabos/canaletas protegidos.",
+    "Iluminação, portas, pintura e conservação geral em ordem."]},
+  E: {t:"Áreas técnicas do subsolo, garagem e casa de bombas", d:"Verificação externa e visual; não abrir painéis, reservatórios ou equipamentos nem realizar testes operacionais.", locais:["Subsolo e garagem","Casa de bombas","Salas técnicas"], itens:[
+    "Casa de bombas e sistemas de recalque organizados, limpos e com acesso livre para manutenção.",
+    "Bombas, motores, registros, válvulas, tubulações e conexões sem ruído, vazamento ou anormalidade visual perceptível.",
+    "Cisternas e reservatórios inferiores com tampas, acessos e fechamentos íntegros; sem vazamentos aparentes.",
+    "Barriletes, tubulações hidráulicas, registros e suportes conservados.",
+    "Quadros e salas elétricas fechados, identificados e com condição externa regular.",
+    "Gerador/área de apoio, quando existente, limpo, organizado e sem sinais aparentes de falha.",
+    "Sistemas de ventilação/exaustão da garagem sem anormalidades perceptíveis.",
+    "Sistemas de incêndio, bombas, tubulações, hidrantes e sinalizações com acesso livre e sem danos aparentes.",
+    "Poços de drenagem, bombas de águas pluviais, ralos, canaletas e grelhas limpos/desobstruídos.",
+    "Salas de telecomunicações, CFTV, controle de acesso, depósitos e almoxarifados organizados.",
+    "Portas, fechaduras, iluminação, pintura, identificação e sinalização conservadas.",
+    "Fiação aparente, eletrodutos, canaletas e suportes íntegros, organizados e sem improvisos.",
+    "Ausência de vazamentos, infiltrações, odores anormais, materiais indevidos ou obstrução de acesso.",
+    "Cadastro individual das salas técnicas e equipamentos atualizado."]},
+  F: {t:"Portarias Norte e Sul", d:"Aplicar separadamente às duas portarias, incluindo ambiente interno, entorno, acessos e sistemas aparentes.", locais:["Portaria Norte","Portaria Sul"], itens:[
+    "Pisos, paredes, rodapés, tetos, pintura, revestimentos, vidros e esquadrias limpos e conservados.",
+    "Portas, fechaduras, bancadas, gavetas e mobiliário conservados e funcionais.",
+    "Posto de trabalho organizado, sem caixas, fios soltos ou materiais indevidos.",
+    "Banheiro/área de apoio limpos, com insumos e sem vazamentos aparentes.",
+    "Iluminação, climatização e ventilação sem anormalidades perceptíveis.",
+    "Computadores, monitores, telefones, interfonia, CFTV, controle de acesso e nobreaks sem anormalidades aparentes.",
+    "Cabos, tomadas, canaletas, eletrodutos e caixas de passagem protegidos, fixados e organizados.",
+    "Ausência de extensões improvisadas, sobrecarga, aquecimento, água próxima a equipamentos ou cheiro de queimado.",
+    "Quadros elétricos fechados, identificados e sem danos externos aparentes.",
+    "Portões, cancelas, portas, fechaduras, sensores, semáforos e sinalizações sem dano ou comportamento anormal visível.",
+    "Calçadas, rampas, pisos, ralos e drenagem do entorno limpos, conservados e desobstruídos.",
+    "Gradis, muros, fechamentos, jardins frontais e iluminação externa em ordem.",
+    "Visibilidade, fluxo e segurança do acesso sem pontos de risco ou obstrução."]},
+  G: {t:"Áreas externas, jardins, chafariz, cascatas e esportes", d:"Jardins frontais, gradis, perímetro, chafariz, cascatas, piscina, áreas esportivas, guarderia náutica e mobiliários externos.", locais:["Áreas externas"], itens:[
+    "Perímetro, gradis, muros, cercas, portões e fechamentos conservados e sem pontos vulneráveis aparentes.",
+    "Jardins, canteiros, palmeiras, horta/pomar e vegetação organizados, sem resíduos ou riscos de queda/obstrução.",
+    "Calçadas, pisos externos, rampas e circulações limpos, íntegros e sem irregularidades perigosas.",
+    "Ralos, grelhas, canaletas, drenagem externa e pontos de escoamento sem obstrução visível.",
+    "Iluminação externa, postes, refletores, sensores e tomadas aparentes conservados.",
+    "Chafariz, cascatas e espelhos d’água limpos, com nível/funcionamento aparente normal e sem vazamentos visíveis.",
+    "Piscina, deck, hidromassagem, sauna e áreas molhadas com conservação, limpeza, sinalização e segurança aparentes em ordem.",
+    "Quadra de areia, campinho, playground/Casa do Pirata externa e mobiliário com conservação e limpeza adequadas.",
+    "Guarderia náutica, flutuantes/deck, acessos e áreas de apoio organizados e sem materiais indevidos.",
+    "Bancos, mesas, ombrelones, lixeiras, placas e demais mobiliários íntegros, limpos e estáveis.",
+    "Ausência de fezes de animais, descarte irregular, pragas, odores anormais ou acúmulo de água.",
+    "Pendências recorrentes registradas para fechamento semanal."]},
+  H: {t:"Áreas internas de lazer e convivência", d:"Game House, Casa do Pirata, sala de jogos, academia, áreas molhadas, salão gourmet e ambientes de apoio.", locais:["Áreas de lazer"], itens:[
+    "Game House, Casa do Pirata, sala de jogos e áreas de convivência limpas e organizadas.",
+    "Mobiliário, brinquedos, mesas, cadeiras, sinuca, jogos e acessórios íntegros e seguros.",
+    "Pisos, paredes, pintura, rodapés, forros, portas e esquadrias conservados.",
+    "Iluminação, tomadas, interruptores, climatização, televisores, consoles e equipamentos sem anormalidade aparente.",
+    "Casa do Pirata: ausência de alimentos, calçados e objetos indevidos; regras de uso visíveis quando aplicável.",
+    "Academia: limpeza, organização, equipamentos, estofados, cabos, pesos e acessórios sem dano aparente.",
+    "Academia: ventilação/climatização, espelhos, bebedouro, sinalização e insumos em ordem.",
+    "Hidromassagem, sauna, spa e áreas de apoio com limpeza, drenagem, revestimentos e portas em ordem.",
+    "Salão Gourmet: mesas, cadeiras, bancadas, eletros, torneiras, ralos, banheiros e lixeiras em ordem.",
+    "Ausência de vazamentos, odores, mofo, infestação, fios expostos ou equipamentos com aquecimento anormal.",
+    "Regras de uso, horários, sinalizações e eventuais interdições visíveis e preservadas."]},
+  I: {t:"Garagem, mensageria e áreas operacionais", d:"Garagem geral, acessos, mensageria, armários inteligentes, bicicletários, depósitos e circulações.", locais:["Garagem e mensageria"], itens:[
+    "Pisos, pintura, demarcações de vagas, faixas, setas e sinalização conservados.",
+    "Circulações de veículos e pedestres livres, sem materiais indevidos, obstruções ou descarte irregular.",
+    "Iluminação, ventilação, sensores, espelhos, sinalização e comunicação visual em ordem.",
+    "Ralos, grelhas, canaletas e drenagem sem obstrução, odor ou empoçamento relevante.",
+    "Portões, cancelas, semáforos, leitores, TAGs e equipamentos de controle sem anormalidade aparente.",
+    "Câmeras, CFTV, interfonia e infraestrutura aparente conservados e protegidos.",
+    "Mensageria/armários inteligentes: limpeza, organização, funcionamento visual e ausência de encomendas esquecidas.",
+    "Bicicletários e áreas de apoio organizados, sem itens abandonados ou fora do local permitido.",
+    "Lixeiras, áreas de resíduos e pontos de coleta limpos, identificados e sem transbordamento.",
+    "Sinais de infiltração, vazamento, umidade, fissuras, oxidação ou danos estruturais aparentes registrados com foto.",
+    "Rotas de fuga, escadas, portas e equipamentos de incêndio acessíveis e desobstruídos."]}
+};
+// itens de cada ficha (chave fixa por posição: permite comparar reincidência entre semanas)
+function rdModeloItens(tipo, secao){
+  if (tipo === "bloco") return RD_NIVEIS.flatMap((n, i) => RD_CATS.map(([c, rot]) => ({k:`n${i}${c}`, g:n, r:rot, c:""})));
+  if (tipo === "areas") return RD_AREAS.map((a, i) => ({k:`a${i}`, g:"", r:a, c:"", p:""}));
+  const s = RD_CHECK[secao]; return s ? s.itens.map((t, i) => ({k:`${secao}${i + 1}`, g:`${secao} · ${s.t}`, r:t, c:""})) : [];
+}
+
+// ---------- ronda: telas (Hoje, Rondas, Pendências, Fechamento semanal) e a ficha ----------
+// Só no setor Administração. Faz quem tem "Fazer ronda"; acompanha quem tem "Ver rondas".
+const RD = { lista:null, vista:"hoje", edit:null, sujo:false, semana:"", pf:"abertas", carregando:false, fotos:new Map(), erro:"" };
+const rdPodeFazer = () => can("ronda_fazer");
+const rdTipoRot = {bloco:"Ficha do bloco", areas:"Áreas comuns", checklist:"Checklist"};
+const rdSegunda = d => { const x = new Date((d || hoje()) + "T12:00"); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return iso(x); };
+const rdSomar = (d, n) => { const x = new Date(d + "T12:00"); x.setDate(x.getDate() + n); return iso(x); };
+const rdTitulo = r => r.tipo === "bloco" ? `Ficha do ${r.alvo}` : r.tipo === "areas" ? "Ficha diária das áreas comuns" : `Checklist ${(r.extras || {}).secao || ""} · ${(RD_CHECK[(r.extras || {}).secao] || {}).t || ""} — ${r.alvo}`;
+const rdCodPill = c => c ? `<span class="rd-cod c-${esc(c)}">${esc(c)}</span>` : `<span class="rd-cod vazio">—</span>`;
+const rdFlag = c => c === "P" || c === "C" || c === "NV";
+const rdPend = () => (RD.lista || []).flatMap(r => r.itens.filter(i => i.c === "P" || i.c === "C").map(i => ({r, i})));
+function rdBadge(){
+  const b = $("#b-ronda"); if (!b) return;
+  const ab = rdPend().filter(x => !x.i.res);
+  b.textContent = ab.length; b.hidden = !ab.length;
+  b.classList.toggle("alert", ab.some(x => x.i.c === "C"));
+}
+async function carregarRondas(silencioso){
+  if (!TEM_ADM || !podeAba("rondas") || RD.carregando || !S.token) return;
+  RD.carregando = true;
+  try { const r = await api("rondas"); RD.lista = r.rondas || []; RD.erro = ""; }
+  catch(e){ RD.erro = e.message; if (!silencioso) toast(e.message, true); }
+  finally { RD.carregando = false; rdBadge(); renderRondas(); }
+}
+function rdTrocarLista(r){
+  if (!RD.lista) RD.lista = [];
+  const i = RD.lista.findIndex(x => x.id === r.id);
+  if (i >= 0) RD.lista[i] = r; else RD.lista.unshift(r);
+  rdBadge();
+}
+function renderRondas(){
+  const sec = $("#t-rondas"); if (!sec || sec.hidden) return;
+  const ed = !!RD.edit;
+  $("#rd-lista-box").hidden = ed; $("#rd-editor").hidden = !ed;
+  if (ed) { rdEditor(); return; }
+  $$("#rd-vistas [data-v]").forEach(b => b.setAttribute("aria-selected", b.dataset.v === RD.vista ? "true" : "false"));
+  const nAb = rdPend().filter(x => !x.i.res).length;
+  $("#rd-n-pend").textContent = nAb; $("#rd-n-pend").hidden = !nAb;
+  const box = $("#rd-corpo");
+  if (RD.erro && !RD.lista) { box.innerHTML = `<div class="notice crit">${esc(RD.erro)}${/desconhecida/i.test(RD.erro) ? " A ronda precisa do Apps Script novo (colar o código e implantar uma nova versão)." : ""}</div>`; return; }
+  if (!RD.lista) { box.innerHTML = `<div class="empty"><span class="spin" aria-hidden="true"></span> Carregando as rondas…</div>`; return; }
+  ({hoje:rdHoje, rondas:rdHistorico, pend:rdPendencias, fech:rdFechamento})[RD.vista](box);
+}
+// ---- Hoje: roteiro do dia, rodízio do mês, fichas em andamento e outras fichas ----
+function rdHoje(box){
+  const h = new Date(), dow = h.getDay(), P = RD_PROG[dow], seg = rdSegunda(), sem = Math.min(5, Math.ceil(h.getDate() / 7));
+  const daSemana = RD.lista.filter(r => r.data >= seg && r.data <= rdSomar(seg, 6));
+  const deHoje = (tipo, alvo) => RD.lista.find(r => r.data === hoje() && r.tipo === tipo && r.alvo === alvo);
+  const botao = (tipo, alvo, rot, extra) => {
+    const r = deHoje(tipo, alvo);
+    if (r) return `<button type="button" class="btn small ${r.status === "Concluída" ? "" : "primary"}" data-rd-abrir="${esc(r.id)}">${r.status === "Concluída" ? "✓ " + esc(r.numero) + " concluída" : "Continuar " + esc(r.numero)}</button>`;
+    return rdPodeFazer() ? `<button type="button" class="btn small primary" data-rd-novo="${tipo}" data-alvo="${esc(alvo)}"${extra || ""}>${esc(rot)}</button>` : `<span class="muted">não feita</span>`;
+  };
+  const andamento = RD.lista.filter(r => r.status === "Em andamento");
+  const blocosOk = new Set(daSemana.filter(r => r.tipo === "bloco" && r.status === "Concluída").map(r => r.alvo));
+  const dataLonga = h.toLocaleDateString("pt-BR", {weekday:"long", day:"2-digit", month:"2-digit"});
+  box.innerHTML = `
+    <div class="rd-grid">
+      <section class="panel rd-hoje"><h3>Hoje · ${esc(dataLonga.charAt(0).toUpperCase() + dataLonga.slice(1))}</h3>
+        ${P ? `<div class="rd-turno"><b>Manhã</b> <span class="muted">Supervisor + Auxiliar · ${esc(P.tempo)}</span>
+            <ul>${P.blocos.map(b => `<li><span>${esc(b)}</span>${botao("bloco", b, "Iniciar ficha")}</li>`).join("")}</ul></div>
+          <div class="rd-turno"><b>Tarde</b> <span class="muted">Auxiliar · 1h</span><p>${esc(P.tarde)}</p>
+            <ul><li><span>Ficha diária das áreas comuns</span>${botao("areas", "Áreas comuns", "Iniciar ficha", ` data-periodo="Tarde"`)}</li></ul></div>
+          <p class="rd-foco"><b>Foco mínimo:</b> ${esc(P.foco)}</p>`
+        : `<p class="muted">Sem roteiro programado para hoje (a programação vai de segunda a sexta). Se precisar, use as fichas ao lado.</p>`}
+        <p class="rd-regra">Risco à segurança, vazamento, eletricidade exposta, rota de fuga obstruída ou ocorrência relevante prevalecem sobre o roteiro: registre como C e comunique a Gerência.</p>
+      </section>
+      <section class="panel"><h3>Rodízio do mês · ${sem}ª semana</h3><p>${esc(RD_RODIZIO[sem - 1])}</p>
+        <h3 style="margin-top:14px">Blocos desta semana</h3>
+        <div class="rd-chips">${RD_BLOCOS.map(b => `<span class="rd-chip ${blocosOk.has(b) ? "ok" : ""}">${blocosOk.has(b) ? "✓ " : ""}${esc(b.replace("Bloco ", "B"))}</span>`).join("")}</div>
+        <p class="hint">Ficha do bloco concluída nesta semana (segunda a domingo).</p>
+      </section>
+      ${andamento.length ? `<section class="panel"><h3>Em andamento</h3><ul class="rd-lst">${andamento.map(r => `<li><button type="button" class="link" data-rd-abrir="${esc(r.id)}">${esc(r.numero)} · ${esc(rdTitulo(r))}</button><span class="muted">${fData(r.data)} · ${esc(r.responsaveis || "")}</span></li>`).join("")}</ul></section>` : ""}
+      ${rdPodeFazer() ? `<section class="panel"><h3>Outras fichas</h3>
+        <div class="rd-nova"><label class="field"><span>Ficha semanal do bloco</span><select class="input" id="rd-n-bloco">${RD_BLOCOS.map(b => `<option>${b}</option>`).join("")}</select></label><button type="button" class="btn" id="rd-n-bloco-ok">Iniciar</button></div>
+        <div class="rd-nova"><label class="field"><span>Checklist-mestre</span><select class="input" id="rd-n-sec">${Object.entries(RD_CHECK).map(([k, s]) => `<option value="${k}">${k} · ${esc(s.t)}</option>`).join("")}</select></label>
+          <label class="field"><span>Local</span><input class="input" id="rd-n-local" list="rd-dl-local" placeholder="Ex.: Bloco 3, Portaria Norte"></label><datalist id="rd-dl-local"></datalist><button type="button" class="btn" id="rd-n-sec-ok">Iniciar</button></div>
+        <div class="rd-nova"><span>Ficha diária das áreas comuns (manhã ou extra)</span><button type="button" class="btn" data-rd-novo="areas" data-alvo="Áreas comuns" data-periodo="Manhã">Iniciar</button></div>
+      </section>` : ""}
+      <section class="panel"><h3>Códigos</h3><ul class="rd-legenda">${RD_COD.map(([c, rot, d]) => `<li>${rdCodPill(c)} <b>${esc(rot)}</b> <span class="muted">${esc(d)}</span></li>`).join("")}</ul>
+        <p class="rd-regra"><b>Regra principal:</b> não registrar OK para local não observado. Sem acesso ou segurança para vistoriar, use NV, informe o motivo e programe o retorno.</p></section>
+    </div>`;
+  if (rdPodeFazer()) {
+    const sec = $("#rd-n-sec"), dl = () => { $("#rd-dl-local").innerHTML = (RD_CHECK[sec.value].locais || []).map(l => `<option value="${esc(l)}">`).join(""); const lc = RD_CHECK[sec.value].locais; $("#rd-n-local").value = lc && lc.length === 1 ? lc[0] : ""; };
+    sec.onchange = dl; dl();
+    $("#rd-n-bloco-ok").onclick = () => rdIniciar("bloco", $("#rd-n-bloco").value);
+    $("#rd-n-sec-ok").onclick = () => { const l = $("#rd-n-local").value.trim(); if (!l) { toast("Informe o local (ex.: Bloco 3, Portaria Norte).", true); $("#rd-n-local").focus(); return; } rdIniciar("checklist", l, {secao:sec.value}); };
+  }
+}
+// ---- histórico ----
+function rdHistorico(box){
+  const lista = RD.lista;
+  box.innerHTML = `<p class="hint">Rondas das últimas ${RD_DIAS_TELA} semanas e as mais antigas que ainda têm pendência aberta. As fichas completas ficam na aba Rondas da planilha.</p>
+    <div class="tablebox"><table><thead><tr><th>Nº</th><th>Ficha</th><th class="hide-s">Data</th><th class="hide-m">Responsáveis</th><th>Resumo</th><th>Situação</th></tr></thead><tbody>
+    ${lista.length ? lista.map(r => `<tr class="click" tabindex="0" data-rd-abrir="${esc(r.id)}"><td class="mono">${esc(r.numero)}</td><td><b>${esc(rdTitulo(r))}</b><span class="sub">${esc(rdTipoRot[r.tipo] || "")}</span></td>
+      <td class="hide-s num">${fData(r.data)}</td><td class="hide-m">${esc(r.responsaveis || "—")}</td><td>${esc(r.resumo || "—")}</td>
+      <td><span class="pill ${r.status === "Concluída" ? "s-ok" : "st-andamento"}">${esc(r.status)}</span></td></tr>`).join("")
+      : `<tr><td colspan="6"><div class="empty">Nenhuma ronda registrada ainda.</div></td></tr>`}</tbody></table></div>`;
+}
+const RD_DIAS_TELA = 8;
+// ---- pendências (P e C) ----
+function rdPendencias(box){
+  const todas = rdPend(), ab = todas.filter(x => !x.i.res), res = todas.filter(x => x.i.res).sort((a, b) => String(b.i.res).localeCompare(String(a.i.res)));
+  const reinc = rdReincidentes();
+  const lista = RD.pf === "abertas" ? ab.sort((a, b) => (a.i.c === "C" ? 0 : 1) - (b.i.c === "C" ? 0 : 1) || String(a.r.data).localeCompare(String(b.r.data))) : res.slice(0, 60);
+  box.innerHTML = `<div class="chips" role="group" aria-label="Mostrar"><button class="chip" type="button" data-pf="abertas" aria-pressed="${RD.pf === "abertas"}">Abertas (${ab.length})</button><button class="chip" type="button" data-pf="resolvidas" aria-pressed="${RD.pf !== "abertas"}">Resolvidas (${res.length})</button></div>
+    <p class="hint">Itens marcados P (pendente) ou C (crítico) nas fichas. Ficam aqui até alguém confirmar a solução${RD.pf === "abertas" ? " — uma pendência encaminhada, mas não resolvida, continua aberta" : ""}.</p>
+    <div class="rd-pend">${lista.length ? lista.map(({r, i}) => `<article class="rd-pi ${i.c === "C" ? "crit" : ""} ${i.res ? "res" : ""}">
+      <div class="rd-pi-top">${rdCodPill(i.c)}<b>${esc(i.g ? i.g + " · " : "")}${esc(i.r)}</b>${reinc.has(r.tipo + "|" + r.alvo + "|" + i.k) && !i.res ? `<span class="pill s-baixo">reincidente</span>` : ""}</div>
+      <p class="rd-pi-o">${esc(i.o || "")}</p>
+      <p class="muted rd-pi-m"><button type="button" class="link" data-rd-abrir="${esc(r.id)}">${esc(r.numero)}</button> · ${esc(r.alvo)} · ${fData(r.data)} · ${esc(r.responsaveis || "")}${(i.f || []).length ? ` · ${i.f.map((f, j) => `<button type="button" class="link" data-rd-foto="${esc(f)}" data-rd="${esc(r.id)}">foto ${j + 1}</button>`).join(" ")}` : ""}</p>
+      ${i.res ? `<p class="rd-pi-res">✓ Resolvida em ${esc(pdMarca(i.res))}: ${esc(i.ro || "")}</p>`
+        : rdPodeFazer() ? `<form class="rd-resolver" data-rd="${esc(r.id)}" data-k="${esc(i.k)}"><input class="input" maxlength="300" placeholder="Como foi resolvida (ex.: OS-0012 concluída, reinspecionado hoje)" aria-label="Como foi resolvida"><button class="btn small" type="submit">Marcar como resolvida</button></form>` : ""}
+    </article>`).join("") : `<div class="empty">${RD.pf === "abertas" ? "Nenhuma pendência aberta." : "Nenhuma pendência resolvida ainda."}</div>`}</div>`;
+  $$("#rd-corpo [data-pf]").forEach(b => b.onclick = () => { RD.pf = b.dataset.pf; renderRondas(); });
+  $$("#rd-corpo .rd-resolver").forEach(f => f.onsubmit = ev => {
+    ev.preventDefault(); const inp = f.querySelector("input"), obs = inp.value.trim();
+    if (!obs) { toast("Diga como foi resolvida.", true); inp.focus(); return; }
+    enviar(f.querySelector("button"), null, "rondaResolver", {id:f.dataset.rd, k:f.dataset.k, obs}, r => { rdTrocarLista(r.ronda); renderRondas(); });
+  });
+}
+// mesmo item (local + ficha) com P ou C em duas ou mais rondas nas últimas 4 semanas
+function rdReincidentes(base){
+  const corte = rdSomar(base || hoje(), -28), n = new Map();
+  (RD.lista || []).filter(r => r.data >= corte && r.data <= (base ? rdSomar(base, 6) : hoje())).forEach(r => r.itens.forEach(i => { if (i.c === "P" || i.c === "C") { const k = r.tipo + "|" + r.alvo + "|" + i.k; n.set(k, (n.get(k) || 0) + 1); } }));
+  return new Set([...n].filter(([, v]) => v >= 2).map(([k]) => k));
+}
+// ---- fechamento semanal (O) ----
+function rdFechamento(box){
+  if (!RD.semana) RD.semana = rdSegunda();
+  const ini = RD.semana, fim = rdSomar(ini, 6);
+  const da = RD.lista.filter(r => r.data >= ini && r.data <= fim), conc = da.filter(r => r.status === "Concluída");
+  const blocos = new Set(conc.filter(r => r.tipo === "bloco").map(r => r.alvo));
+  const nivRegs = new Set(conc.filter(r => r.tipo === "bloco").flatMap(r => r.itens.filter(i => i.c && i.c !== "NV").map(i => i.g)));
+  const areasRegs = new Set(conc.filter(r => r.tipo === "areas").flatMap(r => r.itens.filter(i => i.c && i.c !== "NV" && i.c !== "NA").map(i => i.r)));
+  const itens = da.flatMap(r => r.itens.map(i => ({r, i})));
+  const novas = itens.filter(x => x.i.c === "P" || x.i.c === "C"), crit = novas.filter(x => x.i.c === "C");
+  const resolvidas = rdPend().filter(x => x.i.res && String(x.i.res).slice(0, 10) >= ini && String(x.i.res).slice(0, 10) <= fim);
+  const nv = itens.filter(x => x.i.c === "NV");
+  const reinc = rdReincidentes(ini), reincL = rdPend().filter(x => x.r.data >= rdSomar(ini, -28) && x.r.data <= fim && reinc.has(x.r.tipo + "|" + x.r.alvo + "|" + x.i.k));
+  const abertasC = rdPend().filter(x => !x.i.res && x.i.c === "C");
+  const proxSem = Math.min(5, Math.ceil(new Date(rdSomar(ini, 7) + "T12:00").getDate() / 7));
+  const osTem = Array.isArray(S.osTodas) && S.osTodas.length !== undefined && (can("os_ver") || can("os_gerenciar") || can("os_abrir"));
+  const osConc = osTem ? S.osTodas.filter(o => o.status === "Concluída" && String(o.concluidaEm).slice(0, 10) >= ini && String(o.concluidaEm).slice(0, 10) <= fim).length : null;
+  const osVenc = osTem ? S.osTodas.filter(o => !osEncerrada(o) && o.prazo && o.prazo < hoje()).length : null;
+  const lin = (rot, val) => `<tr><th>${esc(rot)}</th><td>${val}</td></tr>`;
+  const lista = (arr, f) => arr.length ? `<ul class="rd-fl">${arr.slice(0, 12).map(f).join("")}${arr.length > 12 ? `<li class="muted">+ ${arr.length - 12}</li>` : ""}</ul>` : `<span class="muted">nenhum</span>`;
+  const desc = x => `<li>${rdCodPill(x.i.c)} ${esc(x.r.alvo)} · ${esc(x.i.g ? x.i.g + " · " : "")}${esc(x.i.r)}${x.i.o ? ` — <i>${esc(x.i.o)}</i>` : ""}</li>`;
+  box.innerHTML = `<div class="rd-sem"><button type="button" class="btn small" data-sem="-7" aria-label="Semana anterior">‹</button><b>Semana de ${fData(ini)} a ${fData(fim)}</b><button type="button" class="btn small" data-sem="7" aria-label="Próxima semana" ${fim >= hoje() ? "disabled" : ""}>›</button></div>
+    <div class="tablebox"><table class="rd-fech"><tbody>
+      ${lin("Blocos vistoriados", `<div class="rd-chips">${RD_BLOCOS.map(b => `<span class="rd-chip ${blocos.has(b) ? "ok" : "falta"}">${blocos.has(b) ? "✓" : "✗"} ${esc(b.replace("Bloco ", "B"))}</span>`).join("")}</div>`)}
+      ${lin("Pavimentos registrados", RD_NIVEIS.map(n => `<span class="rd-tag ${nivRegs.has(n) ? "ok" : ""}">${esc(n)}</span>`).join(" "))}
+      ${lin("Áreas comuns vistoriadas", RD_AREAS.map(a => `<span class="rd-tag ${areasRegs.has(a) ? "ok" : ""}">${esc(a)}</span>`).join(" ") + `<br><span class="muted">${conc.filter(r => r.tipo === "areas").length} ficha(s) diária(s) concluída(s)</span>`)}
+      ${lin("Ocorrências novas", `<b>${novas.length}</b> ${lista(novas, desc)}`)}
+      ${lin("Ocorrências críticas", `<b class="${crit.length ? "atr" : ""}">${crit.length}</b>`)}
+      ${lin("Pendências resolvidas na semana", `<b>${resolvidas.length}</b>`)}
+      ${osTem ? lin("OS concluídas na semana", `<b>${osConc}</b>`) + lin("OS vencidas (agora)", `<b class="${osVenc ? "atr" : ""}">${osVenc}</b>`) : ""}
+      ${lin("Locais NV e retorno programado", lista(nv, desc))}
+      ${lin("Pendências reincidentes", lista(reincL.filter((x, j, a) => a.findIndex(y => y.r.alvo === x.r.alvo && y.i.k === x.i.k) === j), desc))}
+      ${lin("Prioridades da semana seguinte", `${abertasC.length ? `<b class="atr">${abertasC.length} crítica(s) ainda aberta(s).</b> ` : ""}${nv.length ? `Retornar aos ${nv.length} local(is) NV. ` : ""}Rodízio: <i>${esc(RD_RODIZIO[proxSem - 1])}</i>`)}
+    </tbody></table></div>
+    <p class="hint">Uma ocorrência só é encerrada após confirmação da execução e, quando necessário, reinspeção. Pendência encaminhada, mas não resolvida, permanece aberta.</p>`;
+  $$("#rd-corpo [data-sem]").forEach(b => b.onclick = () => { RD.semana = rdSomar(RD.semana, +b.dataset.sem); renderRondas(); });
+}
+// ---- iniciar, abrir, salvar e concluir ----
+async function rdIniciar(tipo, alvo, extras){
+  const ja = (RD.lista || []).find(r => r.status === "Em andamento" && r.tipo === tipo && r.alvo === alvo && r.data === hoje() && (tipo !== "checklist" || (r.extras || {}).secao === (extras || {}).secao));
+  if (ja) { rdAbrir(ja.id); return; }
+  const itens = rdModeloItens(tipo, (extras || {}).secao);
+  if (!itens.length) return;
+  try {
+    const r = await api("rondaSalvar", {op:"salvar", ronda:{tipo, alvo, data:hoje(), responsaveis:S.nome, extras:extras || {}, itens}});
+    rdTrocarLista(r.ronda); toast(r.msg); rdAbrir(r.ronda.id);
+  } catch(e){ toast(e.message, true); }
+}
+function rdAbrir(id){
+  const r = (RD.lista || []).find(x => x.id === id); if (!r) return;
+  RD.edit = JSON.parse(JSON.stringify(r)); RD.sujo = false; renderRondas(); scrollTo({top:0});
+}
+function rdPayload(){
+  const e = RD.edit;
+  return {id:e.id, tipo:e.tipo, alvo:e.alvo, data:e.data, responsaveis:e.responsaveis, acesso:e.acesso, osRel:e.osRel, obs:e.obs, extras:e.extras || {},
+    itens:e.itens.map(i => { const o = {k:i.k, g:i.g, r:i.r, c:i.c || "", o:i.o || ""}; if (i.p !== undefined) o.p = i.p; return o; })};
+}
+async function rdGravar(op, btn){
+  const msg = $("#rd-msg");
+  if (btn) btn.disabled = true;
+  msg.className = "hint"; msg.innerHTML = `<span class="spin" aria-hidden="true"></span> ${op === "concluir" ? "Concluindo" : op === "reabrir" ? "Reabrindo" : "Salvando"}…`;
+  try {
+    const r = await api("rondaSalvar", {op, ronda: op === "reabrir" ? {id:RD.edit.id} : rdPayload()});
+    rdTrocarLista(r.ronda); RD.edit = JSON.parse(JSON.stringify(r.ronda)); RD.sujo = false;
+    toast(r.msg); rdEditor(); return true;
+  } catch(e){ msg.className = "hint err"; msg.textContent = e.message; return false; }
+  finally { if (btn) btn.disabled = false; }
+}
+function rdSair(){ RD.edit = null; RD.sujo = false; renderRondas(); scrollTo({top:0}); }
+// ---- a ficha ----
+function rdEditor(){
+  const e = RD.edit, box = $("#rd-editor"), ed = e.status === "Em andamento" && rdPodeFazer();
+  const feitos = e.itens.filter(i => i.c).length, tot = e.itens.length, dis = ed ? "" : "disabled";
+  const x = e.extras || {};
+  const segm = i => `<span class="rd-seg" role="group" aria-label="Código">${RD_COD.map(([c, rot]) => `<button type="button" class="c-${c}" data-k="${esc(i.k)}" data-c="${c}" aria-pressed="${i.c === c}" title="${esc(rot)}" ${dis}>${c}</button>`).join("")}</span>`;
+  const detalhe = (i, comRot) => {
+    if (!rdFlag(i.c) && !(i.f || []).length && !i.res) return "";
+    const rotObs = i.c === "NV" ? "Motivo e retorno programado" : "O que foi visto (local exato)";
+    return `<div class="rd-det ${i.c === "C" ? "crit" : ""}">${comRot ? `<b>${esc(i.g)} · ${esc(i.r)} — ${esc(i.c)}</b>` : ""}
+      ${rdFlag(i.c) ? `<input class="input" data-o="${esc(i.k)}" value="${esc(i.o || "")}" maxlength="300" placeholder="${rotObs}${i.c === "C" ? " — comunique a Gerência agora" : ""}" aria-label="${rotObs}" ${dis}>` : ""}
+      <span class="rd-fotos">${(i.f || []).map((f, j) => `<button type="button" class="link" data-rd-foto="${esc(f)}" data-rd="${esc(e.id)}">foto ${j + 1}</button>${ed ? `<button type="button" class="link danger" data-rd-fx="${esc(f)}" aria-label="Tirar a foto ${j + 1}">×</button>` : ""}`).join(" ")}
+        ${ed && rdFlag(i.c) && (i.f || []).length < 3 ? `<label class="btn small rd-fadd">+ Foto<input type="file" accept="image/*" capture="environment" data-rd-up="${esc(i.k)}" hidden></label>` : ""}</span>
+      ${i.res ? `<span class="rd-pi-res">✓ Resolvida em ${esc(pdMarca(i.res))}: ${esc(i.ro || "")}</span>` : ""}</div>`;
+  };
+  let corpo;
+  if (e.tipo === "bloco") {
+    corpo = `<div class="tablebox rd-gradebox"><table class="rd-grade"><thead><tr><th>Nível / ambiente</th>${RD_CATS.map(([c, rot]) => `<th title="${esc(rot)}">${c === "GAS" ? "Shaft gás" : c === "SEL" ? "Shaft elétr." : c}</th>`).join("")}${ed ? "<th></th>" : ""}</tr></thead><tbody>
+      ${RD_NIVEIS.map((n, li) => `<tr><th>${esc(n)}</th>${RD_CATS.map(([c, rot]) => { const i = e.itens.find(z => z.k === `n${li}${c}`) || {k:`n${li}${c}`, c:""};
+        return `<td data-lbl="${esc(rot)}"><select class="rd-sel c-${esc(i.c || "x")}" data-k="${esc(i.k)}" aria-label="${esc(n + " · " + rot)}" ${dis}><option value=""></option>${RD_COD.map(([cc]) => `<option ${cc === i.c ? "selected" : ""}>${cc}</option>`).join("")}</select></td>`; }).join("")}
+        ${ed ? `<td class="rd-fill"><button type="button" class="link" data-fill="${li}" data-v="OK">OK nos vazios</button><button type="button" class="link" data-fill="${li}" data-v="NA">NA nos vazios</button></td>` : ""}</tr>`).join("")}
+      </tbody></table></div>
+      <p class="hint">LIM limpeza · CON conservação/pintura · ELE elétrica/iluminação · HID hidráulica/drenagem · RES resíduos/lixeiras · SEG segurança/circulação. P, C e NV pedem a descrição logo abaixo.</p>
+      <div class="rd-dets">${e.itens.filter(i => rdFlag(i.c) || (i.f || []).length || i.res).map(i => detalhe(i, true)).join("") || ""}</div>`;
+  } else {
+    corpo = `<ol class="rd-itens">${e.itens.map(i => `<li class="rd-item c-${esc(i.c || "x")}"><div class="rd-item-top"><span class="rd-item-r">${esc(i.r)}</span>${segm(i)}</div>
+      ${e.tipo === "areas" ? `<input class="input rd-pontos" data-p="${esc(i.k)}" value="${esc(i.p || "")}" maxlength="200" placeholder="Principais pontos verificados" aria-label="Principais pontos verificados em ${esc(i.r)}" ${dis}>` : ""}
+      ${detalhe(i, false)}</li>`).join("")}</ol>`;
+  }
+  const secInfo = e.tipo === "checklist" ? RD_CHECK[x.secao] : null;
+  const hojeP = RD_PROG[new Date(e.data + "T12:00").getDay()];
+  box.innerHTML = `
+    <div class="ct-top"><button type="button" class="link" id="rd-voltar">← Ronda</button><h2 class="sec">${esc(rdTitulo(e))}</h2><span class="pill ${e.status === "Concluída" ? "s-ok" : "st-andamento"}">${esc(e.numero)} · ${esc(e.status)}</span>
+      <span class="ct-acoes">${ed ? `<button class="btn" type="button" id="rd-salvar">Salvar</button><button class="btn primary" type="button" id="rd-concluir">Concluir ronda</button>` : ""}${e.status === "Concluída" && rdPodeFazer() ? `<button class="btn" type="button" id="rd-reabrir">Reabrir para corrigir</button>` : ""}</span></div>
+    <p class="hint" id="rd-msg">${RD.sujo ? "Alterações não salvas." : ""}</p>
+    ${secInfo ? `<p class="muted">${esc(secInfo.d)}</p>` : ""}
+    ${e.tipo === "areas" && hojeP ? `<p class="muted">Tema da tarde (${esc(hojeP.dia)}): ${esc(hojeP.tarde)}.</p>` : ""}
+    <div class="card ct-card"><div class="form rd-cab">
+      <div class="field"><label for="rd-data">Data</label><input class="input" type="date" id="rd-data" value="${esc(e.data)}" max="${hoje()}" ${dis}></div>
+      <div class="field"><label for="rd-resp">Responsáveis</label><input class="input" id="rd-resp" value="${esc(e.responsaveis || "")}" maxlength="120" ${dis}></div>
+      ${e.tipo === "areas" ? `<div class="field"><label for="rd-per">Período</label><select class="input" id="rd-per" ${dis}>${["Tarde","Manhã","Noite"].map(p => `<option ${p === (x.periodo || "Tarde") ? "selected" : ""}>${p}</option>`).join("")}</select></div>
+        <div class="field"><label for="rd-crit">Ronda crítica realizada?</label><select class="input" id="rd-crit" ${dis}>${["","Sim","Não"].map(p => `<option ${p === (x.critica || "") ? "selected" : ""}>${p}</option>`).join("")}</select></div>
+        <div class="field"><label for="rd-prio">Prioridade do dia</label><input class="input" id="rd-prio" value="${esc(x.prioridade || "")}" maxlength="200" ${dis}></div>` : ""}
+      <div class="field"><label for="rd-acesso">Condições de acesso</label><input class="input" id="rd-acesso" value="${esc(e.acesso || "")}" maxlength="200" placeholder="Ex.: terraço do bloco trancado" ${dis}></div>
+      <div class="field"><label for="rd-os">OS relacionadas</label><input class="input" id="rd-os" value="${esc(e.osRel || "")}" maxlength="120" placeholder="Ex.: OS-0012, OS-0015" ${dis}></div>
+      <div class="field full"><label for="rd-obs">${e.tipo === "bloco" ? "Reinspeção / observações" : "Observações"}</label><textarea class="input" id="rd-obs" maxlength="1000" rows="2" ${dis}>${esc(e.obs || "")}</textarea></div>
+      <p class="full hint">Início ${fDataHora(e.inicio)}${e.fim ? ` · fim ${fDataHora(e.fim)}` : ""}${e.criadaPor ? ` · iniciada por ${esc(e.criadaPor)}` : ""}</p>
+    </div></div>
+    <div class="rd-prog"><span class="track"><i style="width:${tot ? Math.round(feitos / tot * 100) : 0}%"></i></span><span>${feitos} de ${tot} itens com código${e.resumo ? " · " + esc(e.resumo) : ""}</span></div>
+    <div class="card ct-card">${corpo}</div>
+    ${ed ? `<div class="actions" style="margin-top:12px"><button class="btn" type="button" id="rd-salvar2">Salvar</button><button class="btn primary" type="button" id="rd-concluir2">Concluir ronda</button></div>` : ""}`;
+  // eventos
+  $("#rd-voltar").onclick = () => {
+    if (!RD.sujo) { rdSair(); return; }
+    const m = $("#rd-msg"); m.className = "hint err";
+    m.innerHTML = `Há alterações não salvas. <button type="button" class="btn small primary" id="rd-sv-sair">Salvar e sair</button> <button type="button" class="btn small" id="rd-sem-sair">Sair sem salvar</button>`;
+    $("#rd-sv-sair").onclick = async () => { if (await rdGravar("salvar")) rdSair(); };
+    $("#rd-sem-sair").onclick = rdSair;
+  };
+  if ($("#rd-reabrir")) $("#rd-reabrir").onclick = ev => rdGravar("reabrir", ev.target);
+  if (!ed) return;
+  ["#rd-salvar","#rd-salvar2"].forEach(s => $(s).onclick = ev => rdGravar("salvar", ev.target));
+  ["#rd-concluir","#rd-concluir2"].forEach(s => $(s).onclick = ev => rdGravar("concluir", ev.target));
+  const marcar = () => { RD.sujo = true; const m = $("#rd-msg"); if (m && !m.querySelector("button")) { m.className = "hint"; m.textContent = "Alterações não salvas."; } };
+  const cab = [["#rd-data","data"],["#rd-resp","responsaveis"],["#rd-acesso","acesso"],["#rd-os","osRel"],["#rd-obs","obs"]];
+  cab.forEach(([s, k]) => $(s).addEventListener("input", ev => { e[k] = ev.target.value; marcar(); }));
+  [["#rd-per","periodo"],["#rd-crit","critica"],["#rd-prio","prioridade"]].forEach(([s, k]) => { if ($(s)) $(s).addEventListener("input", ev => { e.extras = Object.assign({}, e.extras, {[k]: ev.target.value}); marcar(); }); });
+  const item = k => e.itens.find(i => i.k === k);
+  box.querySelectorAll(".rd-seg button").forEach(b => b.onclick = () => { const i = item(b.dataset.k); i.c = i.c === b.dataset.c ? "" : b.dataset.c; marcar(); rdEditorManterFoco(() => rdEditor(), `.rd-seg [data-k="${CSS.escape(i.k)}"][data-c="${b.dataset.c}"]`); });
+  box.querySelectorAll(".rd-sel").forEach(s => s.onchange = () => { const i = item(s.dataset.k) || (e.itens.push({k:s.dataset.k, c:""}), item(s.dataset.k)); i.c = s.value; marcar(); rdEditorManterFoco(() => rdEditor(), `.rd-sel[data-k="${CSS.escape(i.k)}"]`); });
+  box.querySelectorAll("[data-fill]").forEach(b => b.onclick = () => { const li = b.dataset.fill; e.itens.filter(i => i.k.startsWith(`n${li}`) && i.k.length === `n${li}`.length + 3 && !i.c).forEach(i => { i.c = b.dataset.v; }); marcar(); rdEditor(); });
+  box.querySelectorAll("[data-o]").forEach(inp => inp.addEventListener("input", () => { item(inp.dataset.o).o = inp.value; marcar(); }));
+  box.querySelectorAll("[data-p]").forEach(inp => inp.addEventListener("input", () => { item(inp.dataset.p).p = inp.value; marcar(); }));
+  box.querySelectorAll("[data-rd-up]").forEach(inp => inp.addEventListener("change", async () => {
+    const f = inp.files[0], k = inp.dataset.rdUp; inp.value = ""; if (!f) return;
+    if (RD.sujo && !(await rdGravar("salvar"))) return;
+    const m = $("#rd-msg"); m.className = "hint"; m.innerHTML = `<span class="spin" aria-hidden="true"></span> Enviando a foto…`;
+    try { const b64 = await reduzirFoto(f); const r = await api("rondaFoto", {id:e.id, k, mime:"image/jpeg", b64}); rdTrocarLista(r.ronda); RD.edit = JSON.parse(JSON.stringify(r.ronda)); RD.sujo = false; toast(r.msg); rdEditor(); }
+    catch(er){ m.className = "hint err"; m.textContent = er && er.message && er.message !== "img" ? er.message : "Não deu para ler a foto."; }
+  }));
+  box.querySelectorAll("[data-rd-fx]").forEach(b => b.onclick = async () => {
+    if (!b.dataset.conf) { b.dataset.conf = "1"; b.textContent = "tirar?"; return; }
+    if (RD.sujo && !(await rdGravar("salvar"))) return;
+    try { const r = await api("rondaFotoRemover", {id:e.id, fotoId:b.dataset.rdFx}); rdTrocarLista(r.ronda); RD.edit = JSON.parse(JSON.stringify(r.ronda)); toast(r.msg); rdEditor(); } catch(er){ toast(er.message, true); }
+  });
+}
+// redesenha a ficha mantendo a rolagem e o foco no controle que a pessoa estava usando
+function rdEditorManterFoco(fn, sel){ const y = scrollY; fn(); scrollTo({top:y}); const el = sel && $("#rd-editor " + sel); if (el) el.focus({preventScroll:true}); }
+async function rdVerFoto(rid, fid){
+  $("#modal-box").innerHTML = `<div class="foto-grande"><span class="spin" aria-hidden="true"></span> Carregando a foto…</div><div class="actions"><button class="btn" type="button" id="rd-fz">Fechar</button></div>`;
+  $("#modal").hidden = false; $("#rd-fz").onclick = fecharModal;
+  try {
+    if (!RD.fotos.has(fid)) RD.fotos.set(fid, api("rondaFotoVer", {id:rid, fotoId:fid}).then(r => `data:${r.foto.mime};base64,${r.foto.b64}`));
+    const src = await RD.fotos.get(fid);
+    const box = $("#modal-box .foto-grande"); if (box) box.innerHTML = `<img src="${src}" alt="Foto da ronda" style="max-width:100%;max-height:70vh;display:block;margin:auto">`;
+  } catch(e){ RD.fotos.delete(fid); const box = $("#modal-box .foto-grande"); if (box) box.textContent = e.message; }
+}
+if ($("#t-rondas")) {
+  $("#rd-vistas").addEventListener("click", ev => { const b = ev.target.closest("[data-v]"); if (b) { RD.vista = b.dataset.v; renderRondas(); } });
+  $("#t-rondas").addEventListener("click", ev => {
+    const a = ev.target.closest("[data-rd-abrir]"); if (a) { rdAbrir(a.dataset.rdAbrir); return; }
+    const n = ev.target.closest("[data-rd-novo]"); if (n) { rdIniciar(n.dataset.rdNovo, n.dataset.alvo, n.dataset.periodo ? {periodo:n.dataset.periodo} : {}); return; }
+    const f = ev.target.closest("[data-rd-foto]"); if (f) { rdVerFoto(f.dataset.rd, f.dataset.rdFoto); return; }
+  });
+  $("#t-rondas").addEventListener("keydown", ev => { if (ev.key === "Enter" && ev.target.dataset && ev.target.dataset.rdAbrir && ev.target.tagName === "TR") rdAbrir(ev.target.dataset.rdAbrir); });
 }
 
 // ---------- início ----------
