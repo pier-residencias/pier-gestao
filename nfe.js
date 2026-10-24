@@ -305,5 +305,208 @@
       .filter(x => x.nota > 0.2).sort((x, y) => (y.nota - x.nota) || (y.cobre - x.cobre)).slice(0, n || 5);
   }
 
-  raiz.LeitorNF = { montarLinhas, lerDanfe, lerFotoDanfe, numerosDaLinha, descricaoDaLinha, regiaoProdutos, sugerir, parecido, cobertura };
+  // ---------- características do produto: medida, polegada, seção, potência, corrente, tensão, volume, peso ----------
+  // Regra central: uma característica diferente nunca é aceita sozinha. A semelhança do texto só ordena as sugestões.
+  const LIMITES = {
+    AUTO: 0.6,        // semelhança mínima para "Já cadastrado"
+    FOLGA: 0.15,      // vantagem mínima sobre o segundo material possível
+    CONFIRA: 0.35,    // abaixo disso, a linha vira "Item novo"
+    SUGERE: 0.2,      // abaixo disso, o material nem aparece em "Mais parecidos"
+    TOLERANCIA: 0.005 // arredondamento aceito entre duas medidas (0,5%)
+  };
+  const FRACAO = { 0.125: "1/8", 0.25: "1/4", 0.375: "3/8", 0.5: "1/2", 0.625: "5/8", 0.75: "3/4", 0.875: "7/8" };
+  const SECOES = [0.5, 0.75, 1, 1.5, 2.5, 4, 6, 10, 16, 25, 35, 50, 70, 95, 120];
+  const numC = s => { const t = String(s); return /^\d{1,3}\.\d{3}$/.test(t) ? Number(t.replace(".", "")) : Number(t.replace(",", ".")); };
+  const virgula = n => String(Math.round(n * 1000) / 1000).replace(".", ",");
+  const MM = { mm: 1, cm: 10, m: 1000, mt: 1000, mts: 1000, metro: 1000, metros: 1000 };
+  function rotuloMedida(f) {
+    if (f.semUnidade) return virgula(f.bruto);
+    return f.valor >= 1000 ? virgula(f.valor / 1000) + " m" : virgula(f.valor) + " mm";
+  }
+  function rotuloPol(v) {
+    const int = Math.floor(v + 1e-9), fr = Math.round((v - int) * 1000) / 1000;
+    return (int ? String(int) : "") + (fr ? (int ? " " : "") + (FRACAO[fr] || virgula(fr)) : "") + '"';
+  }
+  const ROTULO = {
+    medida: rotuloMedida, pol: f => rotuloPol(f.valor), secao: f => virgula(f.valor) + " mm²",
+    potencia: f => virgula(f.valor) + " W", corrente: f => virgula(f.valor) + " A",
+    tensao: f => f.valores.join("/") + " V",
+    volume: f => f.valor >= 1000 ? virgula(f.valor / 1000) + " L" : virgula(f.valor) + " ml",
+    massa: f => f.valor >= 1000 ? virgula(f.valor / 1000) + " kg" : virgula(f.valor) + " g"
+  };
+  // lê as características de uma descrição; "resto" é o texto sem elas, para comparar as palavras
+  // marca 3M: em fita, lixa, esponja, EPI etc. "3M" é o fabricante, não 3 metros
+  const PRODUTO_3M = /\b(fitas?|isolante|adesiv\w*|dupla|scotch\w*|lixas?|abrasiv\w*|espumas?|esponjas?|mascaras?|respirador\w*|protetor\w*|auricular\w*|vhb|silver|tape|filtros?|microporo|post|highland|tartan|veda\w*|cola)\b/;
+  const MEDE_3M = /\b(trenas?|metrica|mangueiras?|cabos?|fios?|corrente|cordas?|tubos?|canos?|perfil|barras?|eletroduto|conduite)\b/;
+  function caracteristicas(texto) {
+    let t = " " + String(texto || "").replace(/½/g, " 1/2").replace(/¼/g, " 1/4").replace(/¾/g, " 3/4").replace(/⅛/g, " 1/8").replace(/⁄/g, "/")
+      .normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
+      .replace(/[”“″]/g, '"').replace(/''/g, '"').replace(/²/g, "2").replace(/[®™©]/g, " ") + " ";
+    const lista = [];
+    const tira = (re, fn) => { t = t.replace(re, function () { const r = fn.apply(null, arguments); return r === false ? arguments[0] : " ".repeat(arguments[0].length); }); };
+    const add = (tipo, f) => { f.tipo = tipo; lista.push(f); };
+    const N = "(\\d+(?:[.,]\\d+)?)", FIM = "(?![a-z0-9])";
+    const eFio = /\b(cabo|fio|cordao)\b/.test(t), eDisj = /\bdisj/.test(t);
+    let marca = "";
+    // "3M" grudado é a marca quando o produto é de linha 3M, ou quando já há outra medida linear no texto
+    // ("TRENA 3M", "MANGUEIRA 3M" continuam sendo 3 metros)
+    const RE3M = /(^|[^0-9.,a-z])3m(?![a-z0-9²])/g;
+    if (RE3M.test(t)) {
+      const semEle = t.replace(RE3M, (m, a) => a + "  ");
+      const outraMedida = new RegExp("\\d\\s*(mm|cm|mts|mt|m)" + FIM + "|\\d\\s*x\\s*\\d").test(semEle);
+      if (!MEDE_3M.test(t) && (PRODUTO_3M.test(t) || outraMedida)) { marca = "3M"; t = semEle; }
+    }
+    // rosca métrica de parafuso, porca, barra roscada: M8 / M8x40 (diâmetro 8 mm; comprimento secundário)
+    if (/\b(paraf\w*|porcas?|arruelas?|barras?|roscad\w*|chumbador\w*|prisioneir\w*|rosca)\b/.test(t))
+      tira(new RegExp("\\bm\\s?(\\d{1,2}(?:[.,]\\d)?)(?:\\s*x\\s*" + N + "\\s*(mm)?)?" + FIM, "g"), (m, d, c) => {
+        add("medida", { bruto: numC(d), valor: numC(d), principal: true });
+        if (c) add("medida", { bruto: numC(c), valor: numC(c), principal: false });
+      });
+    // seção de cabo: 2,5mm2 / 2,5 mm²
+    tira(new RegExp(N + "\\s*mm\\s*2" + FIM, "g"), (m, n) => add("secao", { valor: numC(n), principal: true }));
+    // polegadas: 2 1/2" · 3/4 · 3/4 pol · 2"
+    tira(/(?:\b(\d+)\s+)?\b(\d+)\s*\/\s*(2|4|8|16|32|64)\b\s*(?:"|pol(?:egadas?)?\b)?/g, (m, i, a, b) => {
+      if (Number(a) >= Number(b)) return false;
+      add("pol", { valor: (i ? Number(i) : 0) + Number(a) / Number(b), principal: true });
+    });
+    tira(new RegExp(N + "\\s*(?:\"|pol(?:egadas?)?" + FIM + ")", "g"), (m, n) => add("pol", { valor: numC(n), principal: true }));
+    // dimensões: 24x50m · 48mm x 50m · 15x15cm · 4x2
+    const U = "(mm|cm|mts|mt|m)?";
+    tira(new RegExp(N + "\\s*" + U + "\\s*x\\s*" + N + "\\s*" + U + "(?:\\s*x\\s*" + N + "\\s*" + U + ")?" + FIM, "g"), (m, n1, u1, n2, u2, n3, u3) => {
+      const ns = [n1, n2, n3].filter(x => x !== undefined), us = [u1, u2, u3].slice(0, ns.length);
+      if (!us.some(Boolean)) { ns.forEach((n, k) => add("medida", { bruto: numC(n), semUnidade: true, principal: k === 0 })); return; }
+      // largura sem unidade antes de um comprimento em metros: é milímetro (24x50m = 24 mm × 50 m)
+      for (let k = us.length - 2; k >= 0; k--) if (!us[k]) us[k] = MM[us[k + 1]] === 1000 ? "mm" : us[k + 1];
+      for (let k = 1; k < us.length; k++) if (!us[k]) us[k] = us[k - 1];
+      ns.forEach((n, k) => add("medida", { bruto: numC(n), valor: numC(n) * MM[us[k]], principal: k === 0 }));
+    });
+    // medida avulsa: 24mm · 2,4 cm · 50m · 30 metros (em cabo, "2,5mm" é a seção)
+    tira(new RegExp(N + "\\s*(mm|cm|mts|mt|metros|metro|m)" + FIM, "g"), (m, n, u) => {
+      const v = numC(n);
+      if (eFio && u === "mm" && SECOES.indexOf(v) >= 0) add("secao", { valor: v, principal: true });
+      else add("medida", { bruto: v, valor: v * MM[u], principal: true });
+    });
+    tira(new RegExp(N + "\\s*(kw|w|watts?)" + FIM, "g"), (m, n, u) => add("potencia", { valor: numC(n) * (u === "kw" ? 1000 : 1), principal: true }));
+    tira(/(\d{2,3})\s*(?:\/\s*(\d{2,3})\s*)?v(?:olts?)?(?![a-z0-9])/g, (m, a, b) => add("tensao", { valores: [Number(a)].concat(b ? [Number(b)] : []).sort((x, y) => x - y), principal: false }));
+    tira(/\b(?:bivolt|biv)\b/g, () => add("tensao", { valores: [127, 220], principal: false }));
+    tira(new RegExp(N + "\\s*(a|amp|amperes?)" + FIM, "g"), (m, n) => add("corrente", { valor: numC(n), principal: true }));
+    if (eDisj) tira(/\b[bcd]\s?(\d{1,3})(?![a-z0-9])/g, (m, n) => add("corrente", { valor: Number(n), principal: true }));
+    tira(new RegExp(N + "\\s*(ml|litros?|lts|lt|l)" + FIM, "g"), (m, n, u) => add("volume", { valor: numC(n) * (u === "ml" ? 1 : 1000), principal: true }));
+    tira(new RegExp(N + "\\s*(kg|gramas?|gr|g)" + FIM, "g"), (m, n, u) => add("massa", { valor: numC(n) * (u === "kg" ? 1000 : 1), principal: true }));
+    // comprimento do rolo (1 m ou mais) não define o produto quando há outra característica principal
+    if (lista.some(f => f.principal && !(f.tipo === "medida" && f.valor >= 1000)))
+      lista.forEach(f => { if (f.tipo === "medida" && f.valor >= 1000) f.principal = false; });
+    lista.forEach(f => { f.rotulo = ROTULO[f.tipo](f); });
+    return { lista, resto: t.replace(/\s+/g, " ").trim(), marca };
+  }
+  const igualN = (a, b) => Math.abs(a - b) <= Math.max(1e-6, LIMITES.TOLERANCIA * Math.max(Math.abs(a), Math.abs(b)));
+  function mesmo(x, y) {
+    if (x.tipo === "tensao") return x.valores.some(v => y.valores.indexOf(v) >= 0);
+    if (x.tipo === "medida" && (x.semUnidade || y.semUnidade)) return igualN(x.bruto, y.bruto) || (!x.semUnidade && igualN(x.valor, y.bruto)) || (!y.semUnidade && igualN(x.bruto, y.valor));
+    return igualN(x.valor, y.valor);
+  }
+  // compara a linha da nota com o material: "compativel", "conflito", "incompleto" ou "sem" (nenhuma característica em comum)
+  function compararCaracteristicas(cn, ci) {
+    const ln = cn.lista || [], li = ci.lista || [];
+    const tipos = [...new Set(ln.concat(li).map(f => f.tipo))];
+    const difs = [];
+    let conflito = false, incompleto = false, comum = false;
+    tipos.forEach(tp => {
+      const n = ln.filter(f => f.tipo === tp), m = li.filter(f => f.tipo === tp);
+      if (!n.length || !m.length) {
+        if (n.some(f => f.principal) || m.some(f => f.principal)) {
+          incompleto = true;
+          difs.push({ tipo: tp, nota: n.map(f => f.rotulo), item: m.map(f => f.rotulo), falta: true });
+        }
+        return;
+      }
+      comum = true;
+      const nP = n.filter(f => f.principal), mP = m.filter(f => f.principal), nS = n.filter(f => !f.principal), mS = m.filter(f => !f.principal);
+      const choca = nP.some(x => !m.some(y => mesmo(x, y))) || mP.some(y => !n.some(x => mesmo(x, y)))
+        || (nS.length && mS.length && !nS.some(x => mS.some(y => mesmo(x, y))));
+      if (choca) { conflito = true; difs.push({ tipo: tp, nota: n.map(f => f.rotulo), item: m.map(f => f.rotulo) }); }
+    });
+    return { resultado: conflito ? "conflito" : incompleto ? "incompleto" : comum ? "compativel" : "sem", difs };
+  }
+  // características principais, em ordem fixa: muda quando o nome do material passa a ter outra medida
+  const assinaturaCar = c => (c.lista || []).filter(f => f.principal).map(f => f.tipo + ":" + f.rotulo).sort().join("|");
+
+  // semelhança do texto sem as características (as medidas já foram comparadas à parte)
+  const casa = (t, u) => t === u ? 1 : t.length >= 3 && u.length >= 3 && (u.startsWith(t) || t.startsWith(u)) ? 0.75 : t.length >= 4 && u.length >= 4 && t.slice(0, 4) === u.slice(0, 4) ? 0.5 : 0;
+  function semelhanca(restoNota, restoItem) {
+    const a = fichas(restoNota), b = fichas(restoItem);
+    const aW = a.filter(x => !/^\d+$/.test(x)), bW = b.filter(x => !/^\d+$/.test(x) && x.length >= 2);
+    const aN = a.filter(x => /^\d+$/.test(x)), bN = b.filter(x => /^\d+$/.test(x));
+    // números soltos (grão da lixa, modelo, referência) diferentes dos dois lados: pesam contra e impedem a escolha automática
+    const numDif = !!(aN.length && bN.length && !aN.some(x => bN.indexOf(x) >= 0));
+    if (!aW.length || !bW.length) return { nota: 0, cobre: 0, numDif, numNota: aN, numItem: bN };
+    const cobre = bW.filter(u => aW.some(t => casa(t, u) >= 0.75)).length / bW.length;
+    const pontos = aW.reduce((s, t) => s + Math.max(...bW.map(u => casa(t, u))), 0);
+    const parec = pontos / Math.max(aW.length, Math.min(bW.length, 4) * 0.8);
+    return { nota: Math.max(0, 0.65 * cobre + 0.35 * parec - (numDif ? 0.25 : 0)), cobre, numDif, numNota: aN, numItem: bN };
+  }
+  const codigoDoFornecedor = it => { const m = /c[oó]d\. do fornecedor (\S+)/i.exec(String(it.obs || "")); return m ? m[1] : ""; };
+
+  // decide o que a tela mostra para uma linha da nota
+  // opc: { podeNovo, memoria: {itemId, origem:"pessoa"|"auto", quando, vezes, carItem}, antiga: itemId (memória antiga), max }
+  // o nome do material se repete em todas as linhas da nota: lê as características dele uma vez só
+  const memoItem = new Map();
+  function carDoItem(nome) {
+    let c = memoItem.get(nome);
+    if (!c) { if (memoItem.size > 5000) memoItem.clear(); c = caracteristicas(nome); memoItem.set(nome, c); }
+    return c;
+  }
+  function classificar(linha, itens, opc) {
+    opc = opc || {};
+    const cn = caracteristicas(linha.descricao);
+    const cod = String(linha.codigo || "").trim();
+    let cands = itens.map(it => {
+      const ci = carDoItem(String(it.nome || ""));
+      const cmp = compararCaracteristicas(cn, ci);
+      const s = semelhanca(cn.resto, ci.resto);
+      const codigoBate = cod.length >= 3 && (cod === String(it.codigo || "") || cod === codigoDoFornecedor(it));
+      return { it, nota: codigoBate ? Math.max(s.nota, 1) : s.nota, cobre: codigoBate ? 1 : s.cobre, car: cmp.resultado, difs: cmp.difs, carItem: ci, codigoBate,
+        numDif: s.numDif && !codigoBate, numNota: s.numNota, numItem: s.numItem };
+    });
+    const ordem = (x, y) => ((x.car === "conflito") - (y.car === "conflito")) || (y.nota - x.nota) || (y.cobre - x.cobre);
+    const porNota = cands.filter(c => c.nota > LIMITES.SUGERE || c.codigoBate).sort(ordem);
+    const validos = porNota.filter(c => c.car !== "conflito");
+    const completos = validos.filter(c => c.car === "compativel" || c.car === "sem");
+    const top = completos[0], segundo = validos.find(c => c !== top);
+    const folga = top ? top.nota - (segundo ? segundo.nota : 0) : 0;
+    const auto = !!top && top.cobre === 1 && top.nota >= LIMITES.AUTO && folga >= LIMITES.FOLGA && !top.numDif;
+
+    // memória: só a escolha feita por uma pessoa, ainda compatível, vira "Escolhido antes"
+    let memoria = null, dica = null;
+    const avaliarMemoria = (itemId, origem, carGuardada, quando) => {
+      const c = cands.find(x => x.it.id === itemId);
+      if (!c) return { tipo: "ignorada", motivo: "o material foi excluído ou é de outro setor", itemId };
+      if (c.car === "conflito") return { tipo: "ignorada", motivo: "medida diferente", itemId, difs: c.difs };
+      if (carGuardada != null && carGuardada !== assinaturaCar(c.carItem)) return { tipo: "ignorada", motivo: "o material mudou de medida desde a escolha", itemId };
+      return { tipo: origem === "pessoa" ? "lembrado" : "dica", itemId, quando: quando || "", antiga: origem === "antiga" };
+    };
+    if (opc.memoria && opc.memoria.itemId) memoria = avaliarMemoria(opc.memoria.itemId, opc.memoria.origem === "pessoa" ? "pessoa" : "auto", opc.memoria.carItem != null ? opc.memoria.carItem : null, opc.memoria.quando);
+    if ((!memoria || memoria.tipo === "ignorada") && opc.antiga) {
+      const m1 = avaliarMemoria(opc.antiga, "antiga", null, "");
+      if (!memoria || m1.tipo !== "ignorada") memoria = m1;
+    }
+    if (memoria && memoria.tipo === "dica") dica = memoria.itemId;
+
+    let status, sel;
+    if (memoria && memoria.tipo === "lembrado") { status = "lembrado"; sel = memoria.itemId; }
+    else if (auto && (!dica || dica === top.it.id)) { status = "ok"; sel = top.it.id; }
+    else if (validos.some(c => c.nota >= LIMITES.CONFIRA) || dica) { status = "confira"; sel = ""; }
+    else if (opc.podeNovo) { status = "novo"; sel = "__novo"; }
+    else { status = "escolha"; sel = ""; }
+
+    // lista "Mais parecidos": lembrado/dica primeiro, compatíveis, depois os com medida diferente
+    const n = opc.max || 6;
+    let lista = validos.slice(0, n).concat(porNota.filter(c => c.car === "conflito").slice(0, 3));
+    const fixo = memoria && memoria.tipo !== "ignorada" ? memoria.itemId : "";
+    if (fixo) { const c = cands.find(x => x.it.id === fixo); lista = [c].concat(lista.filter(x => x !== c)); }
+    return { status, sel, caracteristicas: cn, candidatos: lista, memoria, folga };
+  }
+
+  raiz.LeitorNF = { montarLinhas, lerDanfe, lerFotoDanfe, numerosDaLinha, descricaoDaLinha, regiaoProdutos, sugerir, parecido, cobertura,
+    LIMITES, caracteristicas, compararCaracteristicas, assinaturaCar, semelhanca, classificar };
 })(typeof window !== "undefined" ? window : globalThis);
