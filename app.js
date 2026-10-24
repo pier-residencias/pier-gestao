@@ -35,7 +35,7 @@ const SETORES_PERM = [["Manutenção","setor_manutencao"],["Limpeza","setor_limp
 const setoresDasPerms = p => { const l = SETORES_PERM.filter(x => p && p[x[1]]).map(x => x[0]); return l.length ? l : ["Manutenção"]; };
 const doSetor = x => setorDe(x) === S.setor;
 const can = p => !!(S.perms && S.perms[p]);
-const ABAS_PERM = {painel:["painel"], demandas:["dem_ver","dem_executar","dem_delegar"], os:["os_ver","os_abrir","os_atender","os_gerenciar"], registrar:["registrar_saida","registrar_entrada","registrar_troca","registrar_emprestimo"], itens:["itens_ver"], historico:["historico_ver"], emprestimos:["devolver","registrar_emprestimo"], dashboard:["dashboard"], indicadores:["dashboard"], categorias:["itens_ver"], prestadores:["os_ver","os_abrir","os_atender","os_gerenciar","dem_ver","dem_executar","dem_delegar"], equipe:["os_gerenciar","dem_delegar"], minhaequipe:["os_gerenciar","dem_delegar"], usuarios:["usuarios"], inicio:["pendencias","usuarios","acessos"], pendencias:["pendencias"], pdpainel:["pendencias"], rondas:["ronda_ver","ronda_fazer"], unidades:["un_ver","un_editar"], uncadastro:["un_ver","un_editar"], unconfig:["un_editar"], medlanc:["med_lancar"], medidores:["med_ver","med_lancar"], medrel:["med_ver","med_lancar"], esreservas:["espacos"], esvistorias:["espacos"], esespacos:["espacos"], cotacoes:["pendencias"], acessos:["acessos"]};
+const ABAS_PERM = {painel:["painel"], demandas:["dem_ver","dem_executar","dem_delegar"], os:["os_ver","os_abrir","os_atender","os_gerenciar"], registrar:["registrar_saida","registrar_entrada","registrar_troca","registrar_emprestimo"], itens:["itens_ver"], historico:["historico_ver"], emprestimos:["devolver","registrar_emprestimo"], dashboard:["dashboard"], indicadores:["dashboard"], categorias:["itens_ver"], prestadores:["os_ver","os_abrir","os_atender","os_gerenciar","dem_ver","dem_executar","dem_delegar"], equipe:["os_gerenciar","dem_delegar"], minhaequipe:["os_gerenciar","dem_delegar"], usuarios:["usuarios"], inicio:["pendencias","usuarios","acessos"], pendencias:["pendencias"], pdpainel:["pendencias"], rondas:["ronda_ver","ronda_fazer"], unidades:["un_ver","un_editar"], uncadastro:["un_ver","un_editar"], unconfig:["un_editar"], medlanc:["med_lancar"], medidores:["med_ver","med_lancar"], medrel:["med_ver","med_lancar"], esreservas:["espacos"], fornecedores:["pendencias"], esvistorias:["espacos"], esespacos:["espacos"], cotacoes:["pendencias"], acessos:["acessos"]};
 // Se o navegador ainda estiver com a página antiga guardada, o menu Administração não existe nela:
 // o resto do sistema continua funcionando normalmente.
 const TEM_ADM = !!(document.getElementById("tab-adm") && document.getElementById("adm-menu") && document.getElementById("t-pendencias"));
@@ -44,6 +44,7 @@ if (!TEM_ADM || !document.getElementById("t-pdpainel")) delete ABAS_PERM.pdpaine
 if (!TEM_ADM || !document.getElementById("t-inicio")) delete ABAS_PERM.inicio;
 if (!TEM_ADM || !document.getElementById("t-rondas")) delete ABAS_PERM.rondas;
 if (!TEM_ADM || !document.getElementById("t-unidades")) { delete ABAS_PERM.unidades; delete ABAS_PERM.uncadastro; delete ABAS_PERM.unconfig; }
+if (!TEM_ADM || !document.getElementById("t-fornecedores")) delete ABAS_PERM.fornecedores;
 if (!TEM_ADM || !document.getElementById("t-esreservas")) { delete ABAS_PERM.esreservas; delete ABAS_PERM.esvistorias; delete ABAS_PERM.esespacos; }
 if (!TEM_ADM || !document.getElementById("t-medlanc")) { delete ABAS_PERM.medlanc; delete ABAS_PERM.medidores; delete ABAS_PERM.medrel; }
 if (!document.getElementById("t-indicadores")) delete ABAS_PERM.indicadores;
@@ -51,7 +52,7 @@ if (!TEM_ADM || !document.getElementById("t-acessos")) delete ABAS_PERM.acessos;
 // O que aparece depende de como a pessoa entrou: Manutenção (tudo do estoque, OS e demandas),
 // Limpeza (só o estoque da limpeza) ou Administração (só o menu Administração).
 // "inicio" primeiro: é a tela que abre ao entrar pela Administração
-const ABAS_ADM = ["inicio","pendencias","pdpainel","cotacoes","rondas","unidades","uncadastro","unconfig","medlanc","medidores","medrel","esreservas","esvistorias","esespacos","usuarios","acessos"];
+const ABAS_ADM = ["inicio","pendencias","pdpainel","cotacoes","rondas","unidades","uncadastro","unconfig","medlanc","medidores","medrel","esreservas","esvistorias","esespacos","fornecedores","usuarios","acessos"];
 const TIPOS_LIMPEZA = ["saida","entrada"];
 const modo = () => S.adm ? "Administração" : S.setor;
 // Mesmo menu nos três setores (pedido de 24/10/2026); cada pessoa vê só o que o perfil permite.
@@ -62,7 +63,7 @@ const modo = () => S.adm ? "Administração" : S.setor;
 // Ronda: só no setor Administração (pedido de 24/10/2026)
 // Unidades e moradores: só no setor Administração (pedido de 24/10/2026; dados pessoais)
 // Central de medições (água, energia e gás): só no setor Administração (pedido de 24/10/2026)
-const SO_ADM = ["inicio","pdpainel","pendencias","cotacoes","rondas","unidades","uncadastro","unconfig","medlanc","medidores","medrel","esreservas","esvistorias","esespacos"], FORA_LIMPEZA = ["demandas","emprestimos","minhaequipe"], SO_MANUT = ["prestadores"];
+const SO_ADM = ["inicio","pdpainel","pendencias","cotacoes","rondas","unidades","uncadastro","unconfig","medlanc","medidores","medrel","esreservas","esvistorias","esespacos","fornecedores"], FORA_LIMPEZA = ["demandas","emprestimos","minhaequipe"], SO_MANUT = ["prestadores"];
 const naManut = () => !S.adm && S.setor !== "Limpeza";
 const abaNoModo = t => t === "painel" ? !S.adm : SO_ADM.includes(t) ? S.adm : SO_MANUT.includes(t) ? naManut() : !(!S.adm && S.setor === "Limpeza" && FORA_LIMPEZA.includes(t));
 const ehSindico = () => norm(S.perfil).includes("sindico");
@@ -170,7 +171,7 @@ function mostrarLogin(msg){
   ($("#l-usuario").value ? $("#l-senha") : $("#l-usuario")).focus();
 }
 // sair encerra a sessão também no servidor: o código guardado no aparelho deixa de valer
-function encerrarLocal(msg){ S.token = ""; S.perms = {}; S.rel = null; S.eq = null; S.pend = null; unLimparMemoria(); mdLimpar(); esLimpar(); fecharModal(); apagarSessao(); abrirMenuAdm(false); fecharMenu(); mostrarLogin(msg); renderMenu(); }
+function encerrarLocal(msg){ S.token = ""; S.perms = {}; S.rel = null; S.eq = null; S.pend = null; unLimparMemoria(); mdLimpar(); esLimpar(); FO.lista = null; fecharModal(); apagarSessao(); abrirMenuAdm(false); fecharMenu(); mostrarLogin(msg); renderMenu(); }
 function sair(msg){
   const tk = S.token;
   if (tk && API) { try { fetch(API, {method:"POST", body:JSON.stringify({acao:"sair", token:tk}), redirect:"follow", keepalive:true}).catch(()=>{}); } catch(e){} }
@@ -312,6 +313,7 @@ function setTab(t){
   if (t==="unidades" || t==="uncadastro" || t==="unconfig") { renderUnidadesTudo(); carregarUnidades(); }
   if (t==="medlanc" || t==="medidores" || t==="medrel") { renderMedTudo(); carregarMed(); }
   if (t==="esreservas" || t==="esvistorias" || t==="esespacos") { renderEspTudo(); carregarEsp(); }
+  if (t==="fornecedores") { renderForn(); carregarForn(); }
   if (t==="inicio") { renderInicio(); if (can("pendencias")) carregarPend(); }
   if (t==="acessos") carregarAcessos();
   if (t==="cotacoes") { renderCot(); carregarCot(); }
@@ -415,7 +417,7 @@ const MENU = [
     {t:"indicadores", rot:"Indicadores"}, {t:"os", acao:"osnova", perm:"os_abrir", rot:"Abrir OS"}, {t:"demandas", acao:"preventiva", perm:"dem_delegar", rot:"Manutenção preventiva"}, {t:"rondas", rot:"Ronda", b:"b-ronda"}, {t:"prestadores", rot:"Prestadores de serviço", b:"b-prest"},
     {t:"os", rot:"Ordens de serviço (OS)", b:"b-os"}, {t:"demandas", rot:"Demandas", b:"b-dem"}]},
   {g:"Pendências e compras", ico:'<path d="M8 5h11M8 12h11M8 19h11M4 5h.01M4 12h.01M4 19h.01"/>', itens:[
-    {t:"pendencias", rot:"Controle de pendências", b:"b-adm"}, {t:"pendencias", acao:"nova", rot:"Incluir pendência"}, {t:"cotacoes", rot:"Cotações"}]},
+    {t:"pendencias", rot:"Controle de pendências", b:"b-adm"}, {t:"pendencias", acao:"nova", rot:"Incluir pendência"}, {t:"cotacoes", rot:"Cotações"}, {t:"fornecedores", rot:"Fornecedores"}]},
   {g:"Unidades", ico:'<path d="M5 21V4h10v17M15 9h4v12M8 8h1M11 8h1M8 12h1M11 12h1M8 16h1M11 16h1M3 21h18"/>', itens:[
     {t:"unidades", rot:"Lista de unidades"}, {t:"uncadastro", rot:"Atualização cadastral"}, {t:"unconfig", rot:"Configurações"}]},
   {g:"Central de medições", ico:'<path d="M3 7.5c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0M3 12.5c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0M3 17.5c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0"/>', itens:[
@@ -7338,6 +7340,120 @@ async function esImportarPDF(file){
 if ($("#t-esreservas")) {
   $("#er-pdf").addEventListener("click", () => $("#er-arq").click());
   $("#er-arq").addEventListener("change", ev => { const f = ev.target.files[0]; ev.target.value = ""; esImportarPDF(f); });
+}
+
+// ---------- fornecedores (Pendências e compras; só Administração) ----------
+const FO = { lista:null, carregando:false, erro:"", em:0, q:"", cat:"", inativos:false };
+async function carregarForn(forcar){
+  if (!TEM_ADM || !S.token || FO.carregando || !podeAba("fornecedores")) return;
+  if (!forcar && FO.lista && Date.now() - FO.em < 60000) { renderForn(); return; }
+  FO.carregando = true;
+  try { const r = await api("fornecedores"); FO.lista = r.fornecedores || []; FO.em = Date.now(); FO.erro = ""; }
+  catch(e){ FO.erro = /desconhecida/i.test(e.message) ? "Os Fornecedores precisam do Apps Script novo (colar o código e implantar uma nova versão)." : e.message; }
+  finally { FO.carregando = false; renderForn(); }
+}
+const foAplicar = r => { if (r && Array.isArray(r.fornecedores)) { FO.lista = r.fornecedores; FO.em = Date.now(); return true; } return false; };
+function renderForn(){
+  const sec = $("#t-fornecedores"); if (!sec || sec.hidden) return;
+  const box = $("#fo-corpo");
+  if (FO.erro && !FO.lista) { box.innerHTML = `<div class="notice crit">${esc(FO.erro)}</div>`; return; }
+  if (!FO.lista) { box.innerHTML = `<div class="empty"><span class="spin" aria-hidden="true"></span> Carregando os fornecedores…</div>`; return; }
+  const cats = [...new Set(FO.lista.map(f => f.categoria).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  $("#fo-cat").innerHTML = `<option value="">Todas as categorias</option>` + cats.map(c => `<option ${c === FO.cat ? "selected" : ""}>${esc(c)}</option>`).join("");
+  const q = norm(FO.q).trim(), qd = FO.q.replace(/\D/g, "");
+  const vis = FO.lista.filter(f => (FO.inativos || f.ativo !== "Não") && (!FO.cat || f.categoria === FO.cat)
+    && (!q || norm([f.nome, f.codigo, f.categoria, f.servicos, f.contato, f.email, f.obs, f.situacao].join(" ")).includes(q) || (qd.length >= 3 && String(f.cnpj).replace(/\D/g, "").includes(qd))));
+  $("#fo-conta").textContent = `${vis.length} de ${FO.lista.length} fornecedor${FO.lista.length === 1 ? "" : "es"}`;
+  box.innerHTML = `<div class="tablebox md-hist"><table><thead><tr><th>Empresa</th><th class="hide-s">Categoria</th><th>Contato</th><th class="hide-m">CNPJ</th><th class="num hide-s">Cotações</th><th class="hide-m">Última cotação</th><th>Ações</th></tr></thead><tbody>
+    ${vis.length ? vis.map(f => `<tr class="${f.ativo === "Não" ? "md-inat" : ""}"><td><b>${esc(f.nome)}</b>${f.codigo ? ` <span class="muted mono">${esc(f.codigo)}</span>` : ""}${f.ativo === "Não" ? ` <span class="md-st cinza">inativo</span>` : ""}${f.situacao ? ` <span class="md-st ${/pendente/i.test(f.situacao) ? "ambar" : /n[ãa]o rec/i.test(f.situacao) ? "verm" : "ok"}">${esc(f.situacao)}</span>` : ""}${f.servicos || f.obs ? `<span class="sub">${esc((f.servicos || f.obs).length > 70 ? (f.servicos || f.obs).slice(0, 68) + "…" : (f.servicos || f.obs))}</span>` : ""}</td>
+      <td class="hide-s">${f.categoria ? `<span class="md-tipo">${esc(f.categoria)}</span>` : "—"}</td>
+      <td>${esc(f.contato || "")}${f.telefone ? `<span class="sub"><a href="tel:${esc(f.telefone.replace(/[^\d+]/g, ""))}">${esc(f.telefone)}</a></span>` : ""}${f.whatsapp ? `<span class="sub"><a href="https://wa.me/55${esc(String(f.whatsapp).replace(/\D/g, "").replace(/^55(?=\d{10,11}$)/, ""))}" target="_blank" rel="noopener">WhatsApp ${esc(f.whatsapp)}</a></span>` : ""}${f.email ? `<span class="sub"><a href="mailto:${esc(f.email)}">${esc(f.email)}</a></span>` : ""}${!f.contato && !f.telefone && !f.email && !f.whatsapp ? "—" : ""}</td>
+      <td class="hide-m mono">${esc(f.cnpj || "—")}</td>
+      <td class="num hide-s">${f.cotacoes || 0}${f.vitorias ? `<span class="sub">${f.vitorias} vencida${f.vitorias === 1 ? "" : "s"}${f.valorGanho ? " · " + fBRL(f.valorGanho) : ""}</span>` : ""}</td>
+      <td class="hide-m">${f.ultimaCot ? `${esc(f.ultimaCot.numero)} · ${fData(f.ultimaCot.data)}<span class="sub">${esc(f.ultimaCot.finalidade)}</span>` : "—"}</td>
+      <td class="md-ac"><button type="button" class="md-ib" data-fo-ed="${esc(f.id)}" title="Editar" aria-label="Editar ${esc(f.nome)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></svg></button></td></tr>`).join("")
+      : `<tr><td colspan="7"><div class="empty">${FO.lista.length ? "Nenhum fornecedor com esses filtros." : "Nenhum fornecedor cadastrado. Use <b>+ Novo fornecedor</b> ou <b>Trazer das cotações</b>."}</div></td></tr>`}</tbody></table></div>`;
+}
+function foEditar(id){
+  const f = id ? FO.lista.find(x => x.id === id) : null, v = f || {nome:"", ativo:"Sim"};
+  const cats = [...new Set(FO.lista.map(x => x.categoria).filter(Boolean).concat(["Materiais de construção","Elétrica","Hidráulica","Limpeza","Jardinagem","Ferragens","EPI","Escritório","Serviços"]))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  const c = (k, rot, tam, extra) => `<div class="field ${extra || ""}"><label for="fo-${k}">${rot}</label><input class="input" id="fo-${k}" value="${esc(v[k] || "")}" maxlength="${tam}"${k === "categoria" ? ' list="fo-dl"' : k === "situacao" ? ' list="fo-dls"' : ""}></div>`;
+  $("#modal-box").classList.add("largo");
+  $("#modal-box").innerHTML = `<h3>${f ? "Editar fornecedor" : "Novo fornecedor"}</h3>
+    <form class="form" id="fo-f" novalidate autocomplete="off">
+      ${c("nome", 'Fornecedor (empresa) <span class="req">*</span>', 100)}${c("codigo", "Código", 20)}${c("categoria", "Categoria", 60)}${c("cnpj", "CNPJ", 20)}
+      <div class="field full"><label for="fo-servicos">Serviços / produtos</label><textarea class="input" id="fo-servicos" rows="2" maxlength="500">${esc(v.servicos || "")}</textarea></div><datalist id="fo-dl">${cats.map(x => `<option>${esc(x)}</option>`).join("")}</datalist>
+      ${c("contato", "Contato (nome)", 80)}${c("telefone", "Telefone", 40)}${c("whatsapp", "WhatsApp", 40)}${c("email", "E-mail", 100)}${c("site", "Site", 120)}${c("instagram", "Instagram", 80)}
+      ${c("situacao", "Situação", 40)}<datalist id="fo-dls"><option>Pendente de conferência</option><option>Conferido</option><option>Aprovado</option><option>Não recomendado</option></datalist>${c("fonte", "Fonte (de onde veio)", 120)}
+      ${c("endereco", "Endereço", 200, "full")}${c("pagamento", "Condições de pagamento", 160, "full")}
+      <div class="field full"><label for="fo-obs">Observação</label><textarea class="input" id="fo-obs" rows="2" maxlength="500">${esc(v.obs || "")}</textarea></div>
+      ${f ? `<label class="field full md-chk"><input type="checkbox" id="fo-at" ${v.ativo !== "Não" ? "checked" : ""}> Fornecedor ativo</label>` : ""}
+    </form>
+    ${f && f.cotacoes ? `<p class="hint">Aparece em ${f.cotacoes} cotação(ões)${f.vitorias ? `, venceu ${f.vitorias}${f.valorGanho ? " (" + fBRL(f.valorGanho) + ")" : ""}` : ""}.</p>` : ""}
+    <div class="actions"><button class="btn primary" type="button" id="fo-ok">Salvar</button><button class="btn" type="button" id="fo-x">Cancelar</button>${f ? `<button class="link danger" type="button" id="fo-del">Excluir</button>` : ""}<span class="hint" id="fo-msg"></span></div>`;
+  $("#modal").hidden = false; $("#fo-x").onclick = fecharModal; $("#fo-nome").focus();
+  const fim = r => { if (foAplicar(r)) { fecharModal(); renderForn(); } };
+  $("#fo-ok").onclick = () => enviar($("#fo-ok"), $("#fo-msg"), "fornSalvar", {fornecedor:Object.assign(f ? {id:f.id} : {}, Object.fromEntries(["nome","codigo","cnpj","categoria","contato","telefone","whatsapp","email","site","instagram","situacao","fonte","endereco","pagamento"].map(k => [k, $("#fo-" + k).value])), {servicos:$("#fo-servicos").value, obs:$("#fo-obs").value, ativo:f ? $("#fo-at").checked : true})}, fim);
+  if ($("#fo-del")) $("#fo-del").onclick = ev => { const b = ev.target; if (!b.dataset.conf) { b.dataset.conf = "1"; b.textContent = "Confirmar exclusão"; return; } enviar(b, $("#fo-msg"), "fornSalvar", {op:"excluir", fornecedor:{id:f.id}}, fim); };
+}
+// planilha de fornecedores: mesmas colunas da planilha do Pier (ID, Fornecedor, Categoria, Serviços / Produtos, …)
+const FO_COLS = [["codigo","ID",10],["nome","Fornecedor",32],["categoria","Categoria",22],["servicos","Serviços / Produtos",40],["telefone","Telefone",16],["whatsapp","WhatsApp",16],["email","E-mail",30],["site","Site",28],
+  ["contato","Contato",22],["endereco","Endereço",36],["instagram","Instagram",18],["situacao","Situação",20],["obs","Observações",36],["fonte","Fonte",20],["cnpj","CNPJ",20],["pagamento","Condições de pagamento",24],["ativo","Ativo",8]];
+const FO_CAB = h => { const n = norm(h).replace(/\s+/g, " ").trim(); return /^(id|codigo)$/.test(n) ? "codigo" : /^(fornecedor|empresa|nome|razao social)/.test(n) ? "nome" : /^categoria/.test(n) ? "categoria" : /^servicos|^produtos/.test(n) ? "servicos"
+  : /^telefone|^fone/.test(n) ? "telefone" : /^whats/.test(n) ? "whatsapp" : /^e-?mail/.test(n) ? "email" : /^site/.test(n) ? "site" : /^contato/.test(n) ? "contato" : /^endereco/.test(n) ? "endereco"
+  : /^instagram/.test(n) ? "instagram" : /^situacao|^status/.test(n) ? "situacao" : /^observ/.test(n) ? "obs" : /^fonte|^origem/.test(n) ? "fonte" : /^cnpj|^cpf/.test(n) ? "cnpj" : /pagamento/.test(n) ? "pagamento" : /^ativo/.test(n) ? "ativo" : ""; };
+function foExportar(){
+  if (!FO.lista) return;
+  try {
+    const X = xlsxMini(), cab = {b:true, cor:"FFFFFFFF", fill:"FF1F4E79", wrap:false};
+    FO_COLS.forEach(([, rot, w], j) => { X.cel(1, j + 1, rot, cab); X.col(j + 1, w); });
+    FO.lista.forEach((f, i) => FO_COLS.forEach(([k], j) => X.cel(i + 2, j + 1, String(f[k] ?? ""))));
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([X.gerar("Fornecedores")], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+    a.download = `Fornecedores - Pier ${hoje()}.xlsx`; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+  } catch(e){ toast(e.message || "Não foi possível gerar a planilha.", true); }
+}
+async function foImportar(file){
+  if (!file || !FO.lista) return;
+  if (!/\.xlsx$/i.test(file.name)) { toast("Escolha a planilha de fornecedores em .xlsx.", true); return; }
+  let abas;
+  try { const buf = await file.arrayBuffer(); try { abas = await xlsxLer(buf); } catch(e){ if (!e || !e.semLeitor) throw e; await carregarXLSX(); const wb = XLSX.read(buf, {type:"array"}); abas = wb.SheetNames.map(n => ({nome:n, folha:xlsxFolhaSheetJS(wb.Sheets[n])})); } }
+  catch(e){ toast(e.message || "Não foi possível ler a planilha.", true); return; }
+  let lista = [], aba = "";
+  for (const a of abas) {
+    const F = a.folha; if (!F) continue;
+    for (let r = F.r0; r <= Math.min(F.r1, F.r0 + 10) && !lista.length; r++) {
+      const col = {}; for (let c = F.c0; c <= F.c1; c++) { const k = FO_CAB(F.val(r, c) ?? ""); if (k && !(k in col)) col[k] = c; }
+      if (!("nome" in col) || Object.keys(col).length < 3) continue;
+      for (let rr = r + 1; rr <= F.r1; rr++) {
+        const o = {_linha:rr + 1}; Object.entries(col).forEach(([k, c]) => { const v = F.val(rr, c); o[k] = v === undefined || v === null ? "" : String(v).trim(); });
+        if (o.nome) lista.push(o);
+      }
+      aba = a.nome;
+    }
+    if (lista.length) break;
+  }
+  if (!lista.length) { toast('Não encontrei a lista de fornecedores (precisa da coluna "Fornecedor" e de outras colunas, como Categoria e Telefone).', true); return; }
+  const acha = o => FO.lista.find(f => (o.codigo && String(f.codigo).toUpperCase() === o.codigo.toUpperCase()) || (o.cnpj && String(f.cnpj).replace(/\D/g, "") && String(f.cnpj).replace(/\D/g, "") === o.cnpj.replace(/\D/g, "")) || norm(f.nome).trim() === norm(o.nome).trim());
+  const nNovo = lista.filter(o => !acha(o)).length;
+  $("#modal-box").classList.add("largo");
+  $("#modal-box").innerHTML = `<h3>Importar fornecedores</h3>
+    <p>Aba <b>${esc(aba)}</b>: <b>${lista.length}</b> fornecedor${lista.length === 1 ? "" : "es"} — <b>${nNovo}</b> nov${nNovo === 1 ? "o" : "os"} e <b>${lista.length - nNovo}</b> já cadastrad${lista.length - nNovo === 1 ? "o" : "os"} (vão ser atualizados; campos vazios na planilha não apagam o que já existe).</p>
+    <div class="tablebox flat"><table><thead><tr><th>ID</th><th>Fornecedor</th><th class="hide-s">Categoria</th><th class="hide-s">Situação</th><th>No sistema</th></tr></thead><tbody>
+      ${lista.map(o => `<tr><td class="mono">${esc(o.codigo || "—")}</td><td>${esc(o.nome)}</td><td class="hide-s">${esc(o.categoria || "")}</td><td class="hide-s">${esc(o.situacao || "")}</td><td>${acha(o) ? "atualiza" : `<span class="md-st conc">novo</span>`}</td></tr>`).join("")}</tbody></table></div>
+    <div class="actions" style="margin-top:12px"><button class="btn primary" type="button" id="fi-ok">Importar</button><button class="btn" type="button" id="fi-x">Cancelar</button><span class="hint" id="fi-msg"></span></div>`;
+  $("#modal").hidden = false; $("#fi-x").onclick = fecharModal;
+  $("#fi-ok").onclick = () => enviar($("#fi-ok"), $("#fi-msg"), "fornImportar", {lista}, r => { if (foAplicar(r)) { fecharModal(); renderForn(); } });
+}
+if ($("#t-fornecedores")) {
+  $("#fo-exp").addEventListener("click", foExportar);
+  $("#fo-imp").addEventListener("click", () => $("#fo-arq").click());
+  $("#fo-arq").addEventListener("change", ev => { const f = ev.target.files[0]; ev.target.value = ""; foImportar(f); });
+  $("#fo-novo").addEventListener("click", () => FO.lista && foEditar(null));
+  $("#fo-cot").addEventListener("click", ev => enviar(ev.target, null, "fornDasCotacoes", {}, r => { foAplicar(r); renderForn(); }));
+  $("#fo-q").addEventListener("input", ev => { FO.q = ev.target.value; renderForn(); });
+  $("#fo-cat").addEventListener("change", ev => { FO.cat = ev.target.value; renderForn(); });
+  $("#fo-inat").addEventListener("change", ev => { FO.inativos = ev.target.checked; renderForn(); });
+  $("#fo-corpo").addEventListener("click", ev => { const b = ev.target.closest("[data-fo-ed]"); if (b) foEditar(b.dataset.foEd); });
 }
 
 // ---------- início ----------

@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap"></noscript>
-<link rel="stylesheet" href="estilo.css?v=20261024esp2">
+<link rel="stylesheet" href="estilo.css?v=20261024forn">
 </head>
 <body>
 <div class="login" id="login" hidden>
@@ -310,6 +310,14 @@
     <div class="un-head"><div><h2 class="sec">Espaços</h2><p class="muted">Espaços que podem ser reservados, com regras e itens do checklist.</p></div>
       <div class="un-ferr"><button class="btn primary" type="button" id="ee-novo">+ Novo espaço</button></div></div>
     <div id="ee-corpo"><div class="empty">Carregando…</div></div>
+  </section>
+
+  <section id="t-fornecedores" hidden>
+    <div class="un-head"><div><h2 class="sec">Fornecedores</h2><p class="muted">Cadastro dos fornecedores de materiais e serviços, com o histórico nas cotações.</p></div>
+      <div class="un-ferr"><button class="btn" type="button" id="fo-imp">Importar planilha</button><button class="btn" type="button" id="fo-exp">Exportar planilha</button><input type="file" id="fo-arq" accept=".xlsx" hidden><button class="btn" type="button" id="fo-cot">Trazer das cotações</button><button class="btn primary" type="button" id="fo-novo">+ Novo fornecedor</button></div></div>
+    <div class="toolbar md-filtros"><input class="input" id="fo-q" type="search" placeholder="Empresa, contato ou CNPJ" aria-label="Pesquisar"><select class="input" id="fo-cat" aria-label="Categoria"><option value="">Todas as categorias</option></select>
+      <label class="md-chk"><input type="checkbox" id="fo-inat"> Mostrar inativos</label><span class="hint" id="fo-conta"></span></div>
+    <div id="fo-corpo"><div class="empty">Carregando…</div></div>
   </section>
 
   <section id="t-rondas" hidden>
@@ -699,7 +707,7 @@
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="config.js"></script>
-<script src="nfe.js?v=20261024esp2"></script>
-<script src="app.js?v=20261024esp2"></script>
+<script src="nfe.js?v=20261024forn"></script>
+<script src="app.js?v=20261024forn"></script>
 </body>
 </html>
