@@ -35,7 +35,7 @@ const SETORES_PERM = [["Manutenção","setor_manutencao"],["Limpeza","setor_limp
 const setoresDasPerms = p => { const l = SETORES_PERM.filter(x => p && p[x[1]]).map(x => x[0]); return l.length ? l : ["Manutenção"]; };
 const doSetor = x => setorDe(x) === S.setor;
 const can = p => !!(S.perms && S.perms[p]);
-const ABAS_PERM = {painel:["painel"], demandas:["dem_ver","dem_executar","dem_delegar"], os:["os_ver","os_abrir","os_atender","os_gerenciar"], registrar:["registrar_saida","registrar_entrada","registrar_troca","registrar_emprestimo"], itens:["itens_ver"], historico:["historico_ver"], emprestimos:["devolver","registrar_emprestimo"], dashboard:["dashboard"], indicadores:["dashboard"], categorias:["itens_ver"], prestadores:["os_ver","os_abrir","os_atender","os_gerenciar","dem_ver","dem_executar","dem_delegar"], equipe:["os_gerenciar","dem_delegar"], minhaequipe:["os_gerenciar","dem_delegar"], usuarios:["usuarios"], inicio:["pendencias","usuarios","acessos"], pendencias:["pendencias"], pdpainel:["pendencias"], rondas:["ronda_ver","ronda_fazer"], cotacoes:["pendencias"], acessos:["acessos"]};
+const ABAS_PERM = {painel:["painel"], demandas:["dem_ver","dem_executar","dem_delegar"], os:["os_ver","os_abrir","os_atender","os_gerenciar"], registrar:["registrar_saida","registrar_entrada","registrar_troca","registrar_emprestimo"], itens:["itens_ver"], historico:["historico_ver"], emprestimos:["devolver","registrar_emprestimo"], dashboard:["dashboard"], indicadores:["dashboard"], categorias:["itens_ver"], prestadores:["os_ver","os_abrir","os_atender","os_gerenciar","dem_ver","dem_executar","dem_delegar"], equipe:["os_gerenciar","dem_delegar"], minhaequipe:["os_gerenciar","dem_delegar"], usuarios:["usuarios"], inicio:["pendencias","usuarios","acessos"], pendencias:["pendencias"], pdpainel:["pendencias"], rondas:["ronda_ver","ronda_fazer"], unidades:["un_ver","un_editar"], uncadastro:["un_ver","un_editar"], unconfig:["un_editar"], cotacoes:["pendencias"], acessos:["acessos"]};
 // Se o navegador ainda estiver com a página antiga guardada, o menu Administração não existe nela:
 // o resto do sistema continua funcionando normalmente.
 const TEM_ADM = !!(document.getElementById("tab-adm") && document.getElementById("adm-menu") && document.getElementById("t-pendencias"));
@@ -43,12 +43,13 @@ if (!TEM_ADM) delete ABAS_PERM.pendencias;
 if (!TEM_ADM || !document.getElementById("t-pdpainel")) delete ABAS_PERM.pdpainel;
 if (!TEM_ADM || !document.getElementById("t-inicio")) delete ABAS_PERM.inicio;
 if (!TEM_ADM || !document.getElementById("t-rondas")) delete ABAS_PERM.rondas;
+if (!TEM_ADM || !document.getElementById("t-unidades")) { delete ABAS_PERM.unidades; delete ABAS_PERM.uncadastro; delete ABAS_PERM.unconfig; }
 if (!document.getElementById("t-indicadores")) delete ABAS_PERM.indicadores;
 if (!TEM_ADM || !document.getElementById("t-acessos")) delete ABAS_PERM.acessos;
 // O que aparece depende de como a pessoa entrou: Manutenção (tudo do estoque, OS e demandas),
 // Limpeza (só o estoque da limpeza) ou Administração (só o menu Administração).
 // "inicio" primeiro: é a tela que abre ao entrar pela Administração
-const ABAS_ADM = ["inicio","pendencias","pdpainel","cotacoes","rondas","usuarios","acessos"];
+const ABAS_ADM = ["inicio","pendencias","pdpainel","cotacoes","rondas","unidades","uncadastro","unconfig","usuarios","acessos"];
 const TIPOS_LIMPEZA = ["saida","entrada"];
 const modo = () => S.adm ? "Administração" : S.setor;
 // Mesmo menu nos três setores (pedido de 24/10/2026); cada pessoa vê só o que o perfil permite.
@@ -57,7 +58,8 @@ const modo = () => S.adm ? "Administração" : S.setor;
 // Prestadores de serviço: só no setor Manutenção (pedido de 24/10/2026).
 // Pendências e compras (controle de pendências e cotações) só no setor Administração (pedidos de 24/10/2026).
 // Ronda: só no setor Administração (pedido de 24/10/2026)
-const SO_ADM = ["inicio","pdpainel","pendencias","cotacoes","rondas"], FORA_LIMPEZA = ["demandas","emprestimos","minhaequipe"], SO_MANUT = ["prestadores"];
+// Unidades e moradores: só no setor Administração (pedido de 24/10/2026; dados pessoais)
+const SO_ADM = ["inicio","pdpainel","pendencias","cotacoes","rondas","unidades","uncadastro","unconfig"], FORA_LIMPEZA = ["demandas","emprestimos","minhaequipe"], SO_MANUT = ["prestadores"];
 const naManut = () => !S.adm && S.setor !== "Limpeza";
 const abaNoModo = t => t === "painel" ? !S.adm : SO_ADM.includes(t) ? S.adm : SO_MANUT.includes(t) ? naManut() : !(!S.adm && S.setor === "Limpeza" && FORA_LIMPEZA.includes(t));
 const ehSindico = () => norm(S.perfil).includes("sindico");
@@ -164,7 +166,7 @@ function mostrarLogin(msg){
   ($("#l-usuario").value ? $("#l-senha") : $("#l-usuario")).focus();
 }
 // sair encerra a sessão também no servidor: o código guardado no aparelho deixa de valer
-function encerrarLocal(msg){ S.token = ""; S.perms = {}; S.rel = null; S.eq = null; S.pend = null; apagarSessao(); abrirMenuAdm(false); fecharMenu(); mostrarLogin(msg); renderMenu(); }
+function encerrarLocal(msg){ S.token = ""; S.perms = {}; S.rel = null; S.eq = null; S.pend = null; unLimparMemoria(); fecharModal(); apagarSessao(); abrirMenuAdm(false); fecharMenu(); mostrarLogin(msg); renderMenu(); }
 function sair(msg){
   const tk = S.token;
   if (tk && API) { try { fetch(API, {method:"POST", body:JSON.stringify({acao:"sair", token:tk}), redirect:"follow", keepalive:true}).catch(()=>{}); } catch(e){} }
@@ -272,7 +274,7 @@ function renderMe(){
 
 // ---------- abas ----------
 // log de segurança: telas sensíveis e exportações ficam na Auditoria (no máximo 1 registro por tela a cada 30 min)
-const TELAS_LOG = ["historico","dashboard","usuarios","pendencias","acessos","cotacoes","rondas"];
+const TELAS_LOG = ["historico","dashboard","usuarios","pendencias","acessos","cotacoes","rondas","unidades","uncadastro","unconfig"];
 const telasVistas = new Map();
 function registrarTela(tela, detalhe){
   if (!S.token) return;
@@ -303,6 +305,7 @@ function setTab(t){
   if (t==="pendencias") carregarPend();
   if (t==="pdpainel") { renderPdPainel(); carregarPend(); }
   if (t==="rondas") { renderRondas(); carregarRondas(true); }
+  if (t==="unidades" || t==="uncadastro" || t==="unconfig") { renderUnidadesTudo(); carregarUnidades(); }
   if (t==="inicio") { renderInicio(); if (can("pendencias")) carregarPend(); }
   if (t==="acessos") carregarAcessos();
   if (t==="cotacoes") { renderCot(); carregarCot(); }
@@ -407,6 +410,8 @@ const MENU = [
     {t:"os", rot:"Ordens de serviço (OS)", b:"b-os"}, {t:"demandas", rot:"Demandas", b:"b-dem"}]},
   {g:"Pendências e compras", ico:'<path d="M8 5h11M8 12h11M8 19h11M4 5h.01M4 12h.01M4 19h.01"/>', itens:[
     {t:"pendencias", rot:"Controle de pendências", b:"b-adm"}, {t:"pendencias", acao:"nova", rot:"Incluir pendência"}, {t:"cotacoes", rot:"Cotações"}]},
+  {g:"Unidades", ico:'<path d="M5 21V4h10v17M15 9h4v12M8 8h1M11 8h1M8 12h1M11 12h1M8 16h1M11 16h1M3 21h18"/>', itens:[
+    {t:"unidades", rot:"Lista de unidades"}, {t:"uncadastro", rot:"Atualização cadastral"}, {t:"unconfig", rot:"Configurações"}]},
   {g:"Administração", ico:'<path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 6.5M18 14.5a6 6 0 0 1 3.5 5.5"/>', itens:[
     {t:"usuarios", rot:"Usuários"}, {t:"equipe", rot:"Equipe"}, {t:"minhaequipe", rot:"Minha equipe"}, {t:"acessos", rot:"Histórico de acessos"}]},
   {g:"Gestão", ico:'<path d="M5 19V11M10 19V6M15 19v-5M20 19V9"/>', itens:[{t:"dashboard", rot:"Dashboard do estoque"}]}
@@ -5590,6 +5595,384 @@ if ($("#t-rondas")) {
     const f = ev.target.closest("[data-rd-foto]"); if (f) { rdVerFoto(f.dataset.rd, f.dataset.rdFoto); return; }
   });
   $("#t-rondas").addEventListener("keydown", ev => { if (ev.key === "Enter" && ev.target.dataset && ev.target.dataset.rdAbrir && ev.target.tagName === "TR") rdAbrir(ev.target.dataset.rdAbrir); });
+}
+
+// ---------- unidades e moradores (só no setor Administração; dados pessoais) ----------
+// Lista de unidades (com animais e veículos), atualização cadastral (ficha, controle e impressão) e configurações
+// (blocos, andares, unidades e importação da planilha de cadastro). Os dados ficam só na planilha do Google.
+const UN = { lista:null, blocos:[], carregando:false, erro:"", em:0, vista:"unidades", q:"", bloco:"", ocup:"", cad:"", cq:"", ed:null, edCad:true };
+let CF = null; // estado da tela Configurações (só grava em "Salvar todas as alterações")
+const unPode = () => can("un_editar");
+const UN_OCUP = ["Ocupada","Em obra","Vazia"], UN_SIT = ["Proprietário","Alugado"], UN_VAGAS = ["1A","1B","2A","2B","3B","4B"];
+const unNome = u => `${u.numero} · ${u.bloco}`;
+const unBlocoCurto = b => String(b || "").replace(/\s*\(.*\)\s*$/, "");
+const unMoradores = u => u.pessoas.filter(p => p.morador === "Sim").length;
+const unTemCadastro = u => !!(String(u.proprietario || "").trim() || u.pessoas.length || u.pets.length || u.veiculos.length);
+// atualização cadastral: em dia até 12 meses
+const unCadSt = u => !u.cadastroEm ? "nunca" : String(u.cadastroEm).slice(0, 10) >= (() => { const d = new Date(); d.setFullYear(d.getFullYear() - 1); return iso(d); })() ? "ok" : "velha";
+const UN_CAD_ROT = {ok:"Atualizada", velha:"Desatualizada", nunca:"Nunca atualizada"};
+function unLimparMemoria(){ UN.lista = null; UN.blocos = []; UN.ed = null; UN.erro = ""; CF = null; }
+async function carregarUnidades(forcar){
+  if (!TEM_ADM || !S.token || UN.carregando) return;
+  if (!(podeAba("unidades") || podeAba("uncadastro") || podeAba("unconfig"))) return;
+  if (!forcar && UN.lista && Date.now() - UN.em < 60000) { renderUnidadesTudo(); return; }
+  UN.carregando = true;
+  try { const r = await api("unidades"); UN.lista = r.unidades || []; UN.blocos = r.blocos || []; UN.em = Date.now(); UN.erro = ""; }
+  catch(e){ UN.erro = e.message; toast(e.message, true); }
+  finally { UN.carregando = false; renderUnidadesTudo(); }
+}
+function renderUnidadesTudo(){ renderUnLista(); renderUnCad(); renderUnConfig(); }
+const unAvisoNovo = () => /desconhecida/i.test(UN.erro) ? " O cadastro de unidades precisa do Apps Script novo (colar o código e implantar uma nova versão)." : "";
+function unCarregando(box){
+  if (UN.erro && !UN.lista) { box.innerHTML = `<div class="notice crit">${esc(UN.erro)}${unAvisoNovo()}</div>`; return true; }
+  if (!UN.lista) { box.innerHTML = `<div class="empty"><span class="spin" aria-hidden="true"></span> Carregando as unidades…</div>`; return true; }
+  return false;
+}
+// busca: número (ex.: 603) em todos os blocos, ou nome / placa / pet
+function unBusca(u, q, vista){
+  if (!q) return true;
+  const n = norm(q).trim();
+  if (/^\d+$/.test(n)) return String(u.numero).includes(n);
+  if (vista === "veiculos") return u.veiculos.some(v => norm([v.placa, v.marca, v.modelo, v.cor].join(" ")).includes(n)) || norm(u.proprietario).includes(n);
+  if (vista === "animais") return u.pets.some(p => norm(p.descricao).includes(n)) || norm(u.proprietario).includes(n);
+  return norm([u.proprietario, u.bloco].concat(u.pessoas.map(p => p.nome)).join(" ")).includes(n);
+}
+// ---- Lista de unidades ----
+function renderUnLista(){
+  const sec = $("#t-unidades"); if (!sec || sec.hidden) return;
+  const box = $("#ul-corpo"); if (unCarregando(box)) { $("#ul-cards").innerHTML = ""; return; }
+  const L = UN.lista, tot = L.length, pct = n => tot ? Math.round(n / tot * 100) + "%" : "0%";
+  const nO = L.filter(u => u.ocupacao === "Ocupada").length, nE = L.filter(u => u.ocupacao === "Em obra").length, nV = L.filter(u => u.ocupacao !== "Ocupada" && u.ocupacao !== "Em obra").length;
+  const card = (k, rot, v, sub, cor, ico, subCls) => `<button type="button" class="pp-card ${UN.ocup === k ? "sel" : ""}" data-ocup="${k}"><span class="pp-txt"><span class="pp-rot">${rot}</span><b class="pp-v num">${v}</b><span class="pp-sub ${subCls || ""}">${sub}</span></span><span class="pp-ico ${cor}"><svg viewBox="0 0 24 24" aria-hidden="true">${ico}</svg></span></button>`;
+  $("#ul-cards").innerHTML = card("", "Total de Unidades", tot, `${UN.blocos.length} bloco${UN.blocos.length === 1 ? "" : "s"}`, "roxo", '<path d="M5 21V4h10v17M15 9h4v12M8 8h1M11 8h1M8 12h1M11 12h1M8 16h1M11 16h1M3 21h18"/>')
+    + card("Ocupada", "Ocupadas", nO, pct(nO), "verde", '<path d="M4 11.5 12 5l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5h-5v5H5a1 1 0 0 1-1-1z"/>', "ok")
+    + card("Em obra", "Em Obra", nE, pct(nE), "laranja", '<path d="M4 17h16v2H4zM6 17a6 6 0 0 1 12 0M12 7V5M9.5 11.5 12 7l2.5 4.5"/>')
+    + card("Vazia", "Vazias", nV, pct(nV), "cinza", '<path d="M6 21V4h9v17M15 6h3v15M12 12h.01M3 21h18"/>');
+  $$("#ul-cards [data-ocup]").forEach(b => b.onclick = () => { UN.ocup = UN.ocup === b.dataset.ocup ? "" : b.dataset.ocup; renderUnLista(); });
+  $$("#ul-vistas [data-v]").forEach(b => b.setAttribute("aria-selected", b.dataset.v === UN.vista ? "true" : "false"));
+  const sel = $("#ul-bloco"); sel.innerHTML = `<option value="">Todos os blocos</option>` + UN.blocos.map(b => `<option ${b === UN.bloco ? "selected" : ""}>${esc(b)}</option>`).join("");
+  const vis = L.filter(u => (!UN.bloco || u.bloco === UN.bloco) && (!UN.ocup || (UN.ocup === "Vazia" ? u.ocupacao !== "Ocupada" && u.ocupacao !== "Em obra" : u.ocupacao === UN.ocup)) && unBusca(u, UN.q, UN.vista));
+  const ocPill = o => `<span class="pill ${o === "Ocupada" ? "s-ok" : o === "Em obra" ? "s-baixo" : "p-ajuste"}">${esc(o || "Vazia")}</span>`;
+  let h;
+  if (UN.vista === "animais") {
+    const l = vis.flatMap(u => u.pets.map(p => ({u, p})));
+    h = `<thead><tr><th>Bloco</th><th>Unidade</th><th>Pet</th><th class="hide-s">Proprietário</th></tr></thead><tbody>${l.length ? l.map(({u, p}) => `<tr class="click" tabindex="0" data-un="${esc(u.id)}"><td>${esc(unBlocoCurto(u.bloco))}</td><td class="mono">${esc(u.numero)}</td><td>${esc(p.descricao)}</td><td class="hide-s">${esc(u.proprietario || "—")}</td></tr>`).join("") : `<tr><td colspan="4"><div class="empty">Nenhum pet com esses filtros.</div></td></tr>`}</tbody>`;
+    $("#ul-conta").textContent = `${l.length} pet${l.length === 1 ? "" : "s"}`;
+  } else if (UN.vista === "veiculos") {
+    const l = vis.flatMap(u => u.veiculos.map(v => ({u, v})));
+    h = `<thead><tr><th>Bloco</th><th>Unidade</th><th>Placa</th><th>Veículo</th><th class="hide-s">Cor</th><th class="hide-s">Vaga</th><th class="hide-m">TAG</th></tr></thead><tbody>${l.length ? l.map(({u, v}) => `<tr class="click" tabindex="0" data-un="${esc(u.id)}"><td>${esc(unBlocoCurto(u.bloco))}</td><td class="mono">${esc(u.numero)}</td><td class="mono">${esc(v.placa || "—")}</td><td>${esc([v.marca, v.modelo].filter(Boolean).join(" ") || "—")}</td><td class="hide-s">${esc(v.cor || "—")}</td><td class="hide-s">${esc(v.vaga || "—")}</td><td class="hide-m">${esc(v.tag || "—")}</td></tr>`).join("") : `<tr><td colspan="7"><div class="empty">Nenhum veículo com esses filtros.</div></td></tr>`}</tbody>`;
+    $("#ul-conta").textContent = `${l.length} veículo${l.length === 1 ? "" : "s"}`;
+  } else {
+    h = `<thead><tr><th>Bloco</th><th>Unidade</th><th class="hide-s">Situação</th><th>Ocupação</th><th>Proprietário</th><th class="hide-m num">Pessoas</th><th class="hide-m num">Pets</th><th class="hide-m num">Veículos</th></tr></thead><tbody>
+      ${vis.length ? vis.map(u => `<tr class="click" tabindex="0" data-un="${esc(u.id)}"><td>${esc(unBlocoCurto(u.bloco))}<span class="sub hide-s">${esc(u.bloco.replace(/^\s*\d+\s*/, ""))}</span></td><td class="mono"><b>${esc(u.numero)}</b></td><td class="hide-s">${esc(u.situacao || "—")}</td><td>${ocPill(u.ocupacao)}</td>
+        <td>${esc(u.proprietario || "—")}</td><td class="hide-m num">${u.pessoas.length}${u.pessoas.length ? `<span class="sub">${unMoradores(u)} morador${unMoradores(u) === 1 ? "" : "es"}</span>` : ""}</td><td class="hide-m num">${u.pets.length}</td><td class="hide-m num">${u.veiculos.length}</td></tr>`).join("")
+        : `<tr><td colspan="8"><div class="empty">${L.length ? "Nenhuma unidade com esses filtros." : "Nenhuma unidade cadastrada. Use Unidades → Configurações para importar a planilha ou criar os blocos."}</div></td></tr>`}</tbody>`;
+    $("#ul-conta").textContent = `${vis.length} de ${tot} unidades`;
+  }
+  box.innerHTML = `<div class="tablebox"><table>${h}</table></div>`;
+}
+// ficha da unidade (somente leitura), com atalhos para atualizar e imprimir
+function unFicha(id){
+  const u = (UN.lista || []).find(x => x.id === id); if (!u) return;
+  registrarTela("unficha", `${unBlocoCurto(u.bloco)}-${u.numero}`);
+  const sn = v => v ? esc(v) : "—";
+  $("#modal-box").classList.add("largo");
+  $("#modal-box").innerHTML = `
+    <div class="os-top"><span class="mono muted">${esc(unBlocoCurto(u.bloco))} · ${esc(u.numero)}</span><span class="pill ${u.ocupacao === "Ocupada" ? "s-ok" : u.ocupacao === "Em obra" ? "s-baixo" : "p-ajuste"}">${esc(u.ocupacao || "Vazia")}</span>${u.situacao ? `<span class="pill st-andamento">${esc(u.situacao)}</span>` : ""}<span class="pill ${unCadSt(u) === "ok" ? "s-ok" : unCadSt(u) === "velha" ? "s-baixo" : "p-ajuste"}">${UN_CAD_ROT[unCadSt(u)]}</span></div>
+    <h3 class="os-tit">Unidade ${esc(u.numero)} · Bloco ${esc(u.bloco)}</h3>
+    <dl class="os-info"><div><dt>Proprietário</dt><dd>${sn(u.proprietario)}</dd></div><div><dt>Contatos</dt><dd class="un-pre">${sn(u.contatos)}</dd></div><div><dt>Identidades</dt><dd class="un-pre">${sn(u.identidade)}</dd></div>
+      <div><dt>Atualização cadastral</dt><dd>${u.cadastroEm ? `${fDataHora(u.cadastroEm)} · ${esc(u.cadastroPor || "")}` : "nunca registrada"}</dd></div></dl>
+    ${u.obs ? `<p class="os-desc">${esc(u.obs)}</p>` : ""}
+    <h4>Pessoas e autorizações de acesso (${u.pessoas.length})</h4>
+    <div class="tablebox flat"><table><thead><tr><th>Nome</th><th>Parentesco</th><th>Morador?</th><th class="hide-s">Facial</th><th class="hide-s">Barco</th><th class="hide-m">Contatos</th></tr></thead><tbody>
+      ${u.pessoas.length ? u.pessoas.map(p => `<tr><td>${esc(p.nome)}</td><td>${sn(p.parentesco)}</td><td>${sn(p.morador)}</td><td class="hide-s">${sn(p.facial)}</td><td class="hide-s">${sn(p.barco)}</td><td class="hide-m un-pre">${sn(p.contatos)}</td></tr>`).join("") : `<tr><td colspan="6"><div class="empty">Nenhuma pessoa cadastrada.</div></td></tr>`}</tbody></table></div>
+    <div class="os-grid"><section><h4>Pets (${u.pets.length})</h4>${u.pets.length ? `<ul class="pr-docs">${u.pets.map(p => `<li>${esc(p.descricao)}</li>`).join("")}</ul>` : `<p class="muted">Nenhum.</p>`}</section>
+      <section><h4>Veículos (${u.veiculos.length})</h4>${u.veiculos.length ? `<ul class="pr-docs">${u.veiculos.map(v => `<li><b class="mono">${esc(v.placa || "sem placa")}</b> ${esc([v.marca, v.modelo, v.cor].filter(Boolean).join(" · "))}${v.vaga ? ` · vaga ${esc(v.vaga)}` : ""}${v.tag ? ` · TAG ${esc(v.tag)}` : ""}</li>`).join("")}</ul>` : `<p class="muted">Nenhum.</p>`}</section></div>
+    <div class="actions" style="margin-top:12px">${unPode() ? `<button class="btn primary" type="button" id="un-f-ed">Atualizar cadastro</button>` : ""}<button class="btn" type="button" id="un-f-pr">Imprimir ficha</button><button class="btn" type="button" id="un-f-x">Fechar</button></div>`;
+  $("#modal").hidden = false;
+  $("#un-f-x").onclick = fecharModal; $("#un-f-x").focus();
+  $("#un-f-pr").onclick = () => unImprimir(u);
+  if ($("#un-f-ed")) $("#un-f-ed").onclick = () => { fecharModal(); unEditar(u.id); };
+}
+function unExportar(){
+  if (!UN.lista) return;
+  try {
+    const X = xlsxMini(), cab = {b:true, cor:"FFFFFFFF", fill:"FF1F4E79", wrap:false};
+    const vis = UN.lista.filter(u => (!UN.bloco || u.bloco === UN.bloco) && unBusca(u, UN.q, UN.vista));
+    let cols, linhas;
+    if (UN.vista === "animais") { cols = [["Bloco",22],["Unidade",10],["Pet",40],["Proprietário",34]]; linhas = vis.flatMap(u => u.pets.map(p => [u.bloco, u.numero, p.descricao, u.proprietario])); }
+    else if (UN.vista === "veiculos") { cols = [["Bloco",22],["Unidade",10],["Vaga",8],["Marca",16],["Modelo",22],["Cor",12],["TAG",16],["Placa",12]]; linhas = vis.flatMap(u => u.veiculos.map(v => [u.bloco, u.numero, v.vaga, v.marca, v.modelo, v.cor, v.tag, v.placa])); }
+    else { cols = [["Bloco",22],["Andar",8],["Unidade",10],["Situação",14],["Ocupação",12],["Proprietário",34],["Pessoas",9],["Moradores",11],["Pets",7],["Veículos",9],["Atualização cadastral",20]];
+      linhas = vis.map(u => [u.bloco, u.andar, u.numero, u.situacao, u.ocupacao, u.proprietario, u.pessoas.length, unMoradores(u), u.pets.length, u.veiculos.length, u.cadastroEm ? fDataHora(u.cadastroEm) : "nunca"]); }
+    cols.forEach(([rot, w], j) => { X.cel(1, j + 1, rot, cab); X.col(j + 1, w); });
+    linhas.forEach((l, i) => l.forEach((v, j) => X.cel(i + 2, j + 1, typeof v === "number" ? v : String(v == null ? "" : v), typeof v === "number" ? {h:"center"} : {})));
+    const buf = X.gerar(UN.vista === "animais" ? "Pets" : UN.vista === "veiculos" ? "Veiculos" : "Unidades");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([buf], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+    a.download = `${UN.vista === "animais" ? "Pets" : UN.vista === "veiculos" ? "Veiculos" : "Unidades"} - Pier ${hoje()}.xlsx`;
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+    registrarTela("exportar_unidades", UN.vista);
+  } catch(e){ toast(e.message || "Não foi possível gerar a planilha.", true); }
+}
+// ---- Atualização cadastral: controle e ficha de edição ----
+function renderUnCad(){
+  const sec = $("#t-uncadastro"); if (!sec || sec.hidden) return;
+  const lb = $("#uc-lista-box"), ed = $("#uc-editor");
+  if (UN.ed) { lb.hidden = true; ed.hidden = false; unEditor(); return; }
+  lb.hidden = false; ed.hidden = true;
+  const box = $("#uc-corpo"); if (unCarregando(box)) { $("#uc-cards").innerHTML = ""; return; }
+  const L = UN.lista, n = k => L.filter(u => unCadSt(u) === k).length, tot = L.length;
+  const card = (k, rot, v, sub, cor, ico) => `<button type="button" class="pp-card ${UN.cad === k ? "sel" : ""}" data-cad="${k}"><span class="pp-txt"><span class="pp-rot">${rot}</span><b class="pp-v num">${v}</b><span class="pp-sub">${sub}</span></span><span class="pp-ico ${cor}"><svg viewBox="0 0 24 24" aria-hidden="true">${ico}</svg></span></button>`;
+  $("#uc-cards").innerHTML = card("ok", "Atualizadas", n("ok"), `${tot ? Math.round(n("ok") / tot * 100) : 0}% · nos últimos 12 meses`, "verde", '<circle cx="12" cy="12" r="9"/><path d="m8 12.5 3 3 5-6"/>')
+    + card("velha", "Desatualizadas", n("velha"), "há mais de 12 meses", "ambar", '<circle cx="12" cy="12" r="8"/><path d="M12 8v4.5l3 2"/>')
+    + card("nunca", "Nunca atualizadas", n("nunca"), "sem registro no sistema", "cinza", '<path d="M12 4 21 19.5H3z"/><path d="M12 10v4.5M12 17h.01"/>');
+  $$("#uc-cards [data-cad]").forEach(b => b.onclick = () => { UN.cad = UN.cad === b.dataset.cad ? "" : b.dataset.cad; renderUnCad(); });
+  const sel = $("#uc-bloco"); sel.innerHTML = `<option value="">Todos os blocos</option>` + UN.blocos.map(b => `<option ${b === UN.bloco ? "selected" : ""}>${esc(b)}</option>`).join("");
+  const vis = L.filter(u => (!UN.bloco || u.bloco === UN.bloco) && (!UN.cad || unCadSt(u) === UN.cad) && unBusca(u, UN.cq, "unidades"));
+  box.innerHTML = `<div class="tablebox"><table><thead><tr><th>Bloco</th><th>Unidade</th><th>Proprietário</th><th>Atualização cadastral</th><th class="hide-s">Quando / quem</th><th></th></tr></thead><tbody>
+    ${vis.length ? vis.map(u => `<tr><td>${esc(unBlocoCurto(u.bloco))}</td><td class="mono"><b>${esc(u.numero)}</b></td><td>${esc(u.proprietario || "—")}</td>
+      <td><span class="pill ${unCadSt(u) === "ok" ? "s-ok" : unCadSt(u) === "velha" ? "s-baixo" : "p-ajuste"}">${UN_CAD_ROT[unCadSt(u)]}</span></td>
+      <td class="hide-s">${u.cadastroEm ? `${fData(u.cadastroEm)} · ${esc(u.cadastroPor || "")}` : "—"}</td>
+      <td class="un-acoes">${unPode() ? `<button type="button" class="btn small primary" data-un-ed="${esc(u.id)}">Atualizar</button>` : `<button type="button" class="btn small" data-un="${esc(u.id)}">Ver</button>`}<button type="button" class="btn small" data-un-pr="${esc(u.id)}">Imprimir</button></td></tr>`).join("")
+      : `<tr><td colspan="6"><div class="empty">Nenhuma unidade com esses filtros.</div></td></tr>`}</tbody></table></div>`;
+}
+function unEditar(id){
+  const u = (UN.lista || []).find(x => x.id === id); if (!u || !unPode()) return;
+  UN.ed = JSON.parse(JSON.stringify(u)); UN.edCad = true;
+  if (S.tab !== "uncadastro") setTab("uncadastro"); else renderUnCad();
+  scrollTo({top:0});
+}
+function unEditor(){
+  const u = UN.ed, box = $("#uc-editor");
+  const pars = [...new Set((UN.lista || []).flatMap(x => x.pessoas.map(p => p.parentesco)).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  const vagas = [...new Set(UN_VAGAS.concat((UN.lista || []).flatMap(x => x.veiculos.map(v => v.vaga)).filter(Boolean)))].sort();
+  const snSel = (k, i, v) => `<select class="input" data-pc="${k}" data-i="${i}" aria-label="${k}"><option value=""></option>${["Sim","Não"].map(x => `<option ${x === v ? "selected" : ""}>${x}</option>`).join("")}</select>`;
+  box.innerHTML = `
+    <div class="ct-top"><button type="button" class="link" id="ue-voltar">← Atualização cadastral</button><h2 class="sec">Unidade ${esc(u.numero)} · Bloco ${esc(u.bloco)}</h2>
+      <span class="ct-acoes"><button class="btn" type="button" id="ue-imprimir">Imprimir ficha</button><button class="btn primary" type="button" id="ue-salvar">Salvar</button></span></div>
+    <p class="hint" id="ue-msg"></p>
+    <div class="card ct-card"><h3>Unidade e proprietário</h3><div class="form">
+      <div class="field"><label for="ue-sit">Situação</label><select class="input" id="ue-sit"><option value="">—</option>${UN_SIT.map(x => `<option ${x === u.situacao ? "selected" : ""}>${x}</option>`).join("")}</select></div>
+      <div class="field"><label for="ue-ocup">Ocupação</label><select class="input" id="ue-ocup">${UN_OCUP.map(x => `<option ${x === (u.ocupacao || "Vazia") ? "selected" : ""}>${x}</option>`).join("")}</select></div>
+      <div class="field full"><label for="ue-prop">Proprietário</label><input class="input" id="ue-prop" value="${esc(u.proprietario || "")}" maxlength="200"></div>
+      <div class="field"><label for="ue-cont">Contatos do proprietário</label><textarea class="input" id="ue-cont" rows="3" maxlength="600" placeholder="E-mail e telefones, um por linha">${esc(u.contatos || "")}</textarea></div>
+      <div class="field"><label for="ue-ident">Identidades</label><textarea class="input" id="ue-ident" rows="3" maxlength="300">${esc(u.identidade || "")}</textarea></div>
+      <div class="field full"><label for="ue-obs">Observação</label><textarea class="input" id="ue-obs" rows="2" maxlength="1000">${esc(u.obs || "")}</textarea></div>
+    </div></div>
+    <div class="card ct-card"><div class="ct-h"><h3>Moradores, residentes e autorizações de acesso</h3><button type="button" class="btn small" id="ue-add-p">+ Pessoa</button></div>
+      <datalist id="ue-dl-par">${pars.map(p => `<option value="${esc(p)}">`).join("")}</datalist>
+      <div class="un-linhas">${u.pessoas.map((p, i) => `<div class="un-linha un-lp"><label class="field"><span>Nome</span><input class="input" data-pc="nome" data-i="${i}" value="${esc(p.nome || "")}" maxlength="120"></label>
+        <label class="field"><span>Parentesco / relação</span><input class="input" data-pc="parentesco" data-i="${i}" value="${esc(p.parentesco || "")}" list="ue-dl-par" maxlength="60"></label>
+        <label class="field"><span>Morador?</span>${snSel("morador", i, p.morador)}</label><label class="field"><span>Facial</span>${snSel("facial", i, p.facial)}</label><label class="field"><span>Barco</span>${snSel("barco", i, p.barco)}</label>
+        <label class="field un-larga"><span>Contatos</span><input class="input" data-pc="contatos" data-i="${i}" value="${esc(p.contatos || "")}" maxlength="300"></label>
+        <button type="button" class="link danger un-x" data-rm="pessoas" data-i="${i}" aria-label="Tirar ${esc(p.nome || "esta pessoa")}">Tirar</button></div>`).join("") || `<p class="muted">Nenhuma pessoa. Use "+ Pessoa".</p>`}</div></div>
+    <div class="os-grid">
+      <div class="card ct-card"><div class="ct-h"><h3>Pets</h3><button type="button" class="btn small" id="ue-add-pet">+ Pet</button></div>
+        <div class="un-linhas">${u.pets.map((p, i) => `<div class="un-linha"><label class="field un-larga"><span>Pet</span><input class="input" data-pt="descricao" data-i="${i}" value="${esc(p.descricao || "")}" maxlength="120" placeholder="Ex.: Cachorro (Mel)"></label><button type="button" class="link danger un-x" data-rm="pets" data-i="${i}">Tirar</button></div>`).join("") || `<p class="muted">Nenhum.</p>`}</div></div>
+      <div class="card ct-card"><div class="ct-h"><h3>Veículos</h3><button type="button" class="btn small" id="ue-add-v">+ Veículo</button></div>
+        <datalist id="ue-dl-vaga">${vagas.map(v => `<option value="${esc(v)}">`).join("")}</datalist>
+        <div class="un-linhas">${u.veiculos.map((v, i) => `<div class="un-linha un-lv">${[["placa","Placa",10],["marca","Marca",40],["modelo","Modelo",60],["cor","Cor",30],["vaga","Vaga",10],["tag","TAG",40]].map(([k, rot, mx]) => `<label class="field"><span>${rot}</span><input class="input" data-vc="${k}" data-i="${i}" value="${esc(v[k] || "")}" maxlength="${mx}" ${k === "vaga" ? 'list="ue-dl-vaga"' : ""}></label>`).join("")}<button type="button" class="link danger un-x" data-rm="veiculos" data-i="${i}">Tirar</button></div>`).join("") || `<p class="muted">Nenhum.</p>`}</div></div>
+    </div>
+    <label class="perm un-conf"><input type="checkbox" id="ue-cad" ${UN.edCad ? "checked" : ""}> Cadastro conferido com o morador: registrar a <b>atualização cadastral</b> de hoje</label>
+    <div class="actions" style="margin-top:12px"><button class="btn primary" type="button" id="ue-salvar2">Salvar</button><button class="btn" type="button" id="ue-cancelar">Cancelar</button></div>`;
+  const ler = () => {
+    u.situacao = $("#ue-sit").value; u.ocupacao = $("#ue-ocup").value; u.proprietario = $("#ue-prop").value.trim(); u.contatos = $("#ue-cont").value.trim();
+    u.identidade = $("#ue-ident").value.trim(); u.obs = $("#ue-obs").value.trim(); UN.edCad = $("#ue-cad").checked;
+    $$("#uc-editor [data-pc]").forEach(el => { u.pessoas[+el.dataset.i][el.dataset.pc] = el.value.trim(); });
+    $$("#uc-editor [data-pt]").forEach(el => { u.pets[+el.dataset.i][el.dataset.pt] = el.value.trim(); });
+    $$("#uc-editor [data-vc]").forEach(el => { u.veiculos[+el.dataset.i][el.dataset.vc] = el.value.trim(); });
+  };
+  const add = (k, obj) => { ler(); u[k].push(obj); unEditor(); const l = $$(`#uc-editor [data-i="${u[k].length - 1}"]`); if (l.length) l[0].focus(); };
+  $("#ue-add-p").onclick = () => add("pessoas", {nome:"", parentesco:"", morador:"Sim", facial:"", barco:"", contatos:""});
+  $("#ue-add-pet").onclick = () => add("pets", {descricao:""});
+  $("#ue-add-v").onclick = () => add("veiculos", {placa:"", marca:"", modelo:"", cor:"", vaga:"", tag:""});
+  $$("#uc-editor [data-rm]").forEach(b => b.onclick = () => { ler(); u[b.dataset.rm].splice(+b.dataset.i, 1); unEditor(); });
+  const sair = () => { UN.ed = null; renderUnCad(); scrollTo({top:0}); };
+  $("#ue-voltar").onclick = sair; $("#ue-cancelar").onclick = sair;
+  $("#ue-imprimir").onclick = () => { ler(); unImprimir(u); };
+  const salvar = async btn => {
+    ler();
+    const msg = $("#ue-msg");
+    const semNome = u.pessoas.findIndex(p => !p.nome);
+    if (semNome >= 0) { msg.className = "hint err"; msg.textContent = `Preencha o nome da pessoa ${semNome + 1} ou tire a linha.`; return; }
+    const r = await enviar(btn, msg, "unSalvar", {unidade:u, cadastro:UN.edCad});
+    if (r) { UN.ed = null; $("#uc-editor").innerHTML = ""; await carregarUnidades(true); scrollTo({top:0}); }
+  };
+  $("#ue-salvar").onclick = ev => salvar(ev.target); $("#ue-salvar2").onclick = ev => salvar(ev.target);
+}
+// ficha da unidade para o morador conferir, corrigir e assinar (impressão / PDF)
+function unImprimir(u){
+  registrarTela("imprimir_unidade", `${unBlocoCurto(u.bloco)}-${u.numero}`);
+  const v = x => esc(x || ""), vazias = (n, cols) => Array.from({length:n}, () => `<tr>${"<td>&nbsp;</td>".repeat(cols)}</tr>`).join("");
+  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Ficha cadastral - Unidade ${v(u.numero)} - Bloco ${v(unBlocoCurto(u.bloco))}</title><style>
+    @page{size:A4;margin:12mm} body{font:11px Calibri,Arial,sans-serif;color:#1f2a37;margin:0}
+    h1{font-size:16px;margin:0} .cab{border-bottom:3px solid #1f3a56;padding-bottom:6px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:flex-end}
+    h2{font-size:12px;background:#1f3a56;color:#fff;padding:4px 6px;margin:12px 0 4px} table{border-collapse:collapse;width:100%} th,td{border:1px solid #9fb0c2;padding:4px 5px;text-align:left;vertical-align:top}
+    th{background:#eef3f7;font-size:10px} td{height:16px} .k{width:28%;background:#eef3f7;font-weight:bold} .assin{margin-top:28px;display:flex;gap:30px} .assin div{flex:1;border-top:1px solid #1f2a37;padding-top:3px;text-align:center}
+    .nota{font-size:10px;color:#455}
+  </style></head><body>
+    <div class="cab"><div><h1>PIER RESIDÊNCIAS — FICHA DE ATUALIZAÇÃO CADASTRAL</h1><div>Bloco ${v(u.bloco)} · Unidade <b>${v(u.numero)}</b></div></div><div class="nota">Impresso em ${fData(hoje())}${u.cadastroEm ? `<br>Última atualização: ${fData(u.cadastroEm)}` : ""}</div></div>
+    <p class="nota">Confira os dados abaixo. Corrija à caneta o que estiver errado, complete as linhas em branco e devolva assinada à Administração.</p>
+    <h2>Unidade e proprietário</h2><table>
+      <tr><td class="k">Situação</td><td>${v(u.situacao)} &nbsp; ( ) Proprietário &nbsp; ( ) Alugado</td></tr>
+      <tr><td class="k">Proprietário</td><td>${v(u.proprietario)}</td></tr>
+      <tr><td class="k">Contatos (e-mail e telefone)</td><td>${v(u.contatos).replace(/\n/g, "<br>")}</td></tr>
+      <tr><td class="k">Identidades</td><td>${v(u.identidade).replace(/\n/g, "<br>")}</td></tr></table>
+    <h2>Moradores, residentes e autorizações de acesso</h2><table><tr><th>Nome</th><th>Parentesco / relação</th><th>Morador?</th><th>Cadastro facial</th><th>Acesso barco?</th><th>Contatos</th></tr>
+      ${u.pessoas.map(p => `<tr><td>${v(p.nome)}</td><td>${v(p.parentesco)}</td><td>${v(p.morador)}</td><td>${v(p.facial)}</td><td>${v(p.barco)}</td><td>${v(p.contatos)}</td></tr>`).join("")}${vazias(4, 6)}</table>
+    <h2>Pets</h2><table><tr><th>Pet (espécie, nome, porte)</th></tr>${u.pets.map(p => `<tr><td>${v(p.descricao)}</td></tr>`).join("")}${vazias(2, 1)}</table>
+    <h2>Veículos</h2><table><tr><th>Vaga</th><th>Marca</th><th>Modelo</th><th>Cor</th><th>TAG?</th><th>Placa</th></tr>${u.veiculos.map(x => `<tr><td>${v(x.vaga)}</td><td>${v(x.marca)}</td><td>${v(x.modelo)}</td><td>${v(x.cor)}</td><td>${v(x.tag)}</td><td>${v(x.placa)}</td></tr>`).join("")}${vazias(2, 6)}</table>
+    <h2>Correções e observações</h2><table>${vazias(4, 1)}</table>
+    <p class="nota">Declaro que as informações acima estão corretas e atualizadas. Os dados são de uso interno da Administração do condomínio.</p>
+    <div class="assin"><div>Assinatura do proprietário / responsável</div><div>Data</div><div>Recebido pela Administração</div></div>
+  </body></html>`;
+  let fr = $("#un-print-frame"); if (fr) fr.remove();
+  fr = document.createElement("iframe"); fr.id = "un-print-frame"; fr.setAttribute("aria-hidden", "true");
+  fr.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
+  document.body.appendChild(fr);
+  fr.contentDocument.open(); fr.contentDocument.write(html); fr.contentDocument.close();
+  setTimeout(() => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch(e){ toast("Não foi possível abrir a impressão.", true); } }, 100);
+  return html;
+}
+// ---- Configurações: blocos, andares e unidades ----
+function cfDe(){
+  const porB = new Map(UN.blocos.map(b => [b, []]));
+  (UN.lista || []).forEach(u => { if (!porB.has(u.bloco)) porB.set(u.bloco, []); porB.get(u.bloco).push({id:u.id, numero:String(u.numero), andar:String(u.andar || ""), cad:unTemCadastro(u)}); });
+  return { blocos:[...porB].map(([nome, unidades]) => ({nome, unidades, andaresExtra:[]})), sel:0, sujo:false, editando:-1 };
+}
+const cfAndarDe = n => String(Math.floor((Number(n) || 0) / 100) || "");
+function renderUnConfig(){
+  const sec = $("#t-unconfig"); if (!sec || sec.hidden) return;
+  const box = $("#cf-corpo"); if (unCarregando(box)) return;
+  if (!CF) CF = cfDe();
+  $("#cf-salvar").disabled = !CF.sujo;
+  const B = CF.blocos, b = B[CF.sel];
+  const andares = b ? [...new Set(b.unidades.map(u => u.andar || cfAndarDe(u.numero)).concat(b.andaresExtra))].sort((x, y) => Number(x) - Number(y)) : [];
+  box.innerHTML = `<div class="cf-grid">
+    <section class="panel cf-blocos"><div class="ct-h"><h3>Blocos</h3><button type="button" class="btn small" id="cf-add-b" aria-label="Adicionar bloco">+</button></div>
+      <ul>${B.map((x, i) => `<li class="${i === CF.sel ? "sel" : ""}">${CF.editando === i ? `<input class="input" id="cf-ren" value="${esc(x.nome)}" maxlength="60" aria-label="Nome do bloco"><button type="button" class="btn small" id="cf-ren-ok">OK</button>`
+        : `<button type="button" class="cf-b" data-b="${i}">${esc(x.nome)}<small>${x.unidades.length} unidade${x.unidades.length === 1 ? "" : "s"}</small></button><button type="button" class="link" data-ren="${i}" aria-label="Renomear ${esc(x.nome)}">✎</button><button type="button" class="link danger" data-del-b="${i}" aria-label="Excluir ${esc(x.nome)}">🗑</button>`}</li>`).join("") || `<li class="muted">Nenhum bloco.</li>`}</ul></section>
+    <section class="panel cf-unid">${b ? `<h3>${esc(b.nome)}</h3><button type="button" class="btn small" id="cf-add-a">+ Adicionar andar</button>
+      <div class="cf-andares">${andares.map(a => { const us = b.unidades.filter(u => (u.andar || cfAndarDe(u.numero)) === a).sort((x, y) => (Number(x.numero) || 0) - (Number(y.numero) || 0));
+        return `<div class="cf-andar"><div class="ct-h"><b>${a === "0" ? "Térreo" : esc(a) + "º andar"}</b><span><button type="button" class="btn small" data-add-u="${esc(a)}">+ Unidade</button><button type="button" class="link danger" data-del-a="${esc(a)}" aria-label="Excluir o ${esc(a)}º andar">🗑</button></span></div>
+          <div class="cf-chips">${us.map(u => `<span class="cf-chip ${u.cad ? "cad" : ""}" title="${u.cad ? "Unidade com cadastro" : ""}">${esc(u.numero)}<button type="button" data-del-u="${esc(u.numero)}" aria-label="Tirar a unidade ${esc(u.numero)}">×</button></span>`).join("") || `<span class="muted">Nenhuma unidade neste andar.</span>`}
+          ${CF.novoAndar === a ? `<span class="cf-nova"><input class="input" id="cf-nu" inputmode="numeric" maxlength="12" placeholder="Nº" aria-label="Número da unidade"><button type="button" class="btn small" id="cf-nu-ok">OK</button></span>` : ""}</div></div>`; }).join("") || `<p class="muted">Nenhum andar. Use "+ Adicionar andar".</p>`}</div>`
+      : `<p class="muted">Crie um bloco com o "+" ao lado.</p>`}</section></div>`;
+  const mexeu = () => { CF.sujo = true; renderUnConfig(); };
+  $$("#cf-corpo [data-b]").forEach(x => x.onclick = () => { CF.sel = +x.dataset.b; CF.novoAndar = null; renderUnConfig(); });
+  $("#cf-add-b").onclick = () => { const n = B.length + 1; B.push({nome:`${n}`, unidades:[], andaresExtra:[]}); CF.sel = B.length - 1; CF.editando = B.length - 1; mexeu(); const r = $("#cf-ren"); if (r) { r.focus(); r.select(); } };
+  $$("#cf-corpo [data-ren]").forEach(x => x.onclick = () => { CF.editando = +x.dataset.ren; renderUnConfig(); $("#cf-ren").focus(); });
+  if ($("#cf-ren")) { const ok = () => { const v = $("#cf-ren").value.trim(); if (!v) { toast("Dê um nome ao bloco.", true); return; } if (B.some((x, i) => i !== CF.editando && norm(x.nome) === norm(v))) { toast("Já existe um bloco com esse nome.", true); return; } B[CF.editando].nome = v; CF.editando = -1; mexeu(); };
+    $("#cf-ren-ok").onclick = ok; $("#cf-ren").onkeydown = e => { if (e.key === "Enter") ok(); if (e.key === "Escape") { CF.editando = -1; renderUnConfig(); } }; }
+  $$("#cf-corpo [data-del-b]").forEach(x => x.onclick = () => { const i = +x.dataset.delB; if (B[i].unidades.some(u => u.cad)) { toast("Este bloco tem unidades com cadastro. Limpe o cadastro delas antes de excluir o bloco.", true); return; }
+    if (!x.dataset.conf) { x.dataset.conf = "1"; x.textContent = "excluir?"; return; } B.splice(i, 1); CF.sel = Math.max(0, Math.min(CF.sel, B.length - 1)); mexeu(); });
+  if (!b) return;
+  $("#cf-add-a").onclick = () => { const atuais = andares.map(Number); const prox = String(atuais.length ? Math.max(...atuais) + 1 : 1); b.andaresExtra.push(prox); CF.novoAndar = prox; mexeu(); const i = $("#cf-nu"); if (i) { i.value = String(Number(prox) * 100 + 1); i.focus(); i.select(); } };
+  $$("#cf-corpo [data-add-u]").forEach(x => x.onclick = () => { const a = x.dataset.addU; CF.novoAndar = a; renderUnConfig(); const us = b.unidades.filter(u => (u.andar || cfAndarDe(u.numero)) === a).map(u => Number(u.numero) || 0); const i = $("#cf-nu"); i.value = String(us.length ? Math.max(...us) + 1 : Number(a) * 100 + 1); i.focus(); i.select(); });
+  if ($("#cf-nu")) { const ok = () => { const n = $("#cf-nu").value.trim(); if (!n) return; if (b.unidades.some(u => u.numero === n)) { toast(`A unidade ${n} já existe neste bloco.`, true); return; } b.unidades.push({id:"", numero:n, andar:CF.novoAndar, cad:false}); CF.novoAndar = null; mexeu(); };
+    $("#cf-nu-ok").onclick = ok; $("#cf-nu").onkeydown = e => { if (e.key === "Enter") ok(); if (e.key === "Escape") { CF.novoAndar = null; renderUnConfig(); } }; }
+  $$("#cf-corpo [data-del-u]").forEach(x => x.onclick = () => { const i = b.unidades.findIndex(u => u.numero === x.dataset.delU); if (i < 0) return; if (b.unidades[i].cad) { toast(`A unidade ${b.unidades[i].numero} tem cadastro (proprietário, pessoas, pets ou veículos). Limpe o cadastro antes de tirar.`, true); return; } b.unidades.splice(i, 1); mexeu(); });
+  $$("#cf-corpo [data-del-a]").forEach(x => x.onclick = () => { const a = x.dataset.delA, us = b.unidades.filter(u => (u.andar || cfAndarDe(u.numero)) === a);
+    if (us.some(u => u.cad)) { toast("Este andar tem unidades com cadastro. Limpe o cadastro delas antes.", true); return; }
+    b.unidades = b.unidades.filter(u => (u.andar || cfAndarDe(u.numero)) !== a); b.andaresExtra = b.andaresExtra.filter(z => z !== a); mexeu(); });
+}
+async function cfSalvar(btn){
+  if (!CF || !CF.sujo) return;
+  const r = await enviar(btn, $("#cf-msg"), "unConfig", {blocos: CF.blocos.map(b => ({nome:b.nome, unidades:b.unidades.map(u => ({id:u.id, numero:u.numero, andar:u.andar || cfAndarDe(u.numero)}))}))});
+  $("#cf-msg").textContent = r ? "" : $("#cf-msg").textContent;
+  if (r) { CF = null; await carregarUnidades(true); }
+}
+// importação da planilha de cadastro no modelo do Pier (aba com BLOCO / APTº / PROPRIETÁRIO / ... / VEÍCULOS)
+async function unImportar(file){
+  if (!file) return;
+  if (!/\.xlsx$/i.test(file.name)) { toast("Escolha a planilha de cadastro em .xlsx.", true); return; }
+  let abas;
+  try {
+    const buf = await file.arrayBuffer();
+    try { abas = await xlsxLer(buf); }
+    catch(e){ if (!e || !e.semLeitor) throw e; await carregarXLSX(); const wb = XLSX.read(buf, {type:"array"}); abas = wb.SheetNames.map(n => ({nome:n, folha:xlsxFolhaSheetJS(wb.Sheets[n])})); }
+  } catch(e){ toast(e.message || "Não foi possível ler a planilha.", true); return; }
+  let achou = null;
+  for (const a of abas) { const r = unLerCadastro(a.folha); if (r && r.unidades.length && (!achou || r.unidades.length > achou.unidades.length)) achou = Object.assign(r, {aba:a.nome}); }
+  if (!achou) { toast('Não encontrei a aba de cadastro (com as colunas BLOCO, APTº, PROPRIETÁRIO e CADASTROS DA UNIDADE).', true); return; }
+  const U = achou.unidades, np = U.reduce((s, u) => s + u.pessoas.length, 0), nm = U.reduce((s, u) => s + u.pessoas.filter(p => p.morador === "Sim").length, 0);
+  const npet = U.reduce((s, u) => s + u.pets.length, 0), nv = U.reduce((s, u) => s + u.veiculos.length, 0), blocos = [...new Set(U.map(u => u.bloco))];
+  const atual = (UN.lista || []).length;
+  $("#modal-box").classList.add("largo");
+  $("#modal-box").innerHTML = `<h3>Importar a planilha de cadastro</h3>
+    <p>Aba <b>${esc(achou.aba)}</b>: <b>${U.length}</b> unidades em <b>${blocos.length}</b> blocos, <b>${np}</b> pessoas (${nm} moradores), <b>${npet}</b> pets e <b>${nv}</b> veículos.</p>
+    <div class="tablebox flat"><table><thead><tr><th>Bloco</th><th class="num">Unidades</th><th class="num">Pessoas</th><th class="num">Pets</th><th class="num">Veículos</th></tr></thead><tbody>
+      ${blocos.map(b => { const l = U.filter(u => u.bloco === b); return `<tr><td>${esc(b)}</td><td class="num">${l.length}</td><td class="num">${l.reduce((s, u) => s + u.pessoas.length, 0)}</td><td class="num">${l.reduce((s, u) => s + u.pets.length, 0)}</td><td class="num">${l.reduce((s, u) => s + u.veiculos.length, 0)}</td></tr>`; }).join("")}</tbody></table></div>
+    ${achou.avisos.length ? `<p class="hint err">${achou.avisos.slice(0, 5).map(esc).join("<br>")}${achou.avisos.length > 5 ? `<br>+ ${achou.avisos.length - 5} aviso(s)` : ""}</p>` : ""}
+    <div class="notice warn">${atual ? `Isto <b>substitui o cadastro atual</b> (${atual} unidades) pelo da planilha. As unidades que já existiam mantêm a data da atualização cadastral e a marcação "Em obra".` : "O cadastro vai ser criado a partir da planilha."} A ocupação começa como <b>Ocupada</b> nas unidades com morador e <b>Vazia</b> nas outras.</div>
+    <div class="actions" style="margin-top:12px"><button class="btn primary" type="button" id="ui-ok">${atual ? "Substituir o cadastro" : "Importar"}</button><button class="btn" type="button" id="ui-no">Cancelar</button><span class="hint" id="ui-msg"></span></div>`;
+  $("#modal").hidden = false; $("#ui-no").onclick = fecharModal;
+  $("#ui-ok").onclick = () => enviar($("#ui-ok"), $("#ui-msg"), "unImportar", {unidades:U}, async () => { fecharModal(); CF = null; await carregarUnidades(true); });
+}
+function unLerCadastro(F){
+  if (!F) return null;
+  const t = (r, c) => { const v = F.val(r, c); return v === undefined || v === null ? "" : String(typeof v === "number" ? (Number.isInteger(v) ? v : v) : v).trim(); };
+  const n = s => norm(s).replace(/\s+/g, " ").trim();
+  let rc = -1, col = {};
+  for (let r = F.r0; r <= Math.min(F.r1, F.r0 + 20) && rc < 0; r++) {
+    const m = {};
+    for (let c = F.c0; c <= F.c1; c++) {
+      const h = n(t(r, c)); if (!h) continue;
+      if (h === "bloco") m.bloco = c; else if (/^apt/.test(h)) m.apto = c; else if (/^proprietari/.test(h)) m.prop = c;
+      else if (/^contatos \(e-?mail/.test(h)) m.contProp = c; else if (/^identidade/.test(h)) m.ident = c; else if (/^situacao/.test(h)) m.sit = c;
+      else if (/^cadastros da unidade/.test(h)) m.nome = c; else if (/^parentesco/.test(h)) m.par = c; else if (/^morador/.test(h)) m.mor = c;
+      else if (/^cadastro facial/.test(h)) m.fac = c; else if (/^acesso barco/.test(h)) m.bar = c; else if (h === "contatos") m.cont = c; else if (/^pets?$/.test(h)) m.pet = c;
+    }
+    if ("bloco" in m && "apto" in m && "nome" in m) { rc = r; col = m; }
+  }
+  if (rc < 0) return null;
+  // subtítulos dos veículos (linha de baixo)
+  let r0 = rc + 1;
+  for (let c = F.c0; c <= F.c1; c++) { const h = n(t(rc + 1, c)); if (h === "vaga") col.vaga = c; else if (h === "marca") col.marca = c; else if (h === "modelo") col.modelo = c; else if (h === "cor") col.cor = c; else if (/^tag/.test(h)) col.tag = c; else if (h === "placa") col.placa = c; }
+  if ("vaga" in col || "placa" in col) r0 = rc + 2;
+  const g = (r, k) => k in col ? t(r, col[k]) : "";
+  const sn = s => { const x = n(s); return !x ? "" : /^s/.test(x) ? "Sim" : /^n/.test(x) ? "Não" : ""; };
+  const unidades = [], avisos = []; let blocoAtual = "", u = null;
+  for (let r = r0; r <= F.r1; r++) {
+    const b = g(r, "bloco"), ap = g(r, "apto");
+    if (b) blocoAtual = b;
+    if (ap) {
+      if (!blocoAtual) { avisos.push(`Linha ${r + 1}: unidade ${ap} sem bloco (ignorada).`); u = null; continue; }
+      const numero = String(ap).replace(/\.0+$/, "");
+      if (unidades.some(x => x.bloco === blocoAtual && x.numero === numero)) avisos.push(`Linha ${r + 1}: a unidade ${numero} do bloco ${blocoAtual} aparece de novo (juntei os dados).`);
+      u = unidades.find(x => x.bloco === blocoAtual && x.numero === numero);
+      if (!u) { u = {bloco:blocoAtual, numero, andar:cfAndarDe(numero), situacao:"", proprietario:"", contatos:"", identidade:"", pessoas:[], pets:[], veiculos:[]}; unidades.push(u); }
+    }
+    if (!u) continue;
+    const prop = g(r, "prop"); if (prop && !u.proprietario.split(" / ").includes(prop)) u.proprietario = u.proprietario ? u.proprietario + " / " + prop : prop;
+    const cp = g(r, "contProp"); if (cp) u.contatos = u.contatos ? u.contatos + "\n" + cp : cp;
+    const id = g(r, "ident"); if (id) u.identidade = u.identidade ? u.identidade + "\n" + id : id;
+    const st = n(g(r, "sit")); if (st && !u.situacao) u.situacao = /alug/.test(st) ? "Alugado" : /propriet/.test(st) ? "Proprietário" : "";
+    const nome = g(r, "nome"), cont = g(r, "cont");
+    if (nome) u.pessoas.push({nome, parentesco:g(r, "par"), morador:sn(g(r, "mor")), facial:sn(g(r, "fac")), barco:sn(g(r, "bar")), contatos:cont});
+    else if (cont && u.pessoas.length) { const p = u.pessoas[u.pessoas.length - 1]; p.contatos = p.contatos ? p.contatos + " / " + cont : cont; }
+    const pet = g(r, "pet"); if (pet) u.pets.push({descricao:pet});
+    const vc = {vaga:g(r, "vaga"), marca:g(r, "marca"), modelo:g(r, "modelo"), cor:g(r, "cor"), tag:g(r, "tag"), placa:g(r, "placa")};
+    if (vc.placa || vc.marca || vc.modelo || vc.vaga) u.veiculos.push(vc);
+  }
+  return {unidades, avisos};
+}
+if ($("#t-unidades")) {
+  $("#ul-vistas").addEventListener("click", ev => { const b = ev.target.closest("[data-v]"); if (b) { UN.vista = b.dataset.v; renderUnLista(); } });
+  $("#ul-q").addEventListener("input", ev => { UN.q = ev.target.value; renderUnLista(); });
+  $("#ul-bloco").addEventListener("change", ev => { UN.bloco = ev.target.value; renderUnLista(); });
+  $("#ul-exportar").addEventListener("click", unExportar);
+  $("#uc-q").addEventListener("input", ev => { UN.cq = ev.target.value; renderUnCad(); });
+  $("#uc-bloco").addEventListener("change", ev => { UN.bloco = ev.target.value; renderUnCad(); });
+  $("#cf-salvar").addEventListener("click", ev => cfSalvar(ev.target));
+  $("#cf-importar").addEventListener("click", () => $("#cf-arq").click());
+  $("#cf-arq").addEventListener("change", ev => { const f = ev.target.files[0]; ev.target.value = ""; unImportar(f); });
+  $("#cf-ocupadas").addEventListener("click", ev => enviar(ev.target, $("#cf-msg"), "unOcupadas", {}, async () => { $("#cf-msg").textContent = ""; CF = null; await carregarUnidades(true); }));
+  document.addEventListener("click", ev => {
+    const a = ev.target.closest("[data-un]"); if (a && a.closest("#t-unidades, #t-uncadastro")) { unFicha(a.dataset.un); return; }
+    const e = ev.target.closest("[data-un-ed]"); if (e) { unEditar(e.dataset.unEd); return; }
+    const p = ev.target.closest("[data-un-pr]"); if (p) { const u = (UN.lista || []).find(x => x.id === p.dataset.unPr); if (u) unImprimir(u); }
+  });
+  document.addEventListener("keydown", ev => { if (ev.key === "Enter" && ev.target.dataset && ev.target.dataset.un && ev.target.tagName === "TR") unFicha(ev.target.dataset.un); });
 }
 
 // ---------- início ----------

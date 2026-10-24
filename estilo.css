@@ -1001,3 +1001,42 @@ td.num.atras{color:var(--crit);font-weight:700}
   .rd-item-top{flex-direction:column}
   .rd-fech th{width:auto}
 }
+
+/* Unidades e moradores */
+.un-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.un-head h2{margin:0}.un-head p{margin:4px 0 0}
+.un-ferr{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.un-ferr .ind-vistas{margin:0}
+.un-ferr #ul-q{width:220px}
+.un-cards{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.pp-card.sel{border-color:var(--accent);box-shadow:inset 0 -3px 0 var(--accent)}
+.pp-ico.cinza{background:#9ca3af}
+.un-pre{white-space:pre-line}
+.un-acoes{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+.un-linhas{display:grid;gap:10px}
+.un-linha{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;align-items:end;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+.un-linha .field{display:grid;gap:3px;margin:0}
+.un-linha .field>span{font-size:.74rem;font-weight:700;color:var(--muted)}
+.un-lp{grid-template-columns:2fr 1.4fr .8fr .8fr .8fr 2fr auto}
+.un-lv{grid-template-columns:repeat(3,minmax(0,1fr)) auto}.un-lv .un-x{grid-row:1/3;grid-column:4}
+.un-x{align-self:center;color:var(--crit)}
+.un-conf{margin-top:14px;display:block}
+.cf-ocup{margin-bottom:14px}.cf-ocup h3{margin:0 0 4px}.cf-ocup p{margin:0 0 10px}
+.cf-verde{background:#10b981;border-color:#10b981;color:#fff}
+.cf-grid{display:grid;grid-template-columns:minmax(220px,300px) minmax(0,1fr);gap:14px;align-items:start}
+.cf-blocos ul{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:6px}
+.cf-blocos li{display:flex;align-items:center;gap:6px;padding:4px 6px;border:1px solid transparent;border-radius:8px}
+.cf-blocos li.sel{background:var(--accent-soft);border-color:var(--accent)}
+.cf-b{flex:1;text-align:left;border:0;background:none;cursor:pointer;font-weight:600;padding:6px 4px}
+.cf-b small{display:block;font-weight:400;color:var(--muted)}
+.cf-blocos .link{text-decoration:none}
+.cf-unid h3{margin:0 0 10px}
+.cf-andares{display:grid;gap:10px;margin-top:12px}
+.cf-andar{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--bg)}
+.cf-andar .ct-h span{display:flex;gap:8px;align-items:center}
+.cf-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.cf-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 6px 4px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font-family:var(--f-mono);font-size:.86rem}
+.cf-chip.cad{border-color:var(--accent)}
+.cf-chip button{border:0;background:none;cursor:pointer;color:var(--muted);font-size:1rem;line-height:1}
+.cf-nova{display:inline-flex;gap:6px}.cf-nova .input{width:90px}
+@media (max-width:860px){.cf-grid{grid-template-columns:1fr}.un-lp,.un-lv{grid-template-columns:1fr 1fr}.un-lp .un-larga,.un-lp .field:first-child{grid-column:1/-1}.un-ferr #ul-q{width:100%}}
