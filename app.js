@@ -54,10 +54,10 @@ const modo = () => S.adm ? "Administração" : S.setor;
 // O setor escolhido decide a página inicial (Home da Administração ou Painel do setor) e qual estoque e quais OS aparecem.
 // No setor Limpeza não há demandas nem empréstimos.
 // Prestadores de serviço: só no setor Manutenção (pedido de 24/10/2026).
-// Pendências e compras não aparecem no setor Manutenção (pedido de 24/10/2026): ficam na Administração.
-const SO_ADM = ["inicio","pdpainel"], FORA_LIMPEZA = ["demandas","emprestimos","minhaequipe"], SO_MANUT = ["prestadores"], FORA_MANUT = ["pendencias","cotacoes"];
+// Pendências e compras (controle de pendências e cotações) só no setor Administração (pedidos de 24/10/2026).
+const SO_ADM = ["inicio","pdpainel","pendencias","cotacoes"], FORA_LIMPEZA = ["demandas","emprestimos","minhaequipe"], SO_MANUT = ["prestadores"];
 const naManut = () => !S.adm && S.setor !== "Limpeza";
-const abaNoModo = t => t === "painel" ? !S.adm : SO_ADM.includes(t) ? S.adm : SO_MANUT.includes(t) ? naManut() : FORA_MANUT.includes(t) && naManut() ? false : !(!S.adm && S.setor === "Limpeza" && FORA_LIMPEZA.includes(t));
+const abaNoModo = t => t === "painel" ? !S.adm : SO_ADM.includes(t) ? S.adm : SO_MANUT.includes(t) ? naManut() : !(!S.adm && S.setor === "Limpeza" && FORA_LIMPEZA.includes(t));
 const ehSindico = () => norm(S.perfil).includes("sindico");
 const ehGerente = () => norm(S.perfil).includes("gerente");
 // OS por ambiente: a Limpeza vê as OS da Limpeza; a Manutenção, as da Manutenção (inclui jardinagem e as antigas, sem setor)
