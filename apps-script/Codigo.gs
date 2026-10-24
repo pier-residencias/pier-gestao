@@ -233,7 +233,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-10-24 prestadores';
+const VERSAO = '2026-10-24 cotação paralela';
 
 function doGet() {
   return json({ ok: true, app: 'Pier Gestão', versao: VERSAO });
@@ -2530,8 +2530,11 @@ function pendAprovar(t, atual, v, conta, obj) {
 
 // ---------- cotações e mapa de cotação ----------
 // Cada cotação guarda os fornecedores, os itens e os preços em JSON (coluna "Dados"); a tela gera o mapa no modelo do Pier.
-// Situação: Em cotação → (enviar) Aguardando gerente → Aguardando síndico → Aprovada; recusar volta para Em cotação.
-const COT_STATUS = { cotacao: 'Em cotação', gerente: 'Aguardando gerente', sindico: 'Aguardando síndico', aprovada: 'Aprovada', cancelada: 'Cancelada' };
+// Situação: Em cotação → (enviar) Aguardando aprovação (gerente e síndico ao mesmo tempo) → Aprovada; recusar volta para Em cotação.
+// aprovação: vai para o gerente e o síndico ao mesmo tempo; cada um aprova com o próprio login, em qualquer ordem (pedido de 24/10/2026).
+// "Aguardando gerente" e "Aguardando síndico" ficam só para as cotações enviadas antes da mudança.
+const COT_STATUS = { cotacao: 'Em cotação', aprovacao: 'Aguardando aprovação', gerente: 'Aguardando gerente', sindico: 'Aguardando síndico', aprovada: 'Aprovada', cancelada: 'Cancelada' };
+const cotAguardando = s => s === COT_STATUS.aprovacao || s === COT_STATUS.gerente || s === COT_STATUS.sindico;
 const COT_VERSAO = 1;
 const COT_MAX = { fornecedores: 10, itens: 60, anexos: 6 };
 
@@ -2577,6 +2580,38 @@ function cotLimpar(d, antes) {
 }
 
 // total de cada fornecedor: soma dos itens + frete − desconto; "completo" quando todos os itens têm preço
+// e-mail único para o gerente e o síndico quando a cotação vai para aprovação (linhas "Gerente" e "Síndico" da aba Emails).
+// Uma falha no e-mail nunca desfaz o envio.
+function cotAvisarAprovacao(c, dados, conta) {
+  try {
+    const dest = [];
+    emailsDoSetor('Gerente').concat(emailsDoSetor('Síndico')).forEach(e => { if (dest.indexOf(e) < 0) dest.push(e); });
+    if (!dest.length) return ' Nenhum e-mail cadastrado para Gerente e Síndico na aba Emails.';
+    const brl = v => 'R$ ' + Number(v || 0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    const forn = (dados.fornecedores || []).filter(f => f.empresa).map(f => f.empresa);
+    const corpo = [
+      'A cotação ' + c.numero + ' foi enviada para aprovação no Pier Gestão e aguarda o gerente e o síndico.',
+      'Cada um aprova com o próprio login, em qualquer ordem. Ela fica aprovada quando os dois aprovarem.',
+      '',
+      'Finalidade: ' + c.finalidade,
+      c.pendNumero ? 'Pendência: ' + c.pendNumero : '',
+      'Fornecedores consultados: ' + (forn.length ? forn.join(', ') : '—'),
+      'Recomendado: ' + (c.vencedor || '—') + (c.valorVencedor ? ' · ' + brl(c.valorVencedor) : ''),
+      dados.recomendacao && dados.recomendacao.justificativa ? 'Justificativa: ' + dados.recomendacao.justificativa : '',
+      'Enviada por: ' + conta.nome,
+      '',
+      'Para aprovar ou devolver: Pier Gestão → setor Administração → Pendências e compras → Cotações.',
+      '',
+      'Mensagem automática do Pier Gestão. Não responda este e-mail.'
+    ].filter((l, i, a) => l !== '' || (i > 0 && a[i - 1] !== '')).join('\n');
+    MailApp.sendEmail({ to: dest.join(','), subject: 'Pier Gestão – cotação ' + c.numero + ' aguardando aprovação: ' + String(c.finalidade).slice(0, 80), body: corpo, name: 'Pier Gestão' });
+    return ' Aviso enviado por e-mail ao gerente e ao síndico.';
+  } catch (e) {
+    Logger.log('Aviso da cotação não enviado: ' + e.message);
+    return ' O aviso por e-mail não foi enviado (' + String(e.message).slice(0, 120) + ').';
+  }
+}
+
 function cotTotais(d) {
   return d.fornecedores.map((f, i) => {
     let sub = 0, comPreco = 0;
@@ -2630,24 +2665,28 @@ function cotSalvar(r, conta) {
       const iRec = dados.recomendacao.fornecedor;
       if (iRec < 0) throw falha('Escolha o fornecedor recomendado antes de enviar para aprovação.');
       if (!dados.recomendacao.justificativa) throw falha('Escreva a justificativa da recomendação.');
-      Object.assign(obj, { status: COT_STATUS.gerente, aprovGerente: '', aprovSindico: '', recusa: '' });
-      return fim(atual.numero + ' enviada para aprovação do gerente e do síndico.');
+      Object.assign(obj, { status: COT_STATUS.aprovacao, aprovGerente: '', aprovSindico: '', recusa: '' });
+      const r0 = fim(atual.numero + ' enviada ao gerente e ao síndico ao mesmo tempo. Cada um aprova com o próprio login.');
+      r0.texto += cotAvisarAprovacao(Object.assign({}, atual, obj), dados, conta);
+      return r0;
     }
     if (op === 'aprovar') {
-      if (atual.status === COT_STATUS.gerente) {
-        if (!gerente && !sindico) throw falha('Só o gerente (ou o síndico, em nome dele) aprova esta etapa.');
-        Object.assign(obj, { status: COT_STATUS.sindico, aprovGerente: marca(!gerente) });
-        return fim('Cotação aprovada pelo gerente' + (gerente ? '' : ' (em nome dele)') + '. Falta a aprovação do síndico.');
+      if (!cotAguardando(atual.status)) throw falha('Esta cotação não está aguardando aprovação.');
+      if (!gerente && !sindico) throw falha('Só o gerente e o síndico aprovam a cotação.');
+      const temG = !!String(atual.aprovGerente || '').trim(), temS = !!String(atual.aprovSindico || '').trim();
+      let quem;
+      if (sindico && !temS) { obj.aprovSindico = marca(false); quem = 'síndico'; }
+      else if (gerente && !temG) { obj.aprovGerente = marca(false); quem = 'gerente'; }
+      else throw falha('Você já aprovou esta cotação. Falta a aprovação do ' + (temG ? 'síndico' : 'gerente') + '.');
+      if ((temG || obj.aprovGerente) && (temS || obj.aprovSindico)) {
+        obj.status = COT_STATUS.aprovada;
+        return fim(atual.numero + ' aprovada pelo gerente e pelo síndico. Fornecedor: ' + (atual.vencedor || '—') + '.');
       }
-      if (atual.status === COT_STATUS.sindico) {
-        if (!sindico) throw falha('Só o síndico aprova esta etapa.');
-        Object.assign(obj, { status: COT_STATUS.aprovada, aprovSindico: marca(false) });
-        return fim(atual.numero + ' aprovada. Fornecedor: ' + (atual.vencedor || '—') + '.');
-      }
-      throw falha('Esta cotação não está aguardando aprovação.');
+      obj.status = COT_STATUS.aprovacao;
+      return fim('Cotação aprovada pelo ' + quem + '. Falta a aprovação do ' + (quem === 'síndico' ? 'gerente' : 'síndico') + '.');
     }
     if (op === 'recusar') {
-      if (atual.status !== COT_STATUS.gerente && atual.status !== COT_STATUS.sindico) throw falha('Esta cotação não está aguardando aprovação.');
+      if (!cotAguardando(atual.status)) throw falha('Esta cotação não está aguardando aprovação.');
       if (!gerente && !sindico) throw falha('Só o gerente ou o síndico podem recusar.');
       const motivo = cotTxt(r.motivo, 300);
       Object.assign(obj, { status: COT_STATUS.cotacao, aprovGerente: '', aprovSindico: '', recusa: agora() + ' · ' + conta.nome + (motivo ? ': ' + motivo : '') });
