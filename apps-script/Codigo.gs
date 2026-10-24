@@ -96,6 +96,37 @@ const ABAS = {
     ],
     num: ['intervalo', 'prazoDias']
   },
+  // unidades do condomínio e o cadastro de cada uma (dados pessoais: só quem tem "Ver unidades e moradores")
+  un: {
+    nome: 'Unidades',
+    criar: true,
+    cols: [
+      ['id', 'ID'], ['bloco', 'Bloco'], ['andar', 'Andar'], ['numero', 'Unidade'], ['situacao', 'Situação'], ['ocupacao', 'Ocupação'],
+      ['proprietario', 'Proprietário'], ['contatos', 'Contatos do proprietário'], ['identidade', 'Identidades'], ['obs', 'Observação'],
+      ['cadastroEm', 'Atualização cadastral em'], ['cadastroPor', 'Atualização cadastral por'], ['atualizadoEm', 'Atualizado em'], ['atualizadoPor', 'Atualizado por']
+    ],
+    num: []
+  },
+  unp: {
+    nome: 'Moradores',
+    criar: true,
+    cols: [['id', 'ID'], ['unidade', 'ID da unidade'], ['bloco', 'Bloco'], ['numero', 'Unidade'], ['nome', 'Nome'], ['parentesco', 'Parentesco / relação'],
+      ['morador', 'Morador?'], ['facial', 'Cadastro facial'], ['barco', 'Acesso barco?'], ['contatos', 'Contatos'], ['ordem', 'Ordem']],
+    num: []
+  },
+  unpet: {
+    nome: 'Pets',
+    criar: true,
+    cols: [['id', 'ID'], ['unidade', 'ID da unidade'], ['bloco', 'Bloco'], ['numero', 'Unidade'], ['descricao', 'Pet']],
+    num: []
+  },
+  unv: {
+    nome: 'Veiculos',
+    criar: true,
+    cols: [['id', 'ID'], ['unidade', 'ID da unidade'], ['bloco', 'Bloco'], ['numero', 'Unidade'], ['vaga', 'Vaga'], ['marca', 'Marca'],
+      ['modelo', 'Modelo'], ['cor', 'Cor'], ['tag', 'TAG?'], ['placa', 'Placa']],
+    num: []
+  },
   // rondas (vistorias preventivas): cabeçalho em colunas; os itens da ficha e os dados extras em JSON
   ronda: {
     nome: 'Rondas',
@@ -246,7 +277,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-10-24 ronda';
+const VERSAO = '2026-10-24 unidades';
 
 function doGet() {
   return json({ ok: true, app: 'Pier Gestão', versao: VERSAO });
@@ -308,6 +339,7 @@ function doPost(e) {
     if (req.acao === 'usuarios') { pode('usuarios'); return json(Object.assign(base, { equipe: equipe() })); }
     if (req.acao === 'cotLista') { pode('pendencias'); return json(Object.assign(base, cotLista())); }
     if (req.acao === 'cotVerArquivo') { pode('pendencias'); const f = cotVerArquivo(req); auditar(conta, 'Abriu arquivo de cotação', f.nome); delete f.nome; return json(Object.assign(base, { arquivo: f })); }
+    if (req.acao === 'unidades') { unExigir(conta, false); return json(Object.assign(base, unLista())); }
     if (req.acao === 'rondas') { rondaExigir(conta, false); return json(Object.assign(base, rondaLista())); }
     if (req.acao === 'rondaFotoVer') { rondaExigir(conta, false); const f = rondaFotoVer(req); delete f.nome; return json(Object.assign(base, { foto: f })); }
     if (req.acao === 'prestVerDoc') { prestExigir(conta, false); const f = prestVerDoc(req); auditar(conta, 'Abriu documento de prestador', f.nome); delete f.nome; return json(Object.assign(base, { arquivo: f })); }
@@ -349,6 +381,10 @@ function doPost(e) {
         case 'prestVisita': prestExigir(conta, true); msg = prestVisita(req, conta); break;
         case 'prestDoc': prestExigir(conta, true); msg = prestDoc(req, conta); break;
         case 'prestDocRemover': prestExigir(conta, true); msg = prestDocRemover(req, conta); break;
+        case 'unSalvar': unExigir(conta, true); msg = unSalvar(req, conta); extra.semDados = true; break;
+        case 'unConfig': unExigir(conta, true); msg = unConfig(req, conta); extra.semDados = true; break;
+        case 'unOcupadas': unExigir(conta, true); msg = unOcupadas(conta); extra.semDados = true; break;
+        case 'unImportar': unExigir(conta, true); msg = unImportar(req, conta); extra.semDados = true; break;
         case 'rondaSalvar': rondaExigir(conta, true); msg = rondaSalvar(req, conta); extra.ronda = msg.ronda; msg = msg.texto; extra.semDados = true; break;
         case 'rondaFoto': rondaExigir(conta, true); msg = rondaFoto(req, conta); extra.ronda = msg.ronda; msg = msg.texto; extra.semDados = true; break;
         case 'rondaFotoRemover': rondaExigir(conta, true); msg = rondaFotoRemover(req, conta); extra.ronda = msg.ronda; msg = msg.texto; extra.semDados = true; break;
@@ -739,7 +775,9 @@ const PERMISSOES = [
   ['pendencias', 'Pendências', 'Ver e atualizar o controle de pendências do síndico (menu Administração)', 'Administração'],
   ['acessos', 'Histórico de acessos', 'Ver quem entrou no sistema, quando e de qual aparelho (menu Administração)', 'Administração'],
   ['ronda_fazer', 'Fazer ronda', 'Preencher as fichas de ronda (vistoria), pôr fotos e marcar pendências como resolvidas (setor Administração)', 'Ronda'],
-  ['ronda_ver', 'Ver rondas', 'Ver as rondas, as pendências e o fechamento semanal (setor Administração)', 'Ronda']
+  ['ronda_ver', 'Ver rondas', 'Ver as rondas, as pendências e o fechamento semanal (setor Administração)', 'Ronda'],
+  ['un_ver', 'Ver unidades e moradores', 'Ver a lista de unidades, moradores, pets e veículos (setor Administração; dados pessoais)', 'Unidades'],
+  ['un_editar', 'Editar unidades e moradores', 'Atualizar o cadastro das unidades, configurar blocos e unidades e importar a planilha (setor Administração)', 'Unidades']
 ];
 const PADRAO_MANUTENCAO = ['painel', 'itens_ver', 'historico_ver', 'registrar_saida', 'registrar_entrada',
   'registrar_troca', 'registrar_emprestimo', 'devolver', 'itens_cadastrar', 'os_ver', 'os_abrir', 'os_atender', 'dem_ver', 'dem_executar',
@@ -1871,6 +1909,167 @@ function prestVerDoc(r) {
   return f;
 }
 
+// ---------- unidades, moradores, pets e veículos (setor Administração; dados pessoais) ----------
+// Vê quem tem "Ver unidades e moradores"; altera quem tem "Editar unidades e moradores". Tudo vai para a Auditoria.
+const UN_OCUP = ['Ocupada', 'Em obra', 'Vazia'], UN_SIT = ['Proprietário', 'Alugado'], UN_SN = ['Sim', 'Não'];
+function unExigir(conta, editar) {
+  const p = conta.perms || {};
+  if (editar ? !p.un_editar : !(p.un_ver || p.un_editar)) { const e = falha(editar ? 'Seu perfil não tem permissão para alterar o cadastro das unidades.' : 'Seu perfil não tem permissão para ver as unidades e os moradores.'); e.negado = true; throw e; }
+}
+const unSN = v => { const s = String(v || '').trim().toLowerCase(); return !s ? '' : /^s/.test(s) ? 'Sim' : /^n/.test(s) ? 'Não' : ''; };
+const unLimpa = o => { const c = Object.assign({}, o); delete c._row; return c; };
+// número do bloco para ordenar: "1 (SEYCHELES)" → 1
+const unBlocoN = b => { const m = /^\s*(\d+)/.exec(String(b || '')); return m ? Number(m[1]) : 999; };
+function unBlocos(unidades) {
+  let salvos = [];
+  try { salvos = JSON.parse(PropertiesService.getScriptProperties().getProperty('UN_BLOCOS') || '[]'); } catch (e) { salvos = []; }
+  const todos = salvos.slice();
+  unidades.forEach(u => { if (todos.indexOf(u.bloco) < 0) todos.push(u.bloco); });
+  return todos.sort((a, b) => unBlocoN(a) - unBlocoN(b) || String(a).localeCompare(String(b), 'pt-BR'));
+}
+function unLista() {
+  const us = linhas(tabela('un')).map(unLimpa), pes = linhas(tabela('unp')).map(unLimpa), pets = linhas(tabela('unpet')).map(unLimpa), vs = linhas(tabela('unv')).map(unLimpa);
+  const por = {};
+  us.forEach(u => { u.pessoas = []; u.pets = []; u.veiculos = []; por[u.id] = u; });
+  pes.sort((a, b) => (Number(a.ordem) || 0) - (Number(b.ordem) || 0)).forEach(x => { if (por[x.unidade]) por[x.unidade].pessoas.push(x); });
+  pets.forEach(x => { if (por[x.unidade]) por[x.unidade].pets.push(x); });
+  vs.forEach(x => { if (por[x.unidade]) por[x.unidade].veiculos.push(x); });
+  us.sort((a, b) => unBlocoN(a.bloco) - unBlocoN(b.bloco) || String(a.bloco).localeCompare(String(b.bloco)) || (Number(a.numero) || 0) - (Number(b.numero) || 0) || String(a.numero).localeCompare(String(b.numero)));
+  return { unidades: us, blocos: unBlocos(us) };
+}
+// regrava a aba inteira de uma vez (rápido no Google e sem converter telefone em número)
+function substituirLinhas(t, objs) {
+  const n = t.sh.getLastRow() - 1;
+  if (n > 0) t.sh.getRange(2, 1, n, t.ncol).clearContent();
+  if (!objs.length) return;
+  const vals = objs.map(o => { const r = new Array(t.ncol).fill(''); t.def.cols.forEach(([k]) => { if (o[k] !== undefined && o[k] !== null) r[t.idx[k]] = String(o[k]); }); return r; });
+  const rng = t.sh.getRange(2, 1, vals.length, t.ncol);
+  rng.setNumberFormat('@');
+  rng.setValues(vals);
+}
+function unPessoas(lista, u) {
+  return (Array.isArray(lista) ? lista : []).slice(0, 60).map((x, i) => {
+    const nome = texto(x.nome, 120);
+    if (!nome) throw falha('Informe o nome de cada pessoa da unidade ' + u.numero + ' (ou tire a linha vazia).');
+    return { id: /^[A-Za-z0-9_-]{4,40}$/.test(String(x.id || '')) ? String(x.id) : novoId('MP'), unidade: u.id, bloco: u.bloco, numero: u.numero, nome,
+      parentesco: texto(x.parentesco, 60), morador: unSN(x.morador), facial: unSN(x.facial), barco: unSN(x.barco), contatos: texto(x.contatos, 300), ordem: i + 1 };
+  });
+}
+function unPets(lista, u) {
+  return (Array.isArray(lista) ? lista : []).slice(0, 30).map(x => ({ id: /^[A-Za-z0-9_-]{4,40}$/.test(String(x.id || '')) ? String(x.id) : novoId('PT'), unidade: u.id, bloco: u.bloco, numero: u.numero, descricao: texto(x.descricao, 120) })).filter(x => x.descricao);
+}
+function unVeiculos(lista, u) {
+  return (Array.isArray(lista) ? lista : []).slice(0, 30).map(x => ({ id: /^[A-Za-z0-9_-]{4,40}$/.test(String(x.id || '')) ? String(x.id) : novoId('VC'), unidade: u.id, bloco: u.bloco, numero: u.numero,
+    vaga: texto(x.vaga, 10).toUpperCase(), marca: texto(x.marca, 40), modelo: texto(x.modelo, 60), cor: texto(x.cor, 30), tag: texto(x.tag, 40), placa: texto(x.placa, 10).toUpperCase().replace(/\s+/g, '') }))
+    .filter(x => x.placa || x.marca || x.modelo || x.vaga);
+}
+// salva a ficha de uma unidade (dados, pessoas, pets e veículos); "cadastro" marca a atualização cadastral de hoje
+function unSalvar(r, conta) {
+  const v = r.unidade || {};
+  const tu = tabela('un'), us = linhas(tu), u = us.find(x => x.id === texto(v.id, 40));
+  if (!u) throw falha('Unidade não encontrada. Atualize a tela.');
+  const sit = UN_SIT.indexOf(v.situacao) >= 0 ? v.situacao : '';
+  const ocup = UN_OCUP.indexOf(v.ocupacao) >= 0 ? v.ocupacao : (u.ocupacao || 'Vazia');
+  const campos = { situacao: sit, ocupacao: ocup, proprietario: texto(v.proprietario, 200), contatos: texto(v.contatos, 600), identidade: texto(v.identidade, 300),
+    obs: texto(v.obs, 1000), atualizadoEm: agora(), atualizadoPor: conta.nome };
+  if (r.cadastro) { campos.cadastroEm = agora(); campos.cadastroPor = conta.nome; }
+  const pessoas = unPessoas(v.pessoas, u), pets = unPets(v.pets, u), veiculos = unVeiculos(v.veiculos, u);
+  gravar(tu, campos, u._row);
+  [['unp', pessoas], ['unpet', pets], ['unv', veiculos]].forEach(([k, novos]) => {
+    const t = tabela(k), outros = linhas(t).filter(x => x.unidade !== u.id).map(unLimpa);
+    substituirLinhas(t, outros.concat(novos));
+  });
+  AUDIT_DET = (r.cadastro ? 'Atualização cadastral' : 'Alterou o cadastro') + ' da unidade ' + u.numero + ' (bloco ' + u.bloco + '): ' + pessoas.length + ' pessoa(s), ' + pets.length + ' pet(s), ' + veiculos.length + ' veículo(s)';
+  return 'Unidade ' + u.numero + ' salva.' + (r.cadastro ? ' Atualização cadastral registrada hoje.' : '');
+}
+// blocos, andares e unidades (tela Configurações): cria, renomeia e tira; não tira unidade que tenha cadastro
+function unConfig(r, conta) {
+  const blocos = Array.isArray(r.blocos) ? r.blocos : [];
+  if (blocos.length > 60) throw falha('Blocos demais.');
+  const tu = tabela('un'), us = linhas(tu), porId = {};
+  us.forEach(u => { porId[u.id] = u; });
+  const pes = linhas(tabela('unp')), pets = linhas(tabela('unpet')), vs = linhas(tabela('unv'));
+  const temCadastro = id => pes.some(x => x.unidade === id) || pets.some(x => x.unidade === id) || vs.some(x => x.unidade === id) || !!(porId[id] && String(porId[id].proprietario || '').trim());
+  const nomes = {}, novos = [], vistos = {};
+  let criadas = 0, renomeadas = 0;
+  blocos.forEach(b => {
+    const nome = texto(b.nome, 60);
+    if (!nome) throw falha('Todo bloco precisa de um nome.');
+    if (nomes[nome.toLowerCase()]) throw falha('O bloco "' + nome + '" aparece duas vezes.');
+    nomes[nome.toLowerCase()] = true;
+    (Array.isArray(b.unidades) ? b.unidades : []).forEach(x => {
+      const numero = texto(x.numero, 12);
+      if (!numero) throw falha('Toda unidade precisa de um número (bloco ' + nome + ').');
+      const chave = nome.toLowerCase() + '|' + numero.toLowerCase();
+      if (vistos[chave]) throw falha('A unidade ' + numero + ' aparece duas vezes no bloco ' + nome + '.');
+      vistos[chave] = true;
+      const andar = texto(x.andar, 4) || String(Math.floor((Number(numero) || 0) / 100) || '');
+      const atual = x.id && porId[x.id];
+      if (atual) {
+        if (atual.bloco !== nome || atual.numero !== numero || String(atual.andar) !== andar) renomeadas++;
+        novos.push(Object.assign(unLimpa(atual), { bloco: nome, numero, andar }));
+        delete porId[x.id];
+      } else {
+        criadas++;
+        novos.push({ id: novoId('UN'), bloco: nome, andar, numero, situacao: '', ocupacao: 'Vazia', proprietario: '', contatos: '', identidade: '', obs: '', cadastroEm: '', cadastroPor: '', atualizadoEm: agora(), atualizadoPor: conta.nome });
+      }
+    });
+  });
+  const sairam = Object.keys(porId);
+  const presas = sairam.filter(temCadastro).map(id => porId[id].numero + ' (' + porId[id].bloco + ')');
+  if (presas.length) throw falha('Não dá para tirar unidade com cadastro (proprietário, pessoas, pets ou veículos): ' + presas.slice(0, 5).join(', ') + (presas.length > 5 ? '…' : '') + '. Limpe o cadastro dela antes.');
+  substituirLinhas(tu, novos);
+  // bloco/número também ficam nas abas de pessoas, pets e veículos (para quem lê a planilha)
+  const porNovo = {}; novos.forEach(u => { porNovo[u.id] = u; });
+  [['unp', pes], ['unpet', pets], ['unv', vs]].forEach(([k, l]) => {
+    if (!l.some(x => porNovo[x.unidade] && (porNovo[x.unidade].bloco !== x.bloco || porNovo[x.unidade].numero !== x.numero))) return;
+    substituirLinhas(tabela(k), l.map(x => Object.assign(unLimpa(x), porNovo[x.unidade] ? { bloco: porNovo[x.unidade].bloco, numero: porNovo[x.unidade].numero } : {})));
+  });
+  PropertiesService.getScriptProperties().setProperty('UN_BLOCOS', JSON.stringify(blocos.map(b => texto(b.nome, 60))));
+  AUDIT_DET = 'Configuração das unidades: ' + blocos.length + ' bloco(s), ' + novos.length + ' unidade(s); ' + criadas + ' criada(s), ' + sairam.length + ' retirada(s), ' + renomeadas + ' alterada(s)';
+  return 'Configuração salva: ' + novos.length + ' unidades em ' + blocos.length + ' blocos.' + (criadas ? ' ' + criadas + ' nova(s).' : '') + (sairam.length ? ' ' + sairam.length + ' retirada(s).' : '');
+}
+// marca como ocupadas as unidades com ao menos uma pessoa com "Morador? = Sim"
+function unOcupadas(conta) {
+  const tu = tabela('un'), us = linhas(tu), pes = linhas(tabela('unp'));
+  const com = {}; pes.forEach(x => { if (x.morador === 'Sim') com[x.unidade] = true; });
+  let n = 0;
+  const novos = us.map(u => { const o = unLimpa(u); if (com[u.id] && u.ocupacao !== 'Ocupada') { o.ocupacao = 'Ocupada'; o.atualizadoEm = agora(); o.atualizadoPor = conta.nome; n++; } return o; });
+  if (n) substituirLinhas(tu, novos);
+  AUDIT_DET = 'Marcou ' + n + ' unidade(s) como ocupadas (com morador ativo)';
+  return n ? n + ' unidade' + (n === 1 ? '' : 's') + ' marcada' + (n === 1 ? '' : 's') + ' como ocupada' + (n === 1 ? '' : 's') + '.' : 'Nenhuma unidade para mudar: as que têm morador ativo já estão como ocupadas.';
+}
+// importação da planilha de cadastro (lida no navegador): substitui o cadastro inteiro de uma vez.
+// Mantém o ID, "Em obra" e a data da atualização cadastral das unidades que já existiam (pelo bloco + número).
+function unImportar(r, conta) {
+  const lista = Array.isArray(r.unidades) ? r.unidades : [];
+  if (!lista.length) throw falha('A planilha não tem unidades.');
+  if (lista.length > 2000) throw falha('Unidades demais na planilha.');
+  const tu = tabela('un'), antes = {};
+  linhas(tu).forEach(u => { antes[String(u.bloco).toLowerCase() + '|' + String(u.numero).toLowerCase()] = u; });
+  const us = [], pes = [], pets = [], vs = [], vistos = {};
+  lista.forEach(x => {
+    const bloco = texto(x.bloco, 60), numero = texto(x.numero, 12);
+    if (!bloco || !numero) return;
+    const chave = bloco.toLowerCase() + '|' + numero.toLowerCase();
+    if (vistos[chave]) throw falha('A unidade ' + numero + ' do bloco ' + bloco + ' aparece duas vezes na planilha.');
+    vistos[chave] = true;
+    const a = antes[chave] || {};
+    const u = { id: a.id || novoId('UN'), bloco, andar: texto(x.andar, 4) || String(Math.floor((Number(numero) || 0) / 100) || ''), numero,
+      situacao: UN_SIT.indexOf(x.situacao) >= 0 ? x.situacao : '', proprietario: texto(x.proprietario, 200), contatos: texto(x.contatos, 600),
+      identidade: texto(x.identidade, 300), obs: a.obs || '', cadastroEm: a.cadastroEm || '', cadastroPor: a.cadastroPor || '', atualizadoEm: agora(), atualizadoPor: conta.nome };
+    const p = unPessoas((x.pessoas || []).filter(z => texto(z.nome, 120)), u);
+    u.ocupacao = a.ocupacao === 'Em obra' ? 'Em obra' : p.some(z => z.morador === 'Sim') ? 'Ocupada' : 'Vazia';
+    us.push(u); p.forEach(z => pes.push(z)); unPets(x.pets, u).forEach(z => pets.push(z)); unVeiculos(x.veiculos, u).forEach(z => vs.push(z));
+  });
+  if (!us.length) throw falha('Nenhuma unidade com bloco e número na planilha.');
+  substituirLinhas(tu, us); substituirLinhas(tabela('unp'), pes); substituirLinhas(tabela('unpet'), pets); substituirLinhas(tabela('unv'), vs);
+  const blocos = unBlocos(us);
+  PropertiesService.getScriptProperties().setProperty('UN_BLOCOS', JSON.stringify(blocos));
+  AUDIT_DET = 'Importou o cadastro: ' + us.length + ' unidades, ' + pes.length + ' pessoas, ' + pets.length + ' pets, ' + vs.length + ' veículos';
+  return 'Cadastro importado: ' + us.length + ' unidades em ' + blocos.length + ' blocos, ' + pes.length + ' pessoas, ' + pets.length + ' pets e ' + vs.length + ' veículos.';
+}
+
 // ---------- ronda (vistorias preventivas do condomínio) ----------
 // Fichas: por bloco (níveis × categorias), diária das áreas comuns e checklist-mestre A a I (modelo do Checklist Consolidado).
 // Códigos: OK, P (pendente), C (crítico), NA (não se aplica), NV (não verificado). P, C e NV pedem observação/motivo.
@@ -2960,6 +3159,9 @@ const TELAS_VISTAS = {
   usuarios: ['Usuários e permissões', 'usuarios'], pendencias: ['Controle de pendências', 'pendencias'],
   acessos: ['Histórico de acessos', 'acessos'], cotacoes: ['Cotações', 'pendencias'],
   exportar_mapa: ['Mapa de cotação (planilha)', 'pendencias'], rondas: ['Ronda (vistorias)', ['ronda_ver', 'ronda_fazer']],
+  unidades: ['Lista de unidades e moradores', ['un_ver', 'un_editar']], uncadastro: ['Atualização cadastral', ['un_ver', 'un_editar']],
+  unconfig: ['Configurações das unidades', 'un_editar'], unficha: ['Ficha da unidade', ['un_ver', 'un_editar']],
+  exportar_unidades: ['Lista de unidades (planilha)', ['un_ver', 'un_editar']], imprimir_unidade: ['Ficha da unidade para imprimir', ['un_ver', 'un_editar']],
   exportar_movs: ['Movimentações (planilha CSV)', 'exportar'], exportar_consumo: ['Consumo por item (planilha CSV)', 'exportar']
 };
 function registrarVisao(conta, req) {
@@ -3286,6 +3488,7 @@ function limparFalhasLogin(usuario) { if (usuario) PropertiesService.getScriptPr
 const ACOES_AUDIT = {
   cotSalvar: 'Cotação', cotArquivo: 'Arquivo de cotação',
   prestSalvar: 'Prestador de serviço', prestVisita: 'Visita de prestador', prestDoc: 'Documento de prestador', prestDocRemover: 'Tirou documento de prestador', prestImportar: 'Importou planilha de prestadores',
+  unSalvar: 'Unidade', unConfig: 'Configuração das unidades', unOcupadas: 'Marcou unidades ocupadas', unImportar: 'Importou cadastro de moradores',
   rondaSalvar: 'Ronda', rondaFoto: 'Foto na ronda', rondaFotoRemover: 'Tirou foto da ronda', rondaResolver: 'Resolveu pendência da ronda',
   visao: 'Abriu tela',
   trocarSenha: 'Trocou a própria senha',
@@ -3418,10 +3621,11 @@ function ehGerente(conta) {
   return String((conta && conta.perfil) || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().indexOf('gerente') >= 0;
 }
 
-// Perfil "Gerente": criado uma vez só, com todas as permissões menos a gestão de usuários (ajustável na tela Usuários)
+// Perfil "Gerente": criado uma vez só, com todas as permissões menos a gestão de usuários e os dados dos moradores (ajustável na tela Usuários)
 function garantirGerente() {
   if (Object.keys(lerPerfis()).some(n => chaveNome(n).indexOf('gerente') >= 0)) return '';
-  const perms = {}; PERMISSOES.forEach(p => { if (p[0] !== 'usuarios') perms[p[0]] = true; });
+  // dados pessoais dos moradores (unidades) não entram por padrão: a Administração marca se quiser
+  const perms = {}; PERMISSOES.forEach(p => { if (['usuarios', 'un_ver', 'un_editar'].indexOf(p[0]) < 0) perms[p[0]] = true; });
   salvarPerfil({ nome: 'Gerente', perms });
   return ' Perfil Gerente criado.';
 }

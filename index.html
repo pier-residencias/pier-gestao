@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap"></noscript>
-<link rel="stylesheet" href="estilo.css?v=20261024ronda">
+<link rel="stylesheet" href="estilo.css?v=20261024unid">
 </head>
 <body>
 <div class="login" id="login" hidden>
@@ -235,6 +235,36 @@
     </div>
     <div id="ind-kanban" hidden></div>
     <div id="ind-agenda" hidden></div>
+  </section>
+
+  <!-- UNIDADES (setor Administração; dados pessoais dos moradores) -->
+  <section id="t-unidades" hidden>
+    <div class="un-head"><div><h2 class="sec">Lista de unidades</h2><p class="muted">Pesquisa: número da unidade (ex.: 603 em todos os blocos) ou nome de condômino.</p></div>
+      <div class="un-ferr"><div class="ind-vistas" id="ul-vistas" role="tablist" aria-label="Mostrar"><button type="button" role="tab" data-v="unidades" aria-selected="true">Unidades</button><button type="button" role="tab" data-v="animais" aria-selected="false">Animais</button><button type="button" role="tab" data-v="veiculos" aria-selected="false">Veículos</button></div>
+        <input class="input" id="ul-q" type="search" placeholder="Número, nome ou placa…" aria-label="Pesquisar"><button class="btn" type="button" id="ul-exportar">Exportar</button></div></div>
+    <div class="pp-cards un-cards" id="ul-cards"></div>
+    <div class="toolbar"><select class="input" id="ul-bloco" aria-label="Bloco"><option value="">Todos os blocos</option></select><span class="hint" id="ul-conta"></span></div>
+    <div id="ul-corpo"><div class="empty">Carregando as unidades…</div></div>
+    <p class="hint" style="margin-top:10px">Dados pessoais de uso interno da Administração. Abrir a lista, a ficha de uma unidade, exportar e imprimir ficam registrados no histórico de acessos.</p>
+  </section>
+
+  <section id="t-uncadastro" hidden>
+    <div id="uc-lista-box">
+      <div class="sec-head"><h2 class="sec">Atualização cadastral</h2><span class="muted">Confira o cadastro de cada unidade com o morador: ficha para imprimir, atualização e controle do que está em dia (últimos 12 meses).</span></div>
+      <div class="pp-cards un-cards" id="uc-cards"></div>
+      <div class="toolbar"><input class="input" id="uc-q" type="search" placeholder="Número da unidade ou nome" aria-label="Pesquisar"><select class="input" id="uc-bloco" aria-label="Bloco"><option value="">Todos os blocos</option></select></div>
+      <div id="uc-corpo"><div class="empty">Carregando as unidades…</div></div>
+    </div>
+    <div id="uc-editor" hidden></div>
+  </section>
+
+  <section id="t-unconfig" hidden>
+    <div class="un-head"><div><h2 class="sec">Configurações de unidades</h2><p class="muted">Defina blocos, andares e unidades do condomínio.</p></div>
+      <div class="un-ferr"><button class="btn" type="button" id="cf-importar">Importar Excel</button><input type="file" id="cf-arq" accept=".xlsx" hidden><button class="btn primary" type="button" id="cf-salvar" disabled>Salvar todas as alterações</button></div></div>
+    <p class="hint" id="cf-msg"></p>
+    <div class="panel cf-ocup"><h3>Marcar unidades ocupadas</h3><p class="muted">Define <b>Ocupada</b> em todas as unidades que têm ao menos uma pessoa com <b>Morador? = Sim</b>.</p><button class="btn cf-verde" type="button" id="cf-ocupadas">Marcar unidades com moradores ativos como ocupadas</button></div>
+    <div id="cf-corpo"><div class="empty">Carregando as unidades…</div></div>
+    <p class="hint" style="margin-top:10px">"Importar Excel" lê a planilha de cadastro no modelo do Pier (BLOCO, APTº, PROPRIETÁRIO, CONTATOS, IDENTIDADES, SITUAÇÃO, CADASTROS DA UNIDADE, PARENTESCO, MORADOR?, CADASTRO FACIAL, ACESSO BARCO?, CONTATOS, PETS e VEÍCULOS) e mostra um resumo antes de gravar.</p>
   </section>
 
   <!-- RONDA (setor Administração): vistorias preventivas no modelo do Checklist Consolidado -->
@@ -625,6 +655,6 @@
 
 <script src="config.js"></script>
 <script src="nfe.js?v=20261015s"></script>
-<script src="app.js?v=20261024ronda"></script>
+<script src="app.js?v=20261024unid"></script>
 </body>
 </html>
