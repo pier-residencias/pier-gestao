@@ -65,7 +65,7 @@ const ABAS = {
       ['solucao', 'O que foi feito'], ['motivoCancelamento', 'Motivo do cancelamento'],
       ['fotosAntes', 'Fotos antes'], ['fotosDepois', 'Fotos depois'], ['andamento', 'Andamento'],
       ['atualizadoEm', 'Atualizado em'],
-      ['setor', 'Setor'], ['pendencia', 'Pendência de origem']
+      ['setor', 'Setor'], ['pendencia', 'Pendência de origem'], ['equipamento', 'Equipamento']
     ],
     num: []
   },
@@ -219,7 +219,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-10-23 rápido';
+const VERSAO = '2026-10-23 indicadores';
 
 function doGet() {
   return json({ ok: true, app: 'Pier Gestão', versao: VERSAO });
@@ -1193,10 +1193,13 @@ function osCampos(v) {
   if (!local) throw falha('Informe o local do serviço.');
   const prioridade = OS_PRIORIDADES.indexOf(v.prioridade) >= 0 ? v.prioridade : 'Normal';
   const prazo = /^\d{4}-\d{2}-\d{2}$/.test(String(v.prazo || '')) ? String(v.prazo) : prazoPadrao(prioridade);
-  return {
+  const c = {
     titulo, local, prioridade, prazo, categoria: texto(v.categoria, 40),
     descricao: texto(v.descricao, 3000), solicitante: texto(v.solicitante, 120)
   };
+  // equipamento é opcional; só muda quando vem no pedido (versões antigas do site não mandam e não apagam)
+  if ('equipamento' in v) c.equipamento = texto(v.equipamento, 80);
+  return c;
 }
 
 function osAbrir(v, conta, origem) {
