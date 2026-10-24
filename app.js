@@ -7089,6 +7089,7 @@ const ES_ITENS = ["Chaves entregues / devolvidas","Limpeza do salão e dos banhe
 const ES_ST = ["Solicitada","Pré-reserva","Confirmada","Cancelada","Recusada","Realizada"];
 const ES_COR = {"Solicitada":"ambar","Pré-reserva":"ambar","Confirmada":"ok","Cancelada":"cinza","Recusada":"verm","Realizada":"conc"};
 const esAtiva = r => r.status !== "Cancelada" && r.status !== "Recusada";
+const esValor = r => { if (r.valor !== "" && r.valor !== undefined && r.valor !== null) return Number(r.valor); const e = ES.d && ES.d.espacos.find(x => x.nome === r.espaco); return e && e.valor !== "" && e.valor !== undefined ? Number(e.valor) : null; };
 const esUn = r => [r.bloco, r.unidade ? "Unid. " + r.unidade : ""].filter(Boolean).join(" · ") || "—";
 const esDiaSem = d => ["dom","seg","ter","qua","qui","sex","sáb"][new Date(d + "T12:00:00").getDay()] || "";
 const esVist = (r, fase) => ES.d.vistorias.find(v => v.reserva === r.id && v.fase === fase);
@@ -7124,15 +7125,16 @@ function renderEsReservas(){
     && (!ES.fEsp || r.espaco === ES.fEsp) && (!q || norm([r.solicitacao, r.bloco, r.unidade, r.espaco, r.obs].join(" ")).includes(q)));
   if (ES.vista === "passadas" || ES.vista === "todas") vis.reverse();
   const conflito = r => esAtiva(r) && L.some(x => x !== r && esAtiva(x) && x.espaco === r.espaco && x.data === r.data);
-  $("#er-conta").textContent = `${vis.length} reserva${vis.length === 1 ? "" : "s"}`;
+  const soma = vis.filter(esAtiva).reduce((a, r) => a + (esValor(r) || 0), 0);
+  $("#er-conta").textContent = `${vis.length} reserva${vis.length === 1 ? "" : "s"}${soma ? " · " + fBRL(soma) : ""}`;
   const vi = (r, f) => { const v = esVist(r, f); return v ? `<span class="md-st ${Number(v.problemas) ? "verm" : "ok"}" title="${esc(f)} feita em ${fDataHora(v.feitoEm)}">${f === "Entrega" ? "Entrega" : "Devolução"} ${Number(v.problemas) ? "· " + v.problemas + " problema(s)" : "✓"}</span>` : ""; };
-  box.innerHTML = `<div class="tablebox md-hist"><table><thead><tr><th>Data</th><th>Espaço</th><th>Bloco / unidade</th><th class="hide-s">Solicitação</th><th>Status</th><th class="hide-m">Checklist</th><th>Ações</th></tr></thead><tbody>
+  box.innerHTML = `<div class="tablebox md-hist"><table><thead><tr><th>Data</th><th>Espaço</th><th>Bloco / unidade</th><th class="hide-s">Solicitação</th><th class="num">Valor</th><th>Status</th><th class="hide-m">Checklist</th><th>Ações</th></tr></thead><tbody>
     ${vis.length ? vis.map(r => `<tr><td class="md-nw"><b>${fData(r.data)}</b><span class="sub">${esDiaSem(r.data)}${r.data === h ? " · hoje" : ""}</span></td><td>${esc(r.espaco)}</td><td>${esc(esUn(r))}</td>
       <td class="hide-s mono">${esc(r.solicitacao || "—")}<span class="sub">${esc(r.origem === "e-mail" ? "pelo e-mail" : r.origem === "colado" ? "e-mail colado" : "manual")}</span></td>
-      <td><span class="md-st ${ES_COR[r.status] || "cinza"}">${esc(r.status)}</span>${conflito(r) ? `<span class="md-st verm" title="Outra reserva ativa no mesmo espaço e dia">conflito de data</span>` : ""}</td>
+      <td class="num md-nw">${esValor(r) !== null ? fBRL(esValor(r)) : "—"}</td><td><span class="md-st ${ES_COR[r.status] || "cinza"}">${esc(r.status)}</span>${conflito(r) ? `<span class="md-st verm" title="Outra reserva ativa no mesmo espaço e dia">conflito de data</span>` : ""}</td>
       <td class="hide-m">${vi(r, "Entrega")}${vi(r, "Devolução")}${!esVist(r, "Entrega") && !esVist(r, "Devolução") ? "—" : ""}</td>
       <td class="md-ac">${pend(r) ? `<button type="button" class="btn small primary" data-er-conf="${esc(r.id)}">Confirmar</button>` : ""}${esAtiva(r) ? `<button type="button" class="btn small" data-er-vist="${esc(r.id)}">Checklist</button>` : ""}<button type="button" class="md-ib" data-er-ed="${esc(r.id)}" title="Editar" aria-label="Editar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></svg></button></td></tr>`).join("")
-      : `<tr><td colspan="7"><div class="empty">Nenhuma reserva aqui. As reservas entram sozinhas pelos e-mails da administradora, ou use <b>Colar e-mail</b> / <b>+ Nova reserva</b>.</div></td></tr>`}</tbody></table></div>`;
+      : `<tr><td colspan="8"><div class="empty">Nenhuma reserva aqui. As reservas entram sozinhas pelos e-mails da administradora, ou use <b>Colar e-mail</b> / <b>+ Nova reserva</b>.</div></td></tr>`}</tbody></table></div>`;
 }
 function esEditar(id){
   const r = id ? ES.d.reservas.find(x => x.id === id) : null, v = r || {espaco:(ES.d.espacos[0] || {}).nome || "Espaço Gourmet", data:hoje(), status:"Confirmada"};
@@ -7143,13 +7145,14 @@ function esEditar(id){
       <div class="field"><label for="er-b">Bloco</label><input class="input" id="er-b" value="${esc(v.bloco || "")}" maxlength="60" placeholder="Ex.: BL 06 - MYCONOS"></div>
       <div class="field"><label for="er-u">Unidade</label><input class="input" id="er-u" value="${esc(v.unidade || "")}" maxlength="20"></div>
       <div class="field"><label for="er-s">Nº da solicitação</label><input class="input mono" id="er-s" value="${esc(v.solicitacao || "")}" maxlength="20"></div>
+      <div class="field"><label for="er-v">Valor (R$)</label><input class="input num" id="er-v" inputmode="decimal" value="${esValor(v) !== null ? esc(String(esValor(v)).replace(".", ",")) : ""}"></div>
       <div class="field"><label for="er-st">Status</label><select class="input" id="er-st">${ES_ST.map(s => `<option ${s === v.status ? "selected" : ""}>${s}</option>`).join("")}</select></div>
       <div class="field full"><label for="er-o">Observação</label><input class="input" id="er-o" value="${esc(v.obs || "")}" maxlength="300"></div>
     </form>
     <div class="actions"><button class="btn primary" type="button" id="er-ok">Salvar</button><button class="btn" type="button" id="er-x">Cancelar</button>${r ? `<button class="link danger" type="button" id="er-del">Excluir reserva</button>` : ""}<span class="hint" id="er-msg"></span></div>`;
   $("#modal").hidden = false; $("#er-x").onclick = fecharModal;
   const fim = x => { if (esAplicar(x)) { fecharModal(); renderEspTudo(); } };
-  $("#er-ok").onclick = () => enviar($("#er-ok"), $("#er-msg"), "espReserva", {reserva:Object.assign(r ? {id:r.id} : {}, {espaco:$("#er-e").value, data:$("#er-d").value, bloco:$("#er-b").value, unidade:$("#er-u").value, solicitacao:$("#er-s").value, status:$("#er-st").value, obs:$("#er-o").value})}, fim);
+  $("#er-ok").onclick = () => enviar($("#er-ok"), $("#er-msg"), "espReserva", {reserva:Object.assign(r ? {id:r.id} : {}, {espaco:$("#er-e").value, data:$("#er-d").value, bloco:$("#er-b").value, unidade:$("#er-u").value, solicitacao:$("#er-s").value, status:$("#er-st").value, obs:$("#er-o").value, valor:$("#er-v").value.trim() === "" ? "" : mdNum($("#er-v").value)})}, fim);
   if ($("#er-del")) $("#er-del").onclick = ev => { const b = ev.target; if (!b.dataset.conf) { b.dataset.conf = "1"; b.textContent = "Confirmar exclusão"; return; } enviar(b, $("#er-msg"), "espReserva", {op:"excluir", reserva:{id:r.id}}, fim); };
 }
 function esColar(){
@@ -7235,7 +7238,7 @@ function renderEsEspacos(){
   const box = $("#ee-corpo"); if (esCarregando(box)) return;
   const h = hoje();
   box.innerHTML = ES.d.espacos.length ? `<div class="md-grid">${ES.d.espacos.map(e => { const prox = ES.d.reservas.filter(r => r.espaco === e.nome && esAtiva(r) && r.data >= h);
-    return `<article class="panel md-card ${e.ativo === "Não" ? "inativo" : ""}"><div class="md-card-h"><span class="pp-ico laranja"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V5a1 1 0 0 1 1-1h9v17M14 8h5v13M3 21h18M10 12v1"/></svg></span><div><h3>${esc(e.nome)}</h3><span class="muted">${[e.capacidade && "até " + e.capacidade + " pessoas", e.horario].filter(Boolean).map(esc).join(" · ") || "&nbsp;"}</span></div>${e.ativo === "Não" ? `<span class="pill p-ajuste">Inativo</span>` : ""}</div>
+    return `<article class="panel md-card ${e.ativo === "Não" ? "inativo" : ""}"><div class="md-card-h"><span class="pp-ico laranja"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V5a1 1 0 0 1 1-1h9v17M14 8h5v13M3 21h18M10 12v1"/></svg></span><div><h3>${esc(e.nome)}</h3><span class="muted">${[e.valor !== "" && e.valor !== undefined ? fBRL(e.valor) : "", e.capacidade && "até " + e.capacidade + " pessoas", e.horario].filter(Boolean).map(esc).join(" · ") || "&nbsp;"}</span></div>${e.ativo === "Não" ? `<span class="pill p-ajuste">Inativo</span>` : ""}</div>
       <dl class="md-dl"><div><dt>Próximas reservas</dt><dd><b>${prox.length}</b>${prox[0] ? ` · próxima em ${fData(prox[0].data)}` : ""}</dd></div><div><dt>Itens do checklist</dt><dd>${e.itens.length}</dd></div></dl>
       ${e.regras ? `<p class="muted md-obs-t es-regras">${esc(e.regras)}</p>` : ""}
       <div class="md-card-a"><button type="button" class="btn small" data-ee-ed="${esc(e.id)}">Editar</button></div></article>`; }).join("")}</div>`
@@ -7248,14 +7251,15 @@ function esEspaco(id){
     <form class="form" id="ee-f" novalidate autocomplete="off">
       <div class="field"><label for="ee-n">Nome <span class="req">*</span></label><input class="input" id="ee-n" value="${esc(v.nome)}" maxlength="60" placeholder="Ex.: Espaço Gourmet"></div>
       <div class="field"><label for="ee-c">Capacidade (pessoas)</label><input class="input" id="ee-c" value="${esc(v.capacidade)}" maxlength="20"></div>
-      <div class="field full"><label for="ee-h">Horário de uso</label><input class="input" id="ee-h" value="${esc(v.horario)}" maxlength="60"></div>
+      <div class="field"><label for="ee-v">Valor da reserva (R$)</label><input class="input num" id="ee-v" inputmode="decimal" value="${v.valor !== "" && v.valor !== undefined ? esc(String(v.valor).replace(".", ",")) : ""}" placeholder="361,44"></div>
+      <div class="field"><label for="ee-h">Horário de uso</label><input class="input" id="ee-h" value="${esc(v.horario)}" maxlength="60"></div>
       <div class="field full"><label for="ee-r">Regras</label><textarea class="input" id="ee-r" rows="4" maxlength="3000">${esc(v.regras)}</textarea></div>
       <div class="field full"><label for="ee-i">Itens do checklist (um por linha)</label><textarea class="input" id="ee-i" rows="8">${esc(v.itens.join("\n"))}</textarea></div>
       ${e ? `<label class="field full md-chk"><input type="checkbox" id="ee-a" ${v.ativo !== "Não" ? "checked" : ""}> Espaço ativo</label>` : ""}
     </form>
     <div class="actions"><button class="btn primary" type="button" id="ee-ok">Salvar</button><button class="btn" type="button" id="ee-x">Cancelar</button><span class="hint" id="ee-msg"></span></div>`;
   $("#modal").hidden = false; $("#ee-x").onclick = fecharModal; $("#ee-n").focus();
-  $("#ee-ok").onclick = () => enviar($("#ee-ok"), $("#ee-msg"), "espEspaco", {espaco:Object.assign(e ? {id:e.id} : {}, {nome:$("#ee-n").value, capacidade:$("#ee-c").value, horario:$("#ee-h").value, regras:$("#ee-r").value, itens:$("#ee-i").value.split("\n").map(x => x.trim()).filter(Boolean), ativo:e ? $("#ee-a").checked : true})}, x => { if (esAplicar(x)) { fecharModal(); renderEspTudo(); } });
+  $("#ee-ok").onclick = () => enviar($("#ee-ok"), $("#ee-msg"), "espEspaco", {espaco:Object.assign(e ? {id:e.id} : {}, {nome:$("#ee-n").value, valor:$("#ee-v").value.trim() === "" ? "" : mdNum($("#ee-v").value), capacidade:$("#ee-c").value, horario:$("#ee-h").value, regras:$("#ee-r").value, itens:$("#ee-i").value.split("\n").map(x => x.trim()).filter(Boolean), ativo:e ? $("#ee-a").checked : true})}, x => { if (esAplicar(x)) { fecharModal(); renderEspTudo(); } });
 }
 if ($("#t-esreservas")) {
   $("#er-vistas").addEventListener("click", ev => { const b = ev.target.closest("[data-v]"); if (b) { ES.vista = b.dataset.v; renderEsReservas(); } });
@@ -7285,11 +7289,17 @@ const esEspDoTitulo = t => { const e = String(t).replace(/pr[ée][\s-]*reserva|c
 const esBlocoLimpo = b => String(b).replace(/\s+/g, " ").trim().replace(/^(BL\s*\d+)\s*-\s*BL\s*\d+\s*-\s*/i, "$1 - ");
 const esChave = x => [x.data, norm(x.espaco).replace(/\s+/g, " ").trim(), (/BL\s*0*(\d+)/i.exec(String(x.bloco || "")) || [, norm(x.bloco)])[1], String(x.unidade || "").replace(/\D/g, "").replace(/^0+/, "")].join("|");
 function esLerBCF(linhas){
-  let data = "", esp = "Espaço Gourmet", pre = true; const out = [];
+  let data = "", esp = "Espaço Gourmet", pre = true, mesP = null, diaP = null; const out = [];
+  const fecha = () => { if (mesP && diaP) { data = `${mesP[1]}-${mesP[0]}-${diaP}`; mesP = diaP = null; } };
   linhas.forEach(l0 => {
     const l = String(l0).replace(/\s+/g, " ").trim(), n = norm(l);
     let m = /^(\d{1,2}) ([a-z]+)\/(\d{4})$/.exec(n);
     if (m) { const k = ES_MESES.indexOf(m[2]); if (k >= 0) data = `${m[3]}-${String(k + 1).padStart(2, "0")}-${m[1].padStart(2, "0")}`; return; }
+    // o PDF do site separa o mês ("outubro/2026") do dia ("24 sábado")
+    m = /^([a-z]+)\/(\d{4})$/.exec(n);
+    if (m && ES_MESES.includes(m[1])) { mesP = [String(ES_MESES.indexOf(m[1]) + 1).padStart(2, "0"), m[2]]; fecha(); return; }
+    m = /^(\d{1,2})\s+(domingo|segunda|terca|quarta|quinta|sexta|sabado)/.exec(n);
+    if (m) { diaP = m[1].padStart(2, "0"); fecha(); return; }
     if (/^hora\b.*bloco.*unidade/.test(n)) return;
     m = /^(?:(\d{1,2}[:h]\d{2})\s+)?(bl\s*\d+.*?)\s+(\d{2,5})\s+(iniciada|confirmada|aprovada|cancelada|recusada|reprovada|finalizada|concluida|aguardando[a-z ]*?)(?:\s+(.*))?$/.exec(n);
     if (m && data) {

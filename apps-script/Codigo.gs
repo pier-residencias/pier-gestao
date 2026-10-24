@@ -148,16 +148,16 @@ const ABAS = {
     nome: 'Espaços',
     criar: true,
     cols: [['id', 'ID'], ['nome', 'Espaço'], ['capacidade', 'Capacidade'], ['horario', 'Horário'], ['regras', 'Regras'], ['itens', 'Itens do checklist (JSON)'],
-      ['ativo', 'Ativo'], ['criadoEm', 'Criado em'], ['criadoPor', 'Criado por']],
-    num: []
+      ['ativo', 'Ativo'], ['criadoEm', 'Criado em'], ['criadoPor', 'Criado por'], ['valor', 'Valor da reserva']],
+    num: ['valor']
   },
   esr: {
     nome: 'Reservas',
     criar: true,
     cols: [['id', 'ID'], ['solicitacao', 'Nº da solicitação'], ['espaco', 'Espaço'], ['data', 'Data'], ['bloco', 'Bloco'], ['unidade', 'Unidade'], ['status', 'Status'],
       ['origem', 'Origem'], ['obs', 'Observação'], ['emailEm', 'E-mail de'], ['registradoEm', 'Registrado em'], ['registradoPor', 'Registrado por'],
-      ['atualizadoEm', 'Atualizado em'], ['atualizadoPor', 'Atualizado por']],
-    num: []
+      ['atualizadoEm', 'Atualizado em'], ['atualizadoPor', 'Atualizado por'], ['valor', 'Valor (R$)']],
+    num: ['valor']
   },
   esc: {
     nome: 'Vistorias de espaços',
@@ -323,7 +323,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-10-24 espaços';
+const VERSAO = '2026-10-24 espaços 2';
 
 function doGet() {
   return json({ ok: true, app: 'Pier Gestão', versao: VERSAO });
@@ -2365,6 +2365,7 @@ function medImportar(r, conta) {
 // solicitação): lidos no Gmail desta conta (acionador a cada 15 min ou botão "Ler e-mails agora") ou colados na tela.
 const ESP_STATUS = ['Solicitada', 'Pré-reserva', 'Confirmada', 'Cancelada', 'Recusada', 'Realizada'];
 const ESP_ROTULO = 'Pier Gestão/Reservas lidas';
+const ESP_VALOR_GOURMET = 361.44; // valor da reserva do Espaço Gourmet (pedido de 24/10/2026)
 const ESP_ITENS_PADRAO = ['Chaves entregues / devolvidas', 'Limpeza do salão e dos banheiros', 'Louças, copos e talheres (quantidade)', 'Geladeira e freezer',
   'Fogão, forno e cooktop', 'Churrasqueira', 'Mesas e cadeiras', 'Ar-condicionado e ventiladores', 'Iluminação e tomadas', 'Som e TV', 'Lixo retirado',
   'Paredes, piso, vidros e mobiliário sem danos'];
@@ -2372,7 +2373,12 @@ function espExigir(conta) {
   if (!(conta.perms || {}).espacos) { const e = falha('Seu perfil não tem permissão para os espaços e reservas.'); e.negado = true; throw e; }
 }
 const espJSON = (v, p) => { try { const x = JSON.parse(String(v || '')); return Array.isArray(x) ? x : p; } catch (e) { return p; } };
+// valor da reserva de um espaço (para gravar na reserva nova)
+const espValorDe = nome => { const e = linhas(tabela('esp')).find(x => x.nome === nome); return e && e.valor !== '' ? e.valor : ''; };
 function espLista() {
+  // Espaço Gourmet cadastrado antes do valor: recebe o valor padrão uma vez
+  const te = tabela('esp');
+  linhas(te).forEach(e => { if (e.valor === '' && /gourmet/.test(espNome(e.nome))) gravar(te, { valor: ESP_VALOR_GOURMET }, e._row); });
   const es = linhas(tabela('esp')).map(unLimpa).map(e => Object.assign(e, { itens: espJSON(e.itens, []) }));
   const rs = linhas(tabela('esr')).map(unLimpa).sort((a, b) => String(a.data).localeCompare(String(b.data)));
   const cs = linhas(tabela('esc')).map(unLimpa).map(c => Object.assign(c, { itens: espJSON(c.itens, []) })).sort((a, b) => String(b.feitoEm).localeCompare(String(a.feitoEm)));
@@ -2384,7 +2390,8 @@ function espAchar(nome, conta) {
   const t = tabela('esp'), es = linhas(t), n = espNome(nome);
   const e = es.find(x => espNome(x.nome) === n) || es.find(x => n && (n.indexOf(espNome(x.nome)) >= 0 || espNome(x.nome).indexOf(n) >= 0));
   if (e) return e.nome;
-  const o = { id: novoId('ES'), nome: texto(nome, 60) || 'Espaço', capacidade: '', horario: '', regras: '', itens: JSON.stringify(ESP_ITENS_PADRAO), ativo: 'Sim', criadoEm: agora(), criadoPor: conta.nome };
+  const o = { id: novoId('ES'), nome: texto(nome, 60) || 'Espaço', capacidade: '', horario: '', regras: '', itens: JSON.stringify(ESP_ITENS_PADRAO), ativo: 'Sim', criadoEm: agora(), criadoPor: conta.nome,
+    valor: /gourmet/.test(espNome(nome)) ? ESP_VALOR_GOURMET : '' };
   gravar(t, o);
   return o.nome;
 }
@@ -2419,7 +2426,8 @@ function espProcessar(msgs, conta, origem) {
       if (r.data) o.data = r.data;
       gravar(t, o, ja._row); Object.assign(ja, o); atual++;
     } else {
-      const o = { id: novoId('RS'), solicitacao: r.solicitacao, espaco: espAchar(r.espaco, conta), data: r.data, bloco: r.bloco, unidade: r.unidade, status: r.status,
+      const nomeE = espAchar(r.espaco, conta);
+      const o = { id: novoId('RS'), solicitacao: r.solicitacao, espaco: nomeE, valor: espValorDe(nomeE), data: r.data, bloco: r.bloco, unidade: r.unidade, status: r.status,
         origem, obs: '', emailEm: quando, registradoEm: agora(), registradoPor: conta.nome };
       gravar(t, o); o._row = 0; rs.push(o); novas++;
     }
@@ -2470,7 +2478,7 @@ function espImportar(r, conta) {
       if (ja.status === status || ja.status === 'Realizada') { iguais++; return; }
       gravar(t, { status, atualizadoEm: agora(), atualizadoPor: conta.nome + ' (PDF da administradora)' }, ja._row); ja.status = status; atual++;
     } else {
-      Object.assign(o, { id: novoId('RS'), solicitacao: '', status, origem: 'PDF', obs: texto([v.hora, v.obs].filter(Boolean).join(' · '), 300), registradoEm: agora(), registradoPor: conta.nome });
+      Object.assign(o, { id: novoId('RS'), solicitacao: '', valor: espValorDe(o.espaco), status, origem: 'PDF', obs: texto([v.hora, v.obs].filter(Boolean).join(' · '), 300), registradoEm: agora(), registradoPor: conta.nome });
       gravar(t, o); porChave[espChave(o)] = o; novas++;
     }
   });
@@ -2489,6 +2497,9 @@ function espReserva(r, conta) {
   if (sol && rs.some(x => x !== ja && String(x.solicitacao) === sol)) throw falha('Já existe uma reserva com a solicitação ' + sol + '.');
   const o = { solicitacao: sol, espaco: espAchar(texto(v.espaco, 60) || 'Espaço Gourmet', conta), data, bloco: texto(v.bloco, 60), unidade: texto(v.unidade, 20), status,
     obs: texto(v.obs, 300), atualizadoEm: agora(), atualizadoPor: conta.nome };
+  const tv = String(v.valor === undefined || v.valor === null ? '' : v.valor).trim(), val = tv === '' ? '' : medNum(tv);
+  if (tv !== '' && !(val >= 0 && isFinite(val))) throw falha('Valor da reserva inválido.');
+  o.valor = tv === '' ? (ja ? '' : espValorDe(o.espaco)) : Math.round(val * 100) / 100;
   if (ja) { gravar(t, o, ja._row); AUDIT_DET = 'Alterou a reserva ' + (sol || ja.id) + ' (' + status + ')'; return 'Reserva salva.'; }
   Object.assign(o, { id: novoId('RS'), origem: 'manual', registradoEm: agora(), registradoPor: conta.nome });
   gravar(t, o); AUDIT_DET = 'Cadastrou reserva ' + (sol || '') + ' em ' + data + ' (' + status + ')';
@@ -2502,7 +2513,9 @@ function espEspaco(r, conta) {
   if (!nome) throw falha('Dê um nome ao espaço.');
   if (es.some(x => x !== ja && espNome(x.nome) === espNome(nome))) throw falha('Já existe um espaço com esse nome.');
   const itens = (Array.isArray(v.itens) ? v.itens : []).map(x => texto(x, 100)).filter(Boolean).slice(0, 60);
-  const o = { nome, capacidade: texto(v.capacidade, 20), horario: texto(v.horario, 60), regras: texto(v.regras, 3000), itens: JSON.stringify(itens), ativo: v.ativo === false ? 'Não' : 'Sim' };
+  const tv = String(v.valor === undefined || v.valor === null ? '' : v.valor).trim(), val = tv === '' ? '' : medNum(tv);
+  if (tv !== '' && !(val >= 0 && isFinite(val))) throw falha('Valor da reserva inválido.');
+  const o = { nome, valor: tv === '' ? '' : Math.round(val * 100) / 100, capacidade: texto(v.capacidade, 20), horario: texto(v.horario, 60), regras: texto(v.regras, 3000), itens: JSON.stringify(itens), ativo: v.ativo === false ? 'Não' : 'Sim' };
   if (ja) {
     gravar(t, o, ja._row);
     if (espNome(ja.nome) !== espNome(nome)) { const tr = tabela('esr'); linhas(tr).filter(x => x.espaco === ja.nome).forEach(x => gravar(tr, { espaco: nome }, x._row)); }
