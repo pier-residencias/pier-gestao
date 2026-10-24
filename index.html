@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap"></noscript>
-<link rel="stylesheet" href="estilo.css?v=20261023painel">
+<link rel="stylesheet" href="estilo.css?v=20261023ind">
 </head>
 <body>
 <div class="login" id="login" hidden>
@@ -74,7 +74,8 @@
   </div>
   <div class="admmenu" id="adm-menu" role="menu" aria-label="Administração" hidden>
     <div class="mh">Pendências e compras</div>
-    <button type="button" role="menuitem" data-adm-tab="pdpainel"><b>Painel de pendências</b><span>Resumo em cartões e gráfico dos últimos 12 meses</span></button>
+    <button type="button" role="menuitem" data-adm-tab="inicio"><b>Home</b><span>O que precisa de atenção e atalhos</span></button>
+    <button type="button" role="menuitem" data-adm-tab="pdpainel"><b>Dashboard</b><span>Resumo em cartões e gráfico dos últimos 12 meses</span></button>
     <button type="button" role="menuitem" data-adm-tab="pendencias"><b>Controle de pendências</b><span>Lista do síndico: situação, responsável e prazo</span></button>
     <button type="button" role="menuitem" data-adm-tab="pendencias" data-adm-acao="nova"><b>Incluir pendência</b><span>Registrar uma pendência nova na lista</span></button>
     <button type="button" role="menuitem" data-adm-tab="cotacoes"><b>Cotações</b><span>Mapas de cotação, fornecedores e aprovação</span></button>
@@ -162,7 +163,7 @@
   <section id="t-os" hidden>
     <div class="sec-head"><h2 class="sec">Ordens de serviço</h2><button class="btn primary" id="o-nova" hidden>Abrir OS</button></div>
     <div class="toolbar">
-      <input class="input" id="o-busca" placeholder="Buscar por número, serviço, local ou pessoa" type="search">
+      <input class="input" id="o-busca" placeholder="Buscar por número, serviço, local, equipamento ou pessoa" type="search">
       <select class="input" id="o-cat" aria-label="Categoria"><option value="">Todas as categorias</option></select>
     </div>
     <div class="chips" id="o-filtros" style="margin-bottom:12px">
@@ -179,6 +180,59 @@
     </table></div>
     <p class="hint" style="margin-top:10px">A lista mostra as OS em aberto e as encerradas nos últimos 90 dias. As mais antigas ficam na aba OS da planilha e entram no dashboard pelo período.</p>
     <datalist id="dl-local"></datalist>
+    <datalist id="dl-equip"></datalist>
+  </section>
+
+  <!-- INDICADORES DA MANUTENÇÃO (só quem tem "Ver dashboard"): dashboard, lista, kanban e agenda das OS e demandas -->
+  <section id="t-indicadores" hidden>
+    <div class="ind-head">
+      <div><h2 class="ind-h"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l5.5-6 4 4L21 6"/><path d="M15 6h6v6"/></svg>Indicadores</h2>
+        <p class="muted">Números, gráficos e prazos das OS e demandas. Filtre por período, tipo, categoria e executante — clique para aprofundar.</p><p class="hint" id="ind-resumo"></p></div>
+      <div class="ind-acoes"><button class="btn" type="button" id="ind-atualizar">↻ Atualizar</button><button class="btn" type="button" id="ind-apres">Modo apresentação</button></div>
+    </div>
+    <div class="ind-vistas" id="ind-vistas" role="tablist" aria-label="Visão">
+      <button type="button" role="tab" data-v="dash" aria-selected="true">Dashboard</button>
+      <button type="button" role="tab" data-v="lista" aria-selected="false">Lista de OS <span class="badge" id="ind-n-lista">0</span></button>
+      <button type="button" role="tab" data-v="kanban" aria-selected="false">Kanban <span class="badge" id="ind-n-kanban">0</span></button>
+      <button type="button" role="tab" data-v="agenda" aria-selected="false">Agenda</button>
+    </div>
+    <div class="ind-filtros">
+      <div class="ind-fgrid">
+        <label class="field"><span>De</span><input class="input" type="date" id="ind-de"></label>
+        <label class="field"><span>Até</span><input class="input" type="date" id="ind-ate"></label>
+        <label class="field"><span>Tipo</span><select class="input" id="ind-tipo"><option value="">Todos</option><option>OS</option><option>Demanda</option><option>Preventiva</option></select></label>
+        <label class="field"><span>Categoria</span><select class="input" id="ind-cat"><option value="">Todas</option></select></label>
+        <label class="field"><span>Executante</span><select class="input" id="ind-exec"><option value="">Todos</option></select></label>
+        <label class="field"><span>Solicitante</span><select class="input" id="ind-sol"><option value="">Todos</option></select></label>
+        <label class="field"><span>Local</span><select class="input" id="ind-local"><option value="">Todos</option></select></label>
+        <label class="field"><span>Equipamento</span><select class="input" id="ind-equip"><option value="">Todos</option></select></label>
+      </div>
+      <div class="ind-fbar">
+        <button class="btn primary" type="button" id="ind-aplicar">Aplicar período</button>
+        <div class="chips" id="ind-presets" role="group" aria-label="Período rápido"><button class="chip" type="button" data-p="hoje" aria-pressed="false">Hoje</button><button class="chip" type="button" data-p="7" aria-pressed="false">7 dias</button><button class="chip" type="button" data-p="30" aria-pressed="false">30 dias</button><button class="chip" type="button" data-p="mes" aria-pressed="true">Este mês</button></div>
+        <button class="link" type="button" id="ind-limpar">Limpar filtros</button>
+      </div>
+      <p class="hint">Tipo, categoria, executante, solicitante, local e equipamento mudam os números na hora; para outro período, escolha as datas e toque em Aplicar. Clique nos cartões e nas barras para ver a lista.</p>
+    </div>
+    <div id="ind-dash">
+      <div class="ind-kpis" id="ind-kpis"><div class="empty">Carregando os indicadores…</div></div>
+      <div class="panel ind-p-tempo"><div class="ind-ptop"><h3 id="ind-t-tempo">Abertas e finalizadas</h3><span class="ind-leg"><span><i class="ab"></i>Abertas</span><span><i class="fi"></i>Finalizadas</span></span></div><div id="ind-g-tempo" class="ind-graf"></div></div>
+      <div class="grid-dash">
+        <div class="panel"><h3>Por categoria</h3><p class="cap">Grupo de atividades das OS abertas no período</p><div id="ind-g-cat" class="hbars"></div></div>
+        <div class="panel"><h3>Por executante</h3><p class="cap">Quem atendeu ou está com a OS</p><div id="ind-g-exec" class="hbars"></div></div>
+        <div class="panel"><h3>Por local</h3><p class="cap">Os 10 locais com mais OS</p><div id="ind-g-local" class="hbars"></div></div>
+        <div class="panel"><h3>Prazo das finalizadas</h3><p class="cap">Concluídas até o prazo ou depois dele</p><div id="ind-g-prazo" class="hbars"></div></div>
+        <div class="panel"><h3>Por prioridade</h3><p class="cap">Urgente, alta, normal e baixa</p><div id="ind-g-prio" class="hbars"></div></div>
+        <div class="panel"><h3>Por tipo</h3><p class="cap">OS, demandas e preventivas</p><div id="ind-g-tipo" class="hbars"></div></div>
+        <div class="panel" id="ind-p-equip" hidden><h3>Por equipamento</h3><p class="cap">Os 10 equipamentos com mais OS</p><div id="ind-g-equip" class="hbars"></div></div>
+      </div>
+    </div>
+    <div id="ind-lista" hidden>
+      <div class="ind-drill" id="ind-drill"></div>
+      <div class="tablebox"><table><thead><tr><th>Nº</th><th>Tipo</th><th>Serviço</th><th class="hide-s">Local</th><th class="hide-m">Executante</th><th>Situação</th><th class="hide-s">Abertura</th><th class="hide-s">Prazo / fim</th></tr></thead><tbody id="ind-l-body"></tbody></table></div>
+    </div>
+    <div id="ind-kanban" hidden></div>
+    <div id="ind-agenda" hidden></div>
   </section>
 
   <!-- REGISTRAR -->
@@ -467,9 +521,22 @@
     </table></div>
   </section>
 
+  <!-- INÍCIO (Administração): saudação, o que precisa de atenção, atalhos e últimas alterações -->
+  <section id="t-inicio" hidden>
+    <div class="in-topo"><div><h2 class="in-ola" id="in-ola">Olá!</h2><p class="muted" id="in-data"></p></div></div>
+    <div id="in-pend-box">
+      <h3 class="in-h">Precisa da sua atenção</h3>
+      <div class="in-cards" id="in-atencao"><div class="empty">Carregando pendências…</div></div>
+    </div>
+    <div class="in-grid">
+      <div class="in-bloco"><h3 class="in-h">Atalhos</h3><div class="in-atalhos" id="in-atalhos"></div></div>
+      <div class="in-bloco" id="in-ult-box"><h3 class="in-h">Últimas pendências alteradas</h3><ul class="in-ult" id="in-ult"></ul></div>
+    </div>
+  </section>
+
   <!-- PAINEL DE PENDÊNCIAS (menu Administração): números do controle em cartões e gráfico dos últimos 12 meses -->
   <section id="t-pdpainel" hidden>
-    <div class="sec-head"><h2 class="sec">Painel de pendências</h2><span class="muted">Resumo do Controle de pendências. Toque num cartão para ver a lista já filtrada.</span><button class="btn" type="button" id="pp-abrir">Abrir o controle</button></div>
+    <div class="sec-head"><h2 class="sec">Dashboard</h2><span class="muted">Resumo do Controle de pendências. Toque num cartão para ver a lista já filtrada.</span><button class="btn" type="button" id="pp-abrir">Abrir o controle</button></div>
     <div class="pp-box">
       <h3 class="pp-tit"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg>Pendências</h3>
       <div class="pp-cards" id="pp-cards"><div class="empty">Carregando pendências…</div></div>
@@ -509,6 +576,6 @@
 
 <script src="config.js"></script>
 <script src="nfe.js?v=20261015s"></script>
-<script src="app.js?v=20261023painel"></script>
+<script src="app.js?v=20261023ind"></script>
 </body>
 </html>

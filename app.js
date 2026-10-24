@@ -35,16 +35,19 @@ const SETORES_PERM = [["Manutenção","setor_manutencao"],["Limpeza","setor_limp
 const setoresDasPerms = p => { const l = SETORES_PERM.filter(x => p && p[x[1]]).map(x => x[0]); return l.length ? l : ["Manutenção"]; };
 const doSetor = x => setorDe(x) === S.setor;
 const can = p => !!(S.perms && S.perms[p]);
-const ABAS_PERM = {painel:["painel"], demandas:["dem_ver","dem_executar","dem_delegar"], os:["os_ver","os_abrir","os_atender","os_gerenciar"], registrar:["registrar_saida","registrar_entrada","registrar_troca","registrar_emprestimo"], itens:["itens_ver"], historico:["historico_ver"], emprestimos:["devolver","registrar_emprestimo"], dashboard:["dashboard"], usuarios:["usuarios"], pendencias:["pendencias"], pdpainel:["pendencias"], cotacoes:["pendencias"], acessos:["acessos"]};
+const ABAS_PERM = {painel:["painel"], demandas:["dem_ver","dem_executar","dem_delegar"], os:["os_ver","os_abrir","os_atender","os_gerenciar"], registrar:["registrar_saida","registrar_entrada","registrar_troca","registrar_emprestimo"], itens:["itens_ver"], historico:["historico_ver"], emprestimos:["devolver","registrar_emprestimo"], dashboard:["dashboard"], indicadores:["dashboard"], usuarios:["usuarios"], inicio:["pendencias","usuarios","acessos"], pendencias:["pendencias"], pdpainel:["pendencias"], cotacoes:["pendencias"], acessos:["acessos"]};
 // Se o navegador ainda estiver com a página antiga guardada, o menu Administração não existe nela:
 // o resto do sistema continua funcionando normalmente.
 const TEM_ADM = !!(document.getElementById("tab-adm") && document.getElementById("adm-menu") && document.getElementById("t-pendencias"));
 if (!TEM_ADM) delete ABAS_PERM.pendencias;
 if (!TEM_ADM || !document.getElementById("t-pdpainel")) delete ABAS_PERM.pdpainel;
+if (!TEM_ADM || !document.getElementById("t-inicio")) delete ABAS_PERM.inicio;
+if (!document.getElementById("t-indicadores")) delete ABAS_PERM.indicadores;
 if (!TEM_ADM || !document.getElementById("t-acessos")) delete ABAS_PERM.acessos;
 // O que aparece depende de como a pessoa entrou: Manutenção (tudo do estoque, OS e demandas),
 // Limpeza (só o estoque da limpeza) ou Administração (só o menu Administração).
-const ABAS_ADM = ["pendencias","pdpainel","cotacoes","usuarios","acessos"];
+// "inicio" primeiro: é a tela que abre ao entrar pela Administração
+const ABAS_ADM = ["inicio","pendencias","pdpainel","cotacoes","usuarios","acessos"];
 const ABAS_LIMPEZA = ["painel","registrar","itens","historico","os"];
 const TIPOS_LIMPEZA = ["saida","entrada"];
 const modo = () => S.adm ? "Administração" : S.setor;
@@ -103,7 +106,7 @@ async function api(acao, extra){
 // Apps Script novo: a entrada já traz os dados e as pendências (uma ida só à planilha). Com o antigo, busca como antes.
 function entradaPend(r){ if (r && Array.isArray(r.pendencias)) { PD.versao = Number(r.pendVersao) || 0; S.pend = r.pendencias; PD.recebidoEm = Date.now(); } }
 function entradaDados(r){ if (r && r.dados) { S.mesesCarregados = r._meses; aplicar(r.dados); renderSync(); } else atualizar(); }
-const pedirPend = adm => adm || S.tab === "pendencias";
+const pedirPend = adm => adm || S.tab === "pendencias" || S.tab === "pdpainel" || S.tab === "inicio";
 function aplicar(d){
   S.itens = new Map((d.itens||[]).map(i => [i.id, i]));
   S.empTodos = d.emprestimos || [];
@@ -132,7 +135,7 @@ function renderSync(){
   const el = $("#sync"); if (!el) return;
   el.innerHTML = S.ocupado ? `<span class="spin" aria-hidden="true"></span> Atualizando…` : S.ultima ? `Atualizado às ${S.ultima.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}` : "";
 }
-setInterval(() => { if (document.visibilityState==="visible" && $("#modal").hidden && S.token) { atualizar(true); if ((S.tab==="pendencias" || S.tab==="pdpainel") && TEM_ADM) carregarPend(); } }, 45000);
+setInterval(() => { if (document.visibilityState==="visible" && $("#modal").hidden && S.token) { atualizar(true); if ((S.tab==="pendencias" || S.tab==="pdpainel" || S.tab==="inicio") && TEM_ADM) carregarPend(); } }, 45000);
 document.addEventListener("visibilitychange", () => { if (document.visibilityState==="visible" && S.token && (!S.ultima || Date.now()-S.ultima > 20000)) atualizar(true); });
 
 // ---------- avisos ----------
@@ -272,7 +275,9 @@ function registrarTela(tela, detalhe){
 function setTab(t){
   if (S.token && !podeAba(t)) t = primeiraAba();
   if (S.token && t !== S.tab && TELAS_LOG.includes(t)) registrarTela(t);
-  if (S.token && t !== S.tab && t === "pdpainel") registrarTela("pendencias", "Painel de pendências");
+  if (S.token && t !== S.tab && t === "pdpainel") registrarTela("pendencias", "Dashboard");
+  if (S.token && t !== S.tab && t === "indicadores") registrarTela("dashboard", "Indicadores de manutenção");
+  if (t !== "indicadores" && document.body.classList.contains("ind-apres")) indApresentacao(false);
   S.tab = t;
   $$("nav.tabs [role=tablist] > button[data-tab]").forEach(b => b.setAttribute("aria-selected", b.dataset.tab===t ? "true":"false"));
   if (TEM_ADM) {
@@ -284,9 +289,11 @@ function setTab(t){
   renderSetorSel();
   renderAll();
   if (t==="dashboard") carregarDashboard();
+  if (t==="indicadores") { if (IND.dados) renderInd(); if (!IND.dados || Date.now() - IND.carregadoEm > 120000) carregarInd(); }
   if (t==="usuarios") carregarEquipe();
   if (t==="pendencias") carregarPend();
   if (t==="pdpainel") { renderPdPainel(); carregarPend(); }
+  if (t==="inicio") { renderInicio(); if (can("pendencias")) carregarPend(); }
   if (t==="acessos") carregarAcessos();
   if (t==="cotacoes") { renderCot(); carregarCot(); }
   window.scrollTo({top:0});
@@ -380,13 +387,15 @@ function renderSetorSel(){
 // Os itens seguem as mesmas permissões e o mesmo setor das abas (podeAba); o contador de cada item é o da aba.
 const MENU = [
   {t:"painel", rot:"Painel", ico:'<path d="M4 11.5 12 5l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5h-5v5H5a1 1 0 0 1-1-1z"/>'},
+  {t:"inicio", rot:"Home", ico:'<path d="M4 11.5 12 5l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5h-5v5H5a1 1 0 0 1-1-1z"/>'},
+  {t:"pdpainel", rot:"Dashboard", ico:'<path d="M4 20h16M6.5 16.5V11M11 16.5V6.5M15.5 16.5v-4M20 16.5V8.5"/>'},
   {g:"Estoque", ico:'<path d="M4 8.5 12 4l8 4.5v7L12 20l-8-4.5zM4 8.5l8 4.5 8-4.5M12 13v7"/>', itens:[
     {t:"registrar", rot:"Registrar movimentação"}, {t:"itens", rot:"Itens", b:"b-itens"}, {t:"historico", rot:"Histórico"}, {t:"emprestimos", rot:"Empréstimos", b:"b-emp"}]},
   {g:"Manutenção e serviços", ico:'<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3.6 17.4a1.9 1.9 0 0 0 2.7 2.7l5.7-5.7a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.3-.3-2.4z"/>', itens:[
-    {t:"os", rot:"Ordens de serviço (OS)", b:"b-os"}, {t:"demandas", rot:"Demandas", b:"b-dem"}]},
+    {t:"os", rot:"Ordens de serviço (OS)", b:"b-os"}, {t:"demandas", rot:"Demandas", b:"b-dem"}, {t:"indicadores", rot:"Indicadores"}]},
   {g:"Gestão", ico:'<path d="M5 19V11M10 19V6M15 19v-5M20 19V9"/>', itens:[{t:"dashboard", rot:"Dashboard"}]},
   {g:"Pendências e compras", ico:'<path d="M8 5h11M8 12h11M8 19h11M4 5h.01M4 12h.01M4 19h.01"/>', itens:[
-    {t:"pdpainel", rot:"Painel de pendências"}, {t:"pendencias", rot:"Controle de pendências", b:"b-adm"}, {t:"pendencias", acao:"nova", rot:"Incluir pendência"}, {t:"cotacoes", rot:"Cotações"}]},
+    {t:"pendencias", rot:"Controle de pendências", b:"b-adm"}, {t:"pendencias", acao:"nova", rot:"Incluir pendência"}, {t:"cotacoes", rot:"Cotações"}]},
   {g:"Equipe", ico:'<path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 6.5M18 14.5a6 6 0 0 1 3.5 5.5"/>', itens:[
     {t:"usuarios", rot:"Usuários e permissões"}, {t:"acessos", rot:"Histórico de acessos"}]}
 ];
@@ -1373,6 +1382,7 @@ function renderOS(){
   const cats = [...new Set(S.os.map(o => o.categoria).filter(Boolean))].sort((x,y)=>x.localeCompare(y,"pt-BR"));
   const sel = $("#o-cat"), cur = sel.value;
   sel.innerHTML = `<option value="">Todas as categorias</option>` + cats.map(c => `<option ${c===cur?"selected":""}>${esc(c)}</option>`).join("");
+  if ($("#dl-equip")) $("#dl-equip").innerHTML = [...new Set(S.os.map(o => String(o.equipamento||"").trim()).filter(Boolean))].sort((x,y)=>x.localeCompare(y,"pt-BR")).map(v=>`<option value="${esc(v)}">`).join("");
   $("#dl-local").innerHTML = [...new Set(S.os.map(o=>o.local).concat(S.movs.map(m=>m.destino)).filter(Boolean).map(s=>String(s).trim()))].sort().slice(0,300).map(v=>`<option value="${esc(v)}">`).join("");
   $$("#o-filtros .chip").forEach(c => { if (c.dataset.f==="minhas") c.hidden = !can("os_atender") && !can("os_gerenciar"); });
   const list = S.os.filter(o => {
@@ -1382,7 +1392,7 @@ function renderOS(){
     if (f==="concluidas" && o.status!=="Concluída") return false;
     if (f==="canceladas" && o.status!=="Cancelada") return false;
     if (cat && o.categoria!==cat) return false;
-    if (q && !norm([o.numero,o.titulo,o.local,o.categoria,o.responsavel,o.solicitante,o.abertaPor,o.descricao].join(" ")).includes(q)) return false;
+    if (q && !norm([o.numero,o.titulo,o.local,o.categoria,o.responsavel,o.solicitante,o.abertaPor,o.descricao,o.equipamento].join(" ")).includes(q)) return false;
     return true;
   }).sort((x,y) => osEncerrada(x)||osEncerrada(y) ? String(y.concluidaEm||y.abertaEm).localeCompare(String(x.concluidaEm||x.abertaEm)) : ordemOS(x,y));
   const vazio = {aberto:"Nenhuma OS em aberto.", minhas:"Nenhuma OS em aberto com você.", atrasadas:"Nenhuma OS atrasada.", concluidas:"Nenhuma OS concluída nos últimos 90 dias.", canceladas:"Nenhuma OS cancelada nos últimos 90 dias.", todas:"Nenhuma OS registrada ainda."}[f];
@@ -1411,11 +1421,13 @@ function camposOS(v, comResp){
       <div class="field"><label for="os-prio">Prioridade</label><select class="input" id="os-prio">${["Urgente","Alta","Normal","Baixa"].map(p=>`<option ${p===(v.prioridade||"Normal")?"selected":""}>${p}</option>`).join("")}</select></div>
       <div class="field"><label for="os-prazo">Prazo</label><input class="input" type="date" id="os-prazo" value="${esc(v.prazo || prazoPara(v.prioridade||"Normal"))}"></div>
       <div class="field full"><label for="os-desc">Descrição</label><textarea class="input" id="os-desc" placeholder="O que está acontecendo, desde quando, detalhes que ajudam no atendimento" maxlength="3000">${esc(v.descricao||"")}</textarea></div>
+      <div class="field"><label for="os-equip">Equipamento <span class="muted">(opcional)</span></label><input class="input" id="os-equip" value="${esc(v.equipamento||"")}" list="dl-equip" maxlength="80" placeholder="Ex.: Bomba da piscina, Portão 2"></div>
       <div class="field"><label for="os-solic">Quem pediu</label><input class="input" id="os-solic" value="${esc(v.solicitante||"")}" placeholder="Ex.: Portaria, Síndico, Apto 302"></div>
       ${comResp ? `<div class="field"><label for="os-resp">Responsável</label><select class="input" id="os-resp"><option value="">Sem responsável por enquanto</option>${S.colab.map(c=>`<option value="${esc(c.usuario)}">${esc(c.nome)}</option>`).join("")}</select></div>` : ""}`;
 }
 function lerCamposOS(msg){
   const v = {titulo:$("#os-titulo").value.trim(), local:$("#os-local").value.trim(), categoria:$("#os-cat").value, prioridade:$("#os-prio").value, prazo:$("#os-prazo").value, descricao:$("#os-desc").value.trim(), solicitante:$("#os-solic").value.trim()};
+  if ($("#os-equip")) v.equipamento = $("#os-equip").value.trim();
   if (!v.titulo) { msg.className="hint err"; msg.textContent = "Descreva o serviço em poucas palavras."; return null; }
   if (!v.local) { msg.className="hint err"; msg.textContent = "Informe o local."; return null; }
   return v;
@@ -1509,6 +1521,7 @@ function abrirOS(id){
     <dl class="os-info">
       <div><dt>Local</dt><dd>${esc(o.local||"—")}</dd></div>
       <div><dt>Categoria</dt><dd>${esc(o.categoria||"—")}</dd></div>
+      ${o.equipamento ? `<div><dt>Equipamento</dt><dd>${esc(o.equipamento)}</dd></div>` : ""}
       <div><dt>Responsável</dt><dd>${esc(o.responsavel||"Sem responsável")}</dd></div>
       <div><dt>Prazo</dt><dd class="${osAtrasada(o)?"atras":""}">${fData(o.prazo)}${osAtrasada(o)?" · atrasada":""}</dd></div>
       <div><dt>Aberta</dt><dd>${fDataHora(o.abertaEm)} por ${esc(o.abertaPor||"—")}</dd></div>
@@ -3055,6 +3068,57 @@ function ppGrafico(){
 let ppRedim;
 addEventListener("resize", () => { clearTimeout(ppRedim); ppRedim = setTimeout(() => { if (S.tab === "pdpainel") ppGrafico(); }, 150); });
 if ($("#pp-abrir")) $("#pp-abrir").addEventListener("click", () => ppIr({}));
+// ---------- Início (Administração): saudação, o que precisa de atenção, atalhos e últimas alterações ----------
+const IN_ICO = {
+  aprov: PP_ICO.aprov, nova: PP_ICO.nova, atraso: PP_ICO.atraso, alta: PP_ICO.alta,
+  incluir:'<path d="M12 5v14M5 12h14"/>', lista: PP_ICO.total,
+  dash:'<path d="M4 20h16M6.5 16.5V11M11 16.5V6.5M15.5 16.5v-4M20 16.5V8.5"/>',
+  cot:'<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 12h7M9 16h7"/>',
+  usu:'<path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 6.5M18 14.5a6 6 0 0 1 3.5 5.5"/>',
+  hist:'<circle cx="12" cy="12" r="8"/><path d="M12 8v4.5l3 2"/>'
+};
+const inSvg = d => `<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
+function renderInicio(){
+  const sec = $("#t-inicio"); if (!sec || sec.hidden) return;
+  const h = new Date().getHours(), primeiro = String(S.nome || "").replace(/\(.*?\)/g, "").trim().split(/\s+/)[0] || "";
+  const dataLonga = new Date().toLocaleDateString("pt-BR", {weekday:"long", day:"numeric", month:"long", year:"numeric"});
+  $("#in-ola").textContent = (h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite") + (primeiro && !/^administra/i.test(primeiro) ? ", " + primeiro : "") + "!";
+  $("#in-data").textContent = dataLonga.charAt(0).toUpperCase() + dataLonga.slice(1);
+  // atalhos: só o que a pessoa pode abrir
+  const at = [
+    {t:"pendencias", acao:"nova", ico:"incluir", rot:"Incluir pendência", d:"Registrar uma pendência nova"},
+    {t:"pendencias", ico:"lista", rot:"Controle de pendências", d:"Situação, responsável e prazo"},
+    {t:"pdpainel", ico:"dash", rot:"Dashboard", d:"Números e gráfico de 12 meses"},
+    {t:"cotacoes", ico:"cot", rot:"Cotações", d:"Mapas, fornecedores e aprovação"},
+    {t:"usuarios", ico:"usu", rot:"Usuários e permissões", d:"Logins, perfis e acessos"},
+    {t:"acessos", ico:"hist", rot:"Histórico de acessos", d:"Entradas, alterações e segurança"}
+  ].filter(a => podeAba(a.t) && $("#t-" + a.t));
+  $("#in-atalhos").innerHTML = at.map(a => `<button type="button" class="in-atalho" data-t="${a.t}"${a.acao ? ` data-acao="${a.acao}"` : ""}><span class="in-aico">${inSvg(IN_ICO[a.ico])}</span><span><b>${esc(a.rot)}</b><small>${esc(a.d)}</small></span></button>`).join("");
+  $$("#in-atalhos .in-atalho").forEach(b => b.onclick = () => { setTab(b.dataset.t); if (b.dataset.acao === "nova") pdAbrirNova(); });
+  const temPend = can("pendencias");
+  $("#in-pend-box").hidden = !temPend;
+  if (!temPend) return;
+  if (!S.pend) { $("#in-atencao").innerHTML = `<div class="empty">Carregando pendências…</div>`; $("#in-ult").innerHTML = ""; return; }
+  const all = pdLista();
+  const minhas = pdV2() ? all.filter(p => pdPossoAprovar(pdEtapa(p))).length : 0;
+  const cards = [];
+  if (ehGerente() || ehSindico()) cards.push({k:"aprov", cor:"roxo", rot:"Aguardando sua aprovação", v:minhas, ir:{aprov:true}});
+  if (!ehSindico()) cards.push({k:"nova", cor:"laranja", rot:"Novas do síndico", v:all.filter(pdNova).length, ir:{novas:true}});
+  cards.push({k:"atraso", cor:"vermelho", rot:"Atrasadas", v:all.filter(pdAtrasada).length, ir:{late:true}});
+  if (pdTemCrit()) cards.push({k:"alta", cor:"vermelho", rot:"Alta criticidade em aberto", v:all.filter(p => p.criticidade === "Alta" && p.status !== "Concluído").length, ir:{crit:"Alta"}});
+  const tudoOk = cards.every(c => !c.v);
+  $("#in-atencao").innerHTML = cards.map((c, i) => `<button type="button" class="in-card ${c.v ? "" : "zero"}" data-i="${i}"><span class="pp-ico ${c.cor}">${inSvg(IN_ICO[c.k])}</span><span><b class="num">${c.v}</b><small>${esc(c.rot)}</small></span></button>`).join("")
+    + (tudoOk ? `<p class="in-ok">Nada precisando de atenção agora.</p>` : "");
+  $$("#in-atencao .in-card").forEach(b => b.onclick = () => ppIr(cards[+b.dataset.i].ir));
+  // últimas pendências alteradas
+  const ult = all.filter(p => p.atualizadoEm).sort((a, b) => String(b.atualizadoEm).localeCompare(String(a.atualizadoEm))).slice(0, 6);
+  $("#in-ult").innerHTML = ult.length ? ult.map(p => `<li><button type="button" class="in-item" data-id="${esc(p.id)}"><span class="in-num">${esc(p.numero || "–")}</span><span class="in-tit">${esc(p.titulo || "")}</span><span class="pd-mini" data-s="${esc(p.status || "")}">${esc(p.status || "")}</span><small>${esc(fData(p.atualizadoEm))} ${esc(String(p.atualizadoEm).slice(11, 16))}${p.atualizadoPor ? " · " + esc(p.atualizadoPor) : ""}</small></button></li>`).join("")
+    : `<li class="empty">Nenhuma alteração registrada ainda.</li>`;
+  $$("#in-ult .in-item").forEach(b => b.onclick = () => {
+    ppIr({}); const id = b.dataset.id;
+    setTimeout(() => { const t = document.getElementById("pdt-" + id); if (t) { t.scrollIntoView({block:"center"}); t.focus({preventScroll:true}); } }, 60);
+  });
+}
 // gravações uma de cada vez, na ordem em que foram feitas
 function pdEnviar(acao, extra, aoConcluir){
   PD.salvando++;
@@ -3374,7 +3438,7 @@ function pdNovo(secao){
 }
 function renderPend(){
   if (!TEM_ADM || !can("pendencias") || !S.pend) return;
-  renderPdPainel();
+  renderPdPainel(); renderInicio();
   pdFiltros(); pdResumo();
   const body = $("#pd-body");
   if (!PD.secs.size) { body.textContent = ""; PD_SECOES.forEach(s => body.append(pdSecao(s).sec)); }
@@ -4409,6 +4473,277 @@ if (TEM_ADM && $("#t-cotacoes")) {
     if (b.dataset.op) { b.disabled = true; await ctOp(b.dataset.op); return; }
     if (b.dataset.ia) { b.disabled = true; await ctIA(b.dataset.ia, b.dataset.ia === "ler" ? {indice:+b.dataset.s, fileId:b.dataset.anx2} : null); b.disabled = false; return; }
   });
+}
+
+// ---------- indicadores da manutenção (OS e demandas): dashboard, lista, kanban, agenda e modo apresentação ----------
+// Só para quem tem "Ver dashboard". Os dados vêm do mesmo relatório do Dashboard (por período), então funcionam
+// mesmo com o Apps Script anterior; o campo Equipamento aparece quando o Apps Script novo estiver instalado.
+const IND = { de:"", ate:"", preset:"mes", vista:"dash", f:{tipo:"", cat:"", exec:"", sol:"", local:"", equip:""}, drill:null, mes:"", tok:0, carregando:false, apres:false, timer:0 };
+const IND_ST = { Aberta:"Aguardando", Pendente:"Aguardando", "Em andamento":"Em atendimento", "Concluída":"Finalizada", Cancelada:"Cancelada" };
+const indMs = s => { const d = dt(s); return d && !isNaN(d) ? d.getTime() : 0; };
+function indDur(ms){
+  if (!(ms > 0)) return "—";
+  const min = Math.round(ms / 6e4), h = Math.floor(min / 60), d = Math.floor(h / 24);
+  return d >= 1 ? `${d}d ${h % 24}h` : h >= 1 ? `${h}h ${min % 60}min` : `${min}min`;
+}
+// une OS e demandas num formato só
+function indItens(){
+  const R = IND.dados; if (!R) return [];
+  const os = (R.os || []).filter(osDoAmb).map(o => ({
+    id:o.id, tipo:"OS", numero:o.numero, titulo:o.titulo, st:IND_ST[o.status] || o.status, status:o.status, prioridade:o.prioridade || "Normal",
+    categoria:o.categoria || "", local:String(o.local||"").trim(), equipamento:String(o.equipamento||"").trim(), solicitante:String(o.solicitante||o.abertaPor||"").trim(),
+    executante:String(o.responsavel||o.concluidaPor||"").trim(), abertaEm:o.abertaEm, iniciadaEm:o.iniciadaEm, concluidaEm:o.concluidaEm, prazo:o.prazo }));
+  // demandas só existem na manutenção
+  const dem = osAmb() === "Manutenção" ? (R.demandas || []).map(d => ({
+    id:d.id, tipo:d.preventiva ? "Preventiva" : "Demanda", numero:d.numero, titulo:d.titulo, st:IND_ST[d.status] || d.status, status:d.status, prioridade:d.prioridade || "Normal",
+    categoria:d.categoria || "", local:String(d.local||"").trim(), equipamento:"", solicitante:String(d.criadaPor||"").trim(),
+    executante:String(d.responsavel||d.concluidaPor||"").trim(), abertaEm:d.criadaEm, iniciadaEm:d.iniciadaEm, concluidaEm:d.concluidaEm, prazo:d.prazo })) : [];
+  return os.concat(dem);
+}
+const indDia = s => String(s || "").slice(0, 10);
+const indNoPeriodo = x => { const a = indDia(x.abertaEm); return a >= IND.de && a <= IND.ate; };
+const indFimNoPeriodo = x => { const c = indDia(x.concluidaEm); return x.st === "Finalizada" && c >= IND.de && c <= IND.ate; };
+const indAberto = x => x.st === "Aguardando" || x.st === "Em atendimento";
+const indExpirada = x => !!x.prazo && x.st !== "Cancelada" && (x.st === "Finalizada" ? indDia(x.concluidaEm) > x.prazo : x.prazo < hoje());
+function indPassaFiltros(x){
+  const f = IND.f;
+  if (f.tipo && x.tipo !== f.tipo) return false;
+  if (f.cat && (x.categoria || "Sem categoria") !== f.cat) return false;
+  if (f.exec && (x.executante || "Sem executante") !== f.exec) return false;
+  if (f.sol && (x.solicitante || "—") !== f.sol) return false;
+  if (f.local && x.local !== f.local) return false;
+  if (f.equip && x.equipamento !== f.equip) return false;
+  return true;
+}
+function indPeriodo(p){
+  const h = new Date(), y = h.getFullYear(), m = h.getMonth(), d = h.getDate();
+  if (p === "hoje") return [iso(h), iso(h)];
+  if (p === "7") return [iso(new Date(y, m, d - 6)), iso(h)];
+  if (p === "30") return [iso(new Date(y, m, d - 29)), iso(h)];
+  return [iso(new Date(y, m, 1)), iso(h)];
+}
+async function carregarInd(){
+  if (!can("dashboard") || !S.token || !$("#t-indicadores")) return;
+  if (!IND.de) { [IND.de, IND.ate] = indPeriodo(IND.preset); $("#ind-de").value = IND.de; $("#ind-ate").value = IND.ate; }
+  const tok = ++IND.tok; IND.carregando = true; $("#t-indicadores").classList.add("carregando");
+  if (!IND.dados) $("#ind-kpis").innerHTML = `<div class="empty">Carregando os indicadores…</div>`;
+  try {
+    const r = await api("relatorio", {de:IND.de, ate:IND.ate});
+    if (tok === IND.tok) { IND.dados = r.relatorio; IND.carregadoEm = new Date(); renderInd(); }
+  } catch(e){ if (tok === IND.tok) { toast(e.message, true); if (!IND.dados) $("#ind-kpis").innerHTML = `<div class="notice crit">${esc(e.message)}</div>`; } }
+  finally { if (tok === IND.tok) { IND.carregando = false; $("#t-indicadores").classList.remove("carregando"); } }
+}
+// opções dos filtros a partir dos dados carregados (mantém o que já estava escolhido)
+function indOpcoes(itens){
+  const preencher = (sel, rot, vals, cur) => {
+    const el = $(sel); const lista = [...new Set(vals.filter(Boolean))].sort((a,b) => a.localeCompare(b,"pt-BR"));
+    if (cur && !lista.includes(cur)) lista.unshift(cur);
+    el.innerHTML = `<option value="">${rot}</option>` + lista.map(v => `<option ${v===cur?"selected":""}>${esc(v)}</option>`).join("");
+  };
+  preencher("#ind-cat", "Todas", itens.map(x => x.categoria || "Sem categoria"), IND.f.cat);
+  preencher("#ind-exec", "Todos", itens.map(x => x.executante || "Sem executante"), IND.f.exec);
+  preencher("#ind-sol", "Todos", itens.map(x => x.solicitante || "—"), IND.f.sol);
+  preencher("#ind-local", "Todos", itens.map(x => x.local), IND.f.local);
+  const eqs = itens.map(x => x.equipamento).filter(Boolean);
+  preencher("#ind-equip", eqs.length ? "Todos" : "Nenhum equipamento informado ainda", eqs, IND.f.equip);
+  $("#ind-equip").disabled = !eqs.length && !IND.f.equip;
+}
+function renderInd(){
+  const sec = $("#t-indicadores"); if (!sec || sec.hidden) return;
+  if (!IND.dados) return;
+  const todos = indItens(); indOpcoes(todos);
+  const itens = todos.filter(indPassaFiltros), base = itens.filter(indNoPeriodo);
+  const dias = Math.round((new Date(IND.ate) - new Date(IND.de)) / 864e5) + 1;
+  $("#ind-resumo").textContent = `${fData(IND.de)} a ${fData(IND.ate)} · ${dias} dia${dias===1?"":"s"}` + (IND.carregadoEm ? ` · atualizado às ${IND.carregadoEm.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}` : "");
+  const abertasAgora = itens.filter(indAberto);
+  $("#ind-n-lista").textContent = base.length;
+  $("#ind-n-kanban").textContent = abertasAgora.length;
+  $$("#ind-vistas [data-v]").forEach(b => b.setAttribute("aria-selected", b.dataset.v === IND.vista ? "true" : "false"));
+  ["dash","lista","kanban","agenda"].forEach(v => { $("#ind-" + v).hidden = v !== IND.vista; });
+  if (IND.vista === "dash") indDash(itens, base, abertasAgora);
+  if (IND.vista === "lista") indLista(itens);
+  if (IND.vista === "kanban") indKanban(itens);
+  if (IND.vista === "agenda") indAgenda(itens);
+}
+function indDash(itens, base, abertasAgora){
+  const fin = base.filter(x => x.st === "Finalizada"), validos = base.filter(x => x.st !== "Cancelada");
+  const ag = base.filter(x => x.st === "Aguardando"), at = base.filter(x => x.st === "Em atendimento");
+  const exp = base.filter(indExpirada), expAb = exp.filter(indAberto).length;
+  const tempos = fin.map(x => indMs(x.concluidaEm) - indMs(x.abertaEm)).filter(v => v > 0);
+  const exec = fin.map(x => indMs(x.concluidaEm) - indMs(x.iniciadaEm || x.abertaEm)).filter(v => v > 0);
+  const media = a => a.length ? a.reduce((s, v) => s + v, 0) / a.length : 0;
+  const taxa = validos.length ? Math.round(fin.length / validos.length * 100) : 0;
+  const k = (cls, rot, v, sub, ir, ico) => `<button type="button" class="ind-kpi ${cls}" data-ir="${ir}"><span class="ind-kl">${rot}</span><b class="num">${v}</b><span class="ind-ks">${sub}</span><svg viewBox="0 0 24 24" aria-hidden="true">${ico}</svg></button>`;
+  $("#ind-kpis").innerHTML = [
+    k("azul", "OS no período", base.length, `abertas agora: ${abertasAgora.length}`, "todas", '<path d="M4 8.5 12 4l8 4.5-8 4.5zM4 12.5l8 4.5 8-4.5M4 16.5l8 4.5 8-4.5"/>'),
+    k("verde", "Finalizadas", fin.length, `taxa ${taxa}%`, "Finalizada", '<circle cx="12" cy="12" r="9"/><path d="m8 12.5 3 3 5-6"/>'),
+    k("ambar", "Aguardando", ag.length, "na fila / agendadas", "Aguardando", '<path d="M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9"/>'),
+    k("roxo", "Em atendimento", at.length, "em execução agora", "Em atendimento", '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3.6 17.4a1.9 1.9 0 0 0 2.7 2.7l5.7-5.7a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.3-.3-2.4z"/>'),
+    k("vermelho", "Expiradas", exp.length, exp.length ? `${expAb} em aberto · ${exp.length - expAb} concluída${exp.length - expAb === 1 ? "" : "s"} com atraso` : "nenhuma fora do prazo", "expiradas", '<path d="M12 4 21 19.5H3z"/><path d="M12 10v4.5M12 17h.01"/>'),
+    k("grafite", "Tempo médio", indDur(media(tempos)), exec.length ? `execução média ${indDur(media(exec))}` : "da abertura à conclusão", "Finalizada", '<circle cx="12" cy="13" r="8"/><path d="M12 9v4.5l3 2M9 2h6"/>')
+  ].join("");
+  $$("#ind-kpis .ind-kpi").forEach(b => b.onclick = () => {
+    const ir = b.dataset.ir;
+    IND.drill = ir === "todas" ? null : ir === "expiradas" ? {rot:"Expiradas", fn:indExpirada} : {rot:ir, fn:x => x.st === ir};
+    indIr("lista");
+  });
+  indGrafTempo(itens);
+  const contar = (lista, chave, vazio) => { const m = {}; lista.forEach(x => { const c = x[chave] || vazio; m[c] = (m[c] || 0) + 1; }); return Object.entries(m).sort((a,b) => b[1] - a[1] || a[0].localeCompare(b[0],"pt-BR")); };
+  // barras clicáveis: o clique abre a Lista de OS só com aquele valor
+  const hb = (sel, pares, rotCampo, chave, semValor, msgVazio) => {
+    barras(sel, pares.slice(0, 10).map(([r, v]) => ({rotulo:r, v, txt:String(v), tip:[["", `${v} no período`]]})), msgVazio);
+    $$(sel + " .hb").forEach((el, i) => {
+      const val = pares[i][0]; el.classList.add("click"); el.setAttribute("role", "button");
+      el.onclick = () => { IND.drill = {rot:`${rotCampo}: ${val}`, fn:x => indNoPeriodo(x) && (x[chave] || semValor) === val}; indIr("lista"); };
+      el.onkeydown = e => { if (e.key === "Enter") el.click(); };
+    });
+  };
+  hb("#ind-g-cat", contar(base, "categoria", "Sem categoria"), "Categoria", "categoria", "Sem categoria", "Nenhuma OS no período.");
+  hb("#ind-g-exec", contar(base, "executante", "Sem executante"), "Executante", "executante", "Sem executante", "Nenhuma OS no período.");
+  hb("#ind-g-local", contar(base, "local", "Sem local"), "Local", "local", "Sem local", "Nenhuma OS no período.");
+  hb("#ind-g-prio", ["Urgente","Alta","Normal","Baixa"].map(p => [p, base.filter(x => x.prioridade === p).length]).filter(p => p[1]), "Prioridade", "prioridade", "Normal", "Nenhuma OS no período.");
+  hb("#ind-g-tipo", contar(base, "tipo", "OS"), "Tipo", "tipo", "OS", "Nenhuma OS no período.");
+  const eq = contar(base.filter(x => x.equipamento), "equipamento", "");
+  $("#ind-p-equip").hidden = !eq.length;
+  if (eq.length) hb("#ind-g-equip", eq, "Equipamento", "equipamento", "", "");
+  // prazo das finalizadas
+  const noPrazo = fin.filter(x => x.prazo && !indExpirada(x)).length, fora = fin.filter(indExpirada).length, semPrazo = fin.length - noPrazo - fora;
+  barras("#ind-g-prazo", [["No prazo", noPrazo], ["Fora do prazo", fora], ["Sem prazo", semPrazo]].filter(p => p[1]).map(([r, v]) => ({rotulo:r, v, txt:String(v) + (fin.length ? ` (${Math.round(v / fin.length * 100)}%)` : "")})), "Nenhuma finalizada no período.");
+}
+// abertas x finalizadas ao longo do período (por dia, semana ou mês, conforme o tamanho do período)
+function indGrafTempo(itens){
+  const el = $("#ind-g-tempo"); if (!el) return;
+  const de = new Date(IND.de + "T00:00"), ate = new Date(IND.ate + "T00:00"), dias = Math.round((ate - de) / 864e5) + 1;
+  const passo = dias <= 31 ? "dia" : dias <= 180 ? "semana" : "mes";
+  const chave = s => { const d = new Date(indDia(s) + "T00:00"); if (passo === "dia") return iso(d); if (passo === "mes") return iso(new Date(d.getFullYear(), d.getMonth(), 1)); const w = new Date(d); w.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return iso(w); };
+  const grupos = []; const vistos = new Set();
+  for (let d = new Date(de); d <= ate; d.setDate(d.getDate() + 1)) { const c = chave(iso(d)); if (!vistos.has(c)) { vistos.add(c); grupos.push(c); } }
+  const ab = grupos.map(g => itens.filter(x => indNoPeriodo(x) && chave(x.abertaEm) === g).length);
+  const fi = grupos.map(g => itens.filter(x => indFimNoPeriodo(x) && chave(x.concluidaEm) === g).length);
+  const rot = g => passo === "mes" ? PP_MESES[+g.slice(5, 7) - 1] + "/" + g.slice(2, 4) : g.slice(8, 10) + "/" + g.slice(5, 7);
+  $("#ind-t-tempo").textContent = `Abertas e finalizadas por ${passo === "dia" ? "dia" : passo === "semana" ? "semana" : "mês"}`;
+  const W = Math.max(300, Math.round(el.clientWidth || 600)), H = W < 560 ? 200 : 240, pl = 30, pr = 8, pt = 10, pb = 28, iw = W - pl - pr, ih = H - pt - pb;
+  const max = Math.max(1, ...ab, ...fi), top = niceMax(max), n = grupos.length, gw = iw / n, bw = Math.max(2, Math.min(18, gw * .36));
+  const y = v => pt + ih - ih * v / top;
+  let g = "";
+  for (let i = 0; i <= 4; i++) { const v = top * i / 4; g += `<line class="pp-grade" x1="${pl}" x2="${W - pr}" y1="${y(v)}" y2="${y(v)}"/><text class="pp-eixo" x="${pl - 5}" y="${y(v) + 4}" text-anchor="end">${Math.round(v)}</text>`; }
+  const pulo = Math.max(1, Math.ceil(n / Math.floor(iw / 44)));
+  grupos.forEach((c, i) => {
+    const cx = pl + gw * (i + .5);
+    g += `<g class="ind-barra" data-g="${c}" tabindex="0" role="button" aria-label="${rot(c)}: ${ab[i]} abertas, ${fi[i]} finalizadas"><rect class="ind-alvo" x="${pl + gw * i}" y="${pt}" width="${gw}" height="${ih}"/>`
+      + `<rect class="ind-b ab" x="${cx - bw - 1}" y="${y(ab[i])}" width="${bw}" height="${Math.max(0, pt + ih - y(ab[i]))}" rx="2"><title>${rot(c)} · abertas: ${ab[i]}</title></rect>`
+      + `<rect class="ind-b fi" x="${cx + 1}" y="${y(fi[i])}" width="${bw}" height="${Math.max(0, pt + ih - y(fi[i]))}" rx="2"><title>${rot(c)} · finalizadas: ${fi[i]}</title></rect></g>`;
+    if (i % pulo === 0) g += `<text class="pp-eixo" x="${cx}" y="${H - 9}" text-anchor="middle">${rot(c)}</text>`;
+  });
+  el.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="OS abertas e finalizadas no período">${g}</svg>`;
+  $$("#ind-g-tempo .ind-barra").forEach(b => { const ir = () => { const c = b.dataset.g; IND.drill = {rot:`${passo === "dia" ? "Dia" : passo === "semana" ? "Semana de" : "Mês"} ${rot(c)}`, fn:x => (indNoPeriodo(x) && chave(x.abertaEm) === c) || (indFimNoPeriodo(x) && chave(x.concluidaEm) === c)}; indIr("lista"); }; b.onclick = ir; b.onkeydown = e => { if (e.key === "Enter") ir(); }; });
+}
+const indPill = x => `<span class="pill ${{"Aguardando":"st-aberta","Em atendimento":"st-andamento","Finalizada":"s-ok","Cancelada":"p-ajuste"}[x.st] || "p-ajuste"}">${esc(x.st)}${indExpirada(x) && indAberto(x) ? " · expirada" : ""}</span>`;
+const indTipo = x => `<span class="ind-tipo ${norm(x.tipo)}">${esc(x.tipo)}</span>`;
+function indLista(itens){
+  const d = IND.drill;
+  const lista = (d ? itens.filter(x => (indNoPeriodo(x) || indFimNoPeriodo(x) || indAberto(x)) && d.fn(x)) : itens.filter(indNoPeriodo))
+    .sort((a, b) => String(b.abertaEm).localeCompare(String(a.abertaEm)));
+  $("#ind-drill").innerHTML = d ? `<span class="ind-chip">Mostrando: <b>${esc(d.rot)}</b><button type="button" id="ind-drill-x" aria-label="Tirar este filtro">×</button></span>` : `<span class="muted">OS e demandas abertas no período.</span>`;
+  if (d) $("#ind-drill-x").onclick = () => { IND.drill = null; renderInd(); };
+  $("#ind-l-body").innerHTML = lista.length ? lista.map(x => `<tr class="click" tabindex="0" data-ind="${esc(x.tipo === "OS" ? "os" : "dem")}:${esc(x.id)}">
+    <td class="mono" style="white-space:nowrap">${esc(x.numero || "—")}</td><td>${indTipo(x)}</td>
+    <td><b>${esc(x.titulo)}</b><span class="sub">${esc([x.categoria, x.equipamento].filter(Boolean).join(" · "))}</span></td>
+    <td class="hide-s">${esc(x.local || "—")}</td><td class="hide-m">${esc(x.executante || "—")}</td><td>${indPill(x)}</td>
+    <td class="hide-s num" style="white-space:nowrap">${fData(x.abertaEm)}</td>
+    <td class="hide-s num ${indExpirada(x) ? "atras" : ""}" style="white-space:nowrap">${x.st === "Finalizada" ? fData(x.concluidaEm) : fData(x.prazo)}</td></tr>`).join("")
+    : `<tr><td colspan="8"><div class="empty">Nenhuma OS com esses filtros.</div></td></tr>`;
+}
+function indKanban(itens){
+  const cols = [
+    {st:"Aguardando", rot:"Aguardando", sub:"na fila", l:itens.filter(x => x.st === "Aguardando")},
+    {st:"Em atendimento", rot:"Em atendimento", sub:"em execução", l:itens.filter(x => x.st === "Em atendimento")},
+    {st:"Finalizada", rot:"Finalizadas", sub:"no período", l:itens.filter(indFimNoPeriodo)}
+  ];
+  const ord = (a, b) => (indExpirada(b) - indExpirada(a)) || ((PRIO_ORD[a.prioridade] ?? 2) - (PRIO_ORD[b.prioridade] ?? 2)) || String(a.prazo || "9").localeCompare(String(b.prazo || "9"));
+  $("#ind-kanban").innerHTML = `<p class="hint">Aguardando e Em atendimento mostram tudo o que está em aberto agora; Finalizadas, o que foi concluído no período. Toque num cartão para abrir.</p><div class="ind-kb">` + cols.map(c => {
+    const l = c.st === "Finalizada" ? c.l.sort((a, b) => String(b.concluidaEm).localeCompare(String(a.concluidaEm))) : c.l.sort(ord);
+    return `<section class="ind-col ${norm(c.st).replace(/\s+/g, "-")}"><h4>${esc(c.rot)} <span class="badge">${l.length}</span><small>${c.sub}</small></h4><div class="ind-cards">`
+      + (l.slice(0, 60).map(x => `<button type="button" class="ind-kc prio-${norm(x.prioridade)} ${indExpirada(x) ? "exp" : ""}" data-ind="${x.tipo === "OS" ? "os" : "dem"}:${esc(x.id)}">
+          <span class="ind-kc-top"><span class="mono">${esc(x.numero || "")}</span>${indTipo(x)}</span><b>${esc(x.titulo)}</b>
+          <span class="ind-kc-meta">${esc([x.local, x.equipamento].filter(Boolean).join(" · ") || "—")}</span>
+          <span class="ind-kc-meta">${esc(x.executante || "Sem executante")} · ${x.st === "Finalizada" ? "concluída " + fData(x.concluidaEm) : x.prazo ? (indExpirada(x) ? "expirou " : "prazo ") + fData(x.prazo) : "sem prazo"}</span></button>`).join("") || `<div class="empty">Nada aqui.</div>`)
+      + (l.length > 60 ? `<p class="hint">+ ${l.length - 60} na Lista de OS</p>` : "") + `</div></section>`;
+  }).join("") + `</div>`;
+}
+function indAgenda(itens){
+  if (!IND.mes) IND.mes = hoje().slice(0, 7);
+  const [y, m] = IND.mes.split("-").map(Number), primeiro = new Date(y, m - 1, 1), ultimo = new Date(y, m, 0);
+  const ev = {};
+  const por = (dia, e) => { (ev[dia] = ev[dia] || []).push(e); };
+  itens.forEach(x => {
+    if (x.st === "Cancelada") return;
+    const dia = x.st === "Finalizada" ? indDia(x.concluidaEm) : x.prazo;
+    if (dia && dia.slice(0, 7) === IND.mes) por(dia, {x, cls: x.st === "Finalizada" ? "fin" : indExpirada(x) ? "exp" : x.st === "Em atendimento" ? "at" : "ag"});
+  });
+  // preventivas programadas (próxima data), para quem gerencia demandas
+  (S.prev || []).filter(p => String(p.ativa) !== "Não" && p.proxima && String(p.proxima).slice(0, 7) === IND.mes && p.proxima >= hoje())
+    .filter(p => !IND.f.tipo || IND.f.tipo === "Preventiva").filter(p => !IND.f.cat || p.categoria === IND.f.cat)
+    .forEach(p => por(String(p.proxima).slice(0, 10), {prev:p, cls:"prog"}));
+  const nomeMes = primeiro.toLocaleDateString("pt-BR", {month:"long", year:"numeric"});
+  let h = `<div class="ind-ag-top"><button type="button" class="btn small" data-mes="-1" aria-label="Mês anterior">‹</button><h4>${nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1)}</h4><button type="button" class="btn small" data-mes="1" aria-label="Próximo mês">›</button><button type="button" class="btn small" data-mes="0">Hoje</button>
+    <span class="ind-leg"><span><i class="ag"></i>Aguardando</span><span><i class="at"></i>Em atendimento</span><span><i class="exp"></i>Expirada</span><span><i class="fin"></i>Finalizada</span><span><i class="prog"></i>Preventiva programada</span></span></div>
+    <div class="ind-cal"><div class="ind-sem">Seg</div><div class="ind-sem">Ter</div><div class="ind-sem">Qua</div><div class="ind-sem">Qui</div><div class="ind-sem">Sex</div><div class="ind-sem">Sáb</div><div class="ind-sem">Dom</div>`;
+  for (let i = 0; i < (primeiro.getDay() + 6) % 7; i++) h += `<div class="ind-dia vazio" aria-hidden="true"></div>`;
+  for (let d = 1; d <= ultimo.getDate(); d++) {
+    const dia = iso(new Date(y, m - 1, d)), l = ev[dia] || [];
+    h += `<div class="ind-dia ${dia === hoje() ? "hoje" : ""} ${l.length ? "" : "sem"}"><span class="ind-dn">${d}<small> ${["dom","seg","ter","qua","qui","sex","sáb"][new Date(y, m - 1, d).getDay()]}</small></span>`
+      + l.slice(0, 4).map(e => e.prev ? `<span class="ind-ev prog" title="${esc(e.prev.titulo)}">${esc(e.prev.titulo)}</span>`
+        : `<button type="button" class="ind-ev ${e.cls}" data-ind="${e.x.tipo === "OS" ? "os" : "dem"}:${esc(e.x.id)}" title="${esc((e.x.numero || "") + " " + e.x.titulo)}">${esc(e.x.numero ? e.x.numero.replace(/^OS-0*/, "OS ") + " " : "")}${esc(e.x.titulo)}</button>`).join("")
+      + (l.length > 4 ? `<span class="ind-mais">+ ${l.length - 4}</span>` : "") + `</div>`;
+  }
+  $("#ind-agenda").innerHTML = h + `</div><p class="hint">Em aberto aparecem no dia do prazo; finalizadas, no dia em que foram concluídas. As finalizadas antigas só aparecem se estiverem dentro do período escolhido nos filtros.</p>`;
+  $$("#ind-agenda [data-mes]").forEach(b => b.onclick = () => { const k = +b.dataset.mes; IND.mes = k ? iso(new Date(y, m - 1 + k, 1)).slice(0, 7) : hoje().slice(0, 7); indAgenda(itens); });
+}
+function indIr(v){ IND.vista = v; renderInd(); if (!IND.apres) { const t = $("#ind-vistas"); if (t) t.scrollIntoView({block:"nearest"}); } }
+// abre a OS ou a demanda (se ela não estiver na lista do dia a dia, mostra um resumo)
+function indAbrir(chave){
+  const [tipo, id] = chave.split(":");
+  if (tipo === "os" && S.os.some(o => o.id === id)) { abrirOS(id); return; }
+  if (tipo === "dem" && S.dem.some(d => d.id === id)) { abrirDem(id); return; }
+  const x = indItens().find(i => i.id === id); if (!x) return;
+  $("#modal-box").innerHTML = `<div class="os-top"><span class="mono muted">${esc(x.numero || "")}</span>${indPill(x)}${prioPill(x.prioridade)}</div><h3 class="os-tit">${esc(x.titulo)}</h3>
+    <dl class="os-info"><div><dt>Tipo</dt><dd>${esc(x.tipo)}</dd></div><div><dt>Local</dt><dd>${esc(x.local || "—")}</dd></div><div><dt>Categoria</dt><dd>${esc(x.categoria || "—")}</dd></div>
+    ${x.equipamento ? `<div><dt>Equipamento</dt><dd>${esc(x.equipamento)}</dd></div>` : ""}<div><dt>Executante</dt><dd>${esc(x.executante || "—")}</dd></div><div><dt>Solicitante</dt><dd>${esc(x.solicitante || "—")}</dd></div>
+    <div><dt>Aberta</dt><dd>${fDataHora(x.abertaEm)}</dd></div><div><dt>Prazo</dt><dd>${fData(x.prazo)}</dd></div>${x.concluidaEm ? `<div><dt>Encerrada</dt><dd>${fDataHora(x.concluidaEm)}</dd></div>` : ""}</dl>
+    <p class="hint">Registro antigo: os detalhes completos ficam na aba ${x.tipo === "OS" ? "OS" : "Demandas"} da planilha.</p><div class="actions"><button class="btn" type="button" id="ind-res-x">Fechar</button></div>`;
+  $("#modal").hidden = false; $("#ind-res-x").onclick = fecharModal; $("#ind-res-x").focus();
+}
+// modo apresentação: tela cheia, só os indicadores, atualiza sozinho a cada 2 minutos
+function indApresentacao(ligar){
+  IND.apres = ligar; document.body.classList.toggle("ind-apres", ligar);
+  $("#ind-apres").textContent = ligar ? "Sair da apresentação" : "Modo apresentação";
+  clearInterval(IND.timer);
+  if (ligar) {
+    IND.timer = setInterval(() => { if (S.tab === "indicadores" && document.visibilityState === "visible") carregarInd(); }, 120000);
+    const el = document.documentElement; if (el.requestFullscreen && !document.fullscreenElement) el.requestFullscreen().catch(() => {});
+  } else if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+  scrollTo({top:0}); setTimeout(renderInd, 80);
+}
+if ($("#t-indicadores")) {
+  $("#ind-vistas").addEventListener("click", e => { const b = e.target.closest("[data-v]"); if (b) { if (b.dataset.v === "lista" && IND.vista !== "lista") IND.drill = null; indIr(b.dataset.v); } });
+  $("#ind-presets").addEventListener("click", e => { const b = e.target.closest("[data-p]"); if (!b) return; IND.preset = b.dataset.p; [IND.de, IND.ate] = indPeriodo(IND.preset); $("#ind-de").value = IND.de; $("#ind-ate").value = IND.ate; syncChips("#ind-presets", "p", IND.preset); carregarInd(); });
+  const lerFiltros = () => { IND.f = {tipo:$("#ind-tipo").value, cat:$("#ind-cat").value, exec:$("#ind-exec").value, sol:$("#ind-sol").value, local:$("#ind-local").value, equip:$("#ind-equip").value}; };
+  ["#ind-tipo","#ind-cat","#ind-exec","#ind-sol","#ind-local","#ind-equip"].forEach(s => $(s).addEventListener("change", () => { lerFiltros(); renderInd(); }));
+  $("#ind-aplicar").addEventListener("click", () => {
+    let de = $("#ind-de").value, ate = $("#ind-ate").value;
+    if (!de || !ate) { toast("Informe as duas datas do período.", true); return; }
+    if (de > ate) [de, ate] = [ate, de];
+    IND.de = de; IND.ate = ate; IND.preset = ""; syncChips("#ind-presets", "p", ""); lerFiltros(); carregarInd();
+  });
+  $("#ind-limpar").addEventListener("click", () => { IND.f = {tipo:"", cat:"", exec:"", sol:"", local:"", equip:""}; $("#ind-tipo").value = ""; IND.drill = null; renderInd(); });
+  $("#ind-atualizar").addEventListener("click", () => carregarInd());
+  $("#ind-apres").addEventListener("click", () => indApresentacao(!IND.apres));
+  document.addEventListener("fullscreenchange", () => { if (!document.fullscreenElement && IND.apres) indApresentacao(false); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && IND.apres && $("#modal").hidden) indApresentacao(false); });
+  $("#t-indicadores").addEventListener("click", e => { const b = e.target.closest("[data-ind]"); if (b) indAbrir(b.dataset.ind); });
+  $("#t-indicadores").addEventListener("keydown", e => { if (e.key === "Enter" && e.target.dataset && e.target.dataset.ind) indAbrir(e.target.dataset.ind); });
+  addEventListener("resize", () => { clearTimeout(IND.rz); IND.rz = setTimeout(() => { if (S.tab === "indicadores" && IND.vista === "dash" && IND.dados) indGrafTempo(indItens().filter(indPassaFiltros)); }, 150); });
 }
 
 // ---------- início ----------
