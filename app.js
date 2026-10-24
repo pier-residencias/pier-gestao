@@ -35,7 +35,7 @@ const SETORES_PERM = [["Manutenção","setor_manutencao"],["Limpeza","setor_limp
 const setoresDasPerms = p => { const l = SETORES_PERM.filter(x => p && p[x[1]]).map(x => x[0]); return l.length ? l : ["Manutenção"]; };
 const doSetor = x => setorDe(x) === S.setor;
 const can = p => !!(S.perms && S.perms[p]);
-const ABAS_PERM = {painel:["painel"], demandas:["dem_ver","dem_executar","dem_delegar"], os:["os_ver","os_abrir","os_atender","os_gerenciar"], registrar:["registrar_saida","registrar_entrada","registrar_troca","registrar_emprestimo"], itens:["itens_ver"], historico:["historico_ver"], emprestimos:["devolver","registrar_emprestimo"], dashboard:["dashboard"], indicadores:["dashboard"], categorias:["itens_ver"], prestadores:["os_ver","os_abrir","os_atender","os_gerenciar","dem_ver","dem_executar","dem_delegar"], equipe:["os_gerenciar","dem_delegar"], minhaequipe:["os_gerenciar","dem_delegar"], usuarios:["usuarios"], inicio:["pendencias","usuarios","acessos"], pendencias:["pendencias"], pdpainel:["pendencias"], rondas:["ronda_ver","ronda_fazer"], unidades:["un_ver","un_editar"], uncadastro:["un_ver","un_editar"], unconfig:["un_editar"], cotacoes:["pendencias"], acessos:["acessos"]};
+const ABAS_PERM = {painel:["painel"], demandas:["dem_ver","dem_executar","dem_delegar"], os:["os_ver","os_abrir","os_atender","os_gerenciar"], registrar:["registrar_saida","registrar_entrada","registrar_troca","registrar_emprestimo"], itens:["itens_ver"], historico:["historico_ver"], emprestimos:["devolver","registrar_emprestimo"], dashboard:["dashboard"], indicadores:["dashboard"], categorias:["itens_ver"], prestadores:["os_ver","os_abrir","os_atender","os_gerenciar","dem_ver","dem_executar","dem_delegar"], equipe:["os_gerenciar","dem_delegar"], minhaequipe:["os_gerenciar","dem_delegar"], usuarios:["usuarios"], inicio:["pendencias","usuarios","acessos"], pendencias:["pendencias"], pdpainel:["pendencias"], rondas:["ronda_ver","ronda_fazer"], unidades:["un_ver","un_editar"], uncadastro:["un_ver","un_editar"], unconfig:["un_editar"], medlanc:["med_lancar"], medidores:["med_ver","med_lancar"], medrel:["med_ver","med_lancar"], cotacoes:["pendencias"], acessos:["acessos"]};
 // Se o navegador ainda estiver com a página antiga guardada, o menu Administração não existe nela:
 // o resto do sistema continua funcionando normalmente.
 const TEM_ADM = !!(document.getElementById("tab-adm") && document.getElementById("adm-menu") && document.getElementById("t-pendencias"));
@@ -44,12 +44,13 @@ if (!TEM_ADM || !document.getElementById("t-pdpainel")) delete ABAS_PERM.pdpaine
 if (!TEM_ADM || !document.getElementById("t-inicio")) delete ABAS_PERM.inicio;
 if (!TEM_ADM || !document.getElementById("t-rondas")) delete ABAS_PERM.rondas;
 if (!TEM_ADM || !document.getElementById("t-unidades")) { delete ABAS_PERM.unidades; delete ABAS_PERM.uncadastro; delete ABAS_PERM.unconfig; }
+if (!TEM_ADM || !document.getElementById("t-medlanc")) { delete ABAS_PERM.medlanc; delete ABAS_PERM.medidores; delete ABAS_PERM.medrel; }
 if (!document.getElementById("t-indicadores")) delete ABAS_PERM.indicadores;
 if (!TEM_ADM || !document.getElementById("t-acessos")) delete ABAS_PERM.acessos;
 // O que aparece depende de como a pessoa entrou: Manutenção (tudo do estoque, OS e demandas),
 // Limpeza (só o estoque da limpeza) ou Administração (só o menu Administração).
 // "inicio" primeiro: é a tela que abre ao entrar pela Administração
-const ABAS_ADM = ["inicio","pendencias","pdpainel","cotacoes","rondas","unidades","uncadastro","unconfig","usuarios","acessos"];
+const ABAS_ADM = ["inicio","pendencias","pdpainel","cotacoes","rondas","unidades","uncadastro","unconfig","medlanc","medidores","medrel","usuarios","acessos"];
 const TIPOS_LIMPEZA = ["saida","entrada"];
 const modo = () => S.adm ? "Administração" : S.setor;
 // Mesmo menu nos três setores (pedido de 24/10/2026); cada pessoa vê só o que o perfil permite.
@@ -59,7 +60,8 @@ const modo = () => S.adm ? "Administração" : S.setor;
 // Pendências e compras (controle de pendências e cotações) só no setor Administração (pedidos de 24/10/2026).
 // Ronda: só no setor Administração (pedido de 24/10/2026)
 // Unidades e moradores: só no setor Administração (pedido de 24/10/2026; dados pessoais)
-const SO_ADM = ["inicio","pdpainel","pendencias","cotacoes","rondas","unidades","uncadastro","unconfig"], FORA_LIMPEZA = ["demandas","emprestimos","minhaequipe"], SO_MANUT = ["prestadores"];
+// Central de medições (água, energia e gás): só no setor Administração (pedido de 24/10/2026)
+const SO_ADM = ["inicio","pdpainel","pendencias","cotacoes","rondas","unidades","uncadastro","unconfig","medlanc","medidores","medrel"], FORA_LIMPEZA = ["demandas","emprestimos","minhaequipe"], SO_MANUT = ["prestadores"];
 const naManut = () => !S.adm && S.setor !== "Limpeza";
 const abaNoModo = t => t === "painel" ? !S.adm : SO_ADM.includes(t) ? S.adm : SO_MANUT.includes(t) ? naManut() : !(!S.adm && S.setor === "Limpeza" && FORA_LIMPEZA.includes(t));
 const ehSindico = () => norm(S.perfil).includes("sindico");
@@ -166,7 +168,7 @@ function mostrarLogin(msg){
   ($("#l-usuario").value ? $("#l-senha") : $("#l-usuario")).focus();
 }
 // sair encerra a sessão também no servidor: o código guardado no aparelho deixa de valer
-function encerrarLocal(msg){ S.token = ""; S.perms = {}; S.rel = null; S.eq = null; S.pend = null; unLimparMemoria(); fecharModal(); apagarSessao(); abrirMenuAdm(false); fecharMenu(); mostrarLogin(msg); renderMenu(); }
+function encerrarLocal(msg){ S.token = ""; S.perms = {}; S.rel = null; S.eq = null; S.pend = null; unLimparMemoria(); mdLimpar(); fecharModal(); apagarSessao(); abrirMenuAdm(false); fecharMenu(); mostrarLogin(msg); renderMenu(); }
 function sair(msg){
   const tk = S.token;
   if (tk && API) { try { fetch(API, {method:"POST", body:JSON.stringify({acao:"sair", token:tk}), redirect:"follow", keepalive:true}).catch(()=>{}); } catch(e){} }
@@ -306,6 +308,7 @@ function setTab(t){
   if (t==="pdpainel") { renderPdPainel(); carregarPend(); }
   if (t==="rondas") { renderRondas(); carregarRondas(true); }
   if (t==="unidades" || t==="uncadastro" || t==="unconfig") { renderUnidadesTudo(); carregarUnidades(); }
+  if (t==="medlanc" || t==="medidores" || t==="medrel") { renderMedTudo(); carregarMed(); }
   if (t==="inicio") { renderInicio(); if (can("pendencias")) carregarPend(); }
   if (t==="acessos") carregarAcessos();
   if (t==="cotacoes") { renderCot(); carregarCot(); }
@@ -412,6 +415,8 @@ const MENU = [
     {t:"pendencias", rot:"Controle de pendências", b:"b-adm"}, {t:"pendencias", acao:"nova", rot:"Incluir pendência"}, {t:"cotacoes", rot:"Cotações"}]},
   {g:"Unidades", ico:'<path d="M5 21V4h10v17M15 9h4v12M8 8h1M11 8h1M8 12h1M11 12h1M8 16h1M11 16h1M3 21h18"/>', itens:[
     {t:"unidades", rot:"Lista de unidades"}, {t:"uncadastro", rot:"Atualização cadastral"}, {t:"unconfig", rot:"Configurações"}]},
+  {g:"Central de medições", ico:'<path d="M3 7.5c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0M3 12.5c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0M3 17.5c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0"/>', itens:[
+    {t:"medlanc", rot:"Sinalizar consumo"}, {t:"medidores", rot:"Meus medidores"}, {t:"medrel", rot:"Relatórios"}]},
   {g:"Administração", ico:'<path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 6.5M18 14.5a6 6 0 0 1 3.5 5.5"/>', itens:[
     {t:"usuarios", rot:"Usuários"}, {t:"equipe", rot:"Equipe"}, {t:"minhaequipe", rot:"Minha equipe"}, {t:"acessos", rot:"Histórico de acessos"}]},
   {g:"Gestão", ico:'<path d="M5 19V11M10 19V6M15 19v-5M20 19V9"/>', itens:[{t:"dashboard", rot:"Dashboard do estoque"}]}
@@ -5973,6 +5978,734 @@ if ($("#t-unidades")) {
     const p = ev.target.closest("[data-un-pr]"); if (p) { const u = (UN.lista || []).find(x => x.id === p.dataset.unPr); if (u) unImprimir(u); }
   });
   document.addEventListener("keydown", ev => { if (ev.key === "Enter" && ev.target.dataset && ev.target.dataset.un && ev.target.tagName === "TR") unFicha(ev.target.dataset.un); });
+}
+
+// ---------- central de medições: água, energia e gás (só no setor Administração) ----------
+// Sinalizar consumo (leituras do relógio e contas mensais), Meus medidores e Relatórios.
+// Consumo = diferença entre duas leituras do mesmo medidor. Quando passam dias sem leitura, o consumo é dividido igualmente
+// entre esses dias e fica no dia de cada leitura (a leitura de hoje mostra o que foi gasto desde a anterior).
+const MD = { d:null, carregando:false, erro:"", em:0, cache:new Map(), vista:"dia", fMed:"", fPer:"30", rPer:"30", rTipo:"dia", rVis:{}, rSel:{} };
+const MD_TIPOS = ["Água","Energia","Gás"], MD_UNID = ["m³","kWh","Litros"];
+const MD_INFO = {
+  "Água": {cor:"azul", un:"m³", ico:'<path d="M12 3.5s6 6.4 6 10.5a6 6 0 0 1-12 0c0-4.1 6-10.5 6-10.5z"/>'},
+  "Energia": {cor:"ambar", un:"kWh", ico:'<path d="M13 2.5 5 13.5h6l-1 8 8-11h-6z"/>'},
+  "Gás": {cor:"laranja", un:"m³", ico:'<path d="M12 21a6 6 0 0 0 6-6c0-3.5-2.5-5.5-3.5-8-1 2-2 3-3.5 3.5C11 8 10 5 8.5 3.5 8 7 6 9.5 6 15a6 6 0 0 0 6 6z"/>'}
+};
+const MD_CORES = ["#2563eb","#10b981","#f59e0b","#8b5cf6","#ef4444","#0d9488","#db2777","#64748b"];
+const MD_PER = [["7","Últimos 7 dias"],["30","Últimos 30 dias"],["90","Últimos 90 dias"],["mes","Este mês"],["mesant","Mês passado"],["12m","Últimos 12 meses"],["ano","Este ano"]];
+const mdIco = (tipo, cls) => `<span class="pp-ico ${(MD_INFO[tipo] || MD_INFO["Água"]).cor} ${cls || ""}"><svg viewBox="0 0 24 24" aria-hidden="true">${(MD_INFO[tipo] || MD_INFO["Água"]).ico}</svg></span>`;
+const mdLancar = () => can("med_lancar");
+const mdMed = id => ((MD.d && MD.d.medidores) || []).find(m => m.id === id);
+// número digitado no padrão brasileiro: "1.420" = mil quatrocentos e vinte; "1.050,5" e "1050,5" = mil e cinquenta e meio
+const mdNum = v => { if (typeof v === "number") return v; const s = String(v ?? "").trim().replace(/\s/g, "").replace(/^R\$/i, ""); if (!s) return NaN; return Number(s.includes(",") || /^\d{1,3}(\.\d{3})+$/.test(s) ? s.replace(/\./g, "").replace(",", ".") : s); };
+const mdF = (n, d) => n === null || n === undefined || isNaN(n) ? "—" : Number(n).toLocaleString("pt-BR", {minimumFractionDigits:d ?? 0, maximumFractionDigits:d ?? 2});
+const mdDiasEntre = (a, b) => Math.round((Date.parse(b + "T12:00:00") - Date.parse(a + "T12:00:00")) / 864e5);
+const mdSomaDia = (d, n) => { const x = new Date(d + "T12:00:00"); x.setDate(x.getDate() + n); return iso(x); };
+const mdOrdem = l => l.slice().sort((a, b) => MD_TIPOS.indexOf(a.tipo) - MD_TIPOS.indexOf(b.tipo) || String(a.nome).localeCompare(String(b.nome), "pt-BR"));
+const mdRotMes = ym => { const [a, m] = String(ym).split("-"); return (PP_MESES[+m - 1] || m) + "/" + a; };
+const mdNoves = m => "9".repeat(Number(m.casas) || 5);
+function mdLimpar(){ MD.d = null; MD.erro = ""; MD.cache = new Map(); MD.rSel = {}; }
+function mdAplicar(r){
+  if (!r || !Array.isArray(r.medidores)) return false;
+  MD.d = {medidores:r.medidores, leituras:(r.leituras || []).map(l => Object.assign({}, l, {leitura:Number(l.leitura)})), contas:r.contas || []};
+  MD.em = Date.now(); MD.cache = new Map(); return true;
+}
+async function carregarMed(forcar){
+  if (!TEM_ADM || !S.token || MD.carregando) return;
+  if (!["medlanc","medidores","medrel"].some(podeAba)) return;
+  if (!forcar && MD.d && Date.now() - MD.em < 60000) { renderMedTudo(); return; }
+  MD.carregando = true;
+  try { const r = await api("medicoes"); mdAplicar(r); MD.erro = ""; }
+  catch(e){ MD.erro = e.message; toast(e.message, true); }
+  finally { MD.carregando = false; renderMedTudo(); }
+}
+function renderMedTudo(){ renderMedLanc(); renderMedidores(); renderMedRel(); }
+const mdAviso = () => /desconhecida/i.test(MD.erro) ? " A Central de medições precisa do Apps Script novo (colar o código e implantar uma nova versão)." : "";
+function mdCarregando(box){
+  if (MD.erro && !MD.d) { box.innerHTML = `<div class="notice crit">${esc(MD.erro)}${mdAviso()}</div>`; return true; }
+  if (!MD.d) { box.innerHTML = `<div class="empty"><span class="spin" aria-hidden="true"></span> Carregando as medições…</div>`; return true; }
+  return false;
+}
+// intervalos entre leituras de um medidor: {de, ate, dias, consumo, leitura}
+function mdInt(m){
+  const k = "i|" + m.id; if (MD.cache.has(k)) return MD.cache.get(k);
+  const ls = MD.d.leituras.filter(l => l.medidor === m.id).sort((a, b) => a.data < b.data ? -1 : a.data > b.data ? 1 : 0);
+  const lim = Math.pow(10, Number(m.casas) || 0), out = [];
+  for (let i = 1; i < ls.length; i++) {
+    const a = ls[i - 1], b = ls[i]; let c = b.leitura - a.leitura;
+    if (b.virada === "Sim" || c < 0) c += lim;
+    out.push({de:a.data, ate:b.data, dias:Math.max(1, mdDiasEntre(a.data, b.data)), consumo:Math.round(c * 1000) / 1000, leitura:b});
+  }
+  const r = {ls, out}; MD.cache.set(k, r); return r;
+}
+// consumo de cada dia (rateado entre os dias sem leitura)
+function mdDiario(m){
+  const k = "d|" + m.id; if (MD.cache.has(k)) return MD.cache.get(k);
+  const mp = new Map();
+  mdInt(m).out.forEach(iv => { const per = iv.consumo / iv.dias; for (let j = 1; j <= iv.dias; j++) { const d = mdSomaDia(iv.de, j); mp.set(d, (mp.get(d) || 0) + per); } });
+  MD.cache.set(k, mp); return mp;
+}
+function mdPref(m){
+  const k = "p|" + m.id; if (MD.cache.has(k)) return MD.cache.get(k);
+  const dias = [...mdDiario(m).keys()].sort(), cum = [0]; dias.forEach((d, i) => cum.push(cum[i] + mdDiario(m).get(d)));
+  const r = {dias, cum}; MD.cache.set(k, r); return r;
+}
+const mdBusca = (l, x) => { let a = 0, b = l.length; while (a < b) { const h = (a + b) >> 1; if (l[h] < x) a = h + 1; else b = h; } return a; };
+// soma do consumo dos dias de "de" a "ate" (inclusive) e quantos dias têm consumo calculado
+const mdSomaFaixa = (m, de, ate) => { const P = mdPref(m), i = mdBusca(P.dias, de), j = mdBusca(P.dias, ate + "~"); return {s:j > i ? P.cum[j] - P.cum[i] : 0, n:Math.max(0, j - i)}; };
+// ciclo da concessionária: começa no dia seguinte à última leitura marcada como "da concessionária" (as linhas verdes da planilha)
+const mdCicloIni = (m, antesDe) => { const l = MD.d.leituras.filter(x => x.medidor === m.id && x.ciclo === "Sim" && x.data < antesDe).map(x => x.data).sort(); return l.length ? l[l.length - 1] : ""; };
+const mdAcumCiclo = (m, ate) => { const ini = mdCicloIni(m, ate); return ini ? Object.assign(mdSomaFaixa(m, mdSomaDia(ini, 1), ate), {ini}) : null; };
+const mdTemCiclo = m => MD.d.leituras.some(x => x.medidor === m.id && x.ciclo === "Sim");
+const mdLim = m => m && m.limite !== "" && m.limite !== undefined && Number(m.limite) > 0 ? Number(m.limite) : 0;
+const mdDiasAcima = (m, de, ate) => { const lim = mdLim(m); if (!lim) return 0; let n = 0; for (const [d, v] of mdDiario(m)) if (d >= de && d <= ate && v > lim + 1e-9) n++; return n; };
+const mdMediaDia = (m, ate) => { const f = mdSomaFaixa(m, mdSomaDia(ate, -29), ate); return f.n ? f.s / f.n : 0; };
+function mdPeriodo(k){
+  const h = hoje(), d = new Date(h + "T12:00:00"), rot = (MD_PER.find(p => p[0] === k) || MD_PER[1])[1];
+  if (/^\d+$/.test(k)) return {de:mdSomaDia(h, -(Number(k) - 1)), ate:h, rot};
+  if (k === "mes") return {de:h.slice(0, 8) + "01", ate:h, rot};
+  if (k === "mesant") return {de:iso(new Date(d.getFullYear(), d.getMonth() - 1, 1)), ate:iso(new Date(d.getFullYear(), d.getMonth(), 0)), rot};
+  if (k === "12m") return {de:iso(new Date(d.getFullYear(), d.getMonth() - 11, 1)), ate:h, rot};
+  if (k === "ano") return {de:h.slice(0, 4) + "-01-01", ate:h, rot};
+  return mdPeriodo("30");
+}
+const mdDias = (de, ate) => { const o = []; for (let x = de; x <= ate && o.length < 4000; x = mdSomaDia(x, 1)) o.push(x); return o; };
+const mdMeses = (de, ate) => { const o = []; let [y, m] = de.slice(0, 7).split("-").map(Number); const fim = ate.slice(0, 7); for (let i = 0; i < 240; i++) { const s = y + "-" + String(m).padStart(2, "0"); o.push(s); if (s >= fim) break; if (++m > 12) { m = 1; y++; } } return o; };
+// unidade do relatório de um tipo: a dos medidores; litros viram m³ quando há os dois
+function mdUnidade(meds, tipo){ const us = [...new Set(meds.map(m => m.unidade))]; return us.length === 1 ? us[0] : us.includes("m³") ? "m³" : us[0] || (MD_INFO[tipo] || {}).un || ""; }
+const mdFator = (m, un) => m.unidade === un ? 1 : m.unidade === "Litros" && un === "m³" ? 1 / 1000 : m.unidade === "m³" && un === "Litros" ? 1000 : 1;
+const mdMesSel = (m, ym) => mdSomaFaixa(m, ym + "-01", ym + "-31");
+
+// ---- Sinalizar consumo ----
+function renderMedLanc(){
+  const sec = $("#t-medlanc"); if (!sec || sec.hidden) return;
+  $$("#ml-vistas [data-v]").forEach(b => b.setAttribute("aria-selected", b.dataset.v === MD.vista ? "true" : "false"));
+  ["#ml-novo","#ml-importar","#ml-modelo"].forEach(s => { $(s).hidden = !mdLancar(); });
+  $("#ml-modelo").textContent = MD.vista === "mes" ? "Baixar modelo" : "Baixar planilha de controle";
+  const box = $("#ml-corpo"); if (mdCarregando(box)) { $("#ml-conta").textContent = ""; return; }
+  const meds = mdOrdem(MD.d.medidores);
+  $("#ml-med").innerHTML = `<option value="">Todos</option>` + meds.map(m => `<option value="${esc(m.id)}" ${m.id === MD.fMed ? "selected" : ""}>${esc(m.tipo)} · ${esc(m.nome)}${m.ativo === "Não" ? " (inativo)" : ""}</option>`).join("");
+  $("#ml-per").value = MD.fPer;
+  if (!meds.length) { box.innerHTML = `<div class="empty">Nenhum medidor cadastrado. Cadastre em <b>Meus medidores</b> antes de lançar.</div>`; $("#ml-conta").textContent = ""; return; }
+  const desde = MD.fPer === "todos" ? "" : mdSomaDia(hoje(), -(Number(MD.fPer) - 1));
+  const acoes = (tipo, id) => mdLancar() ? `<td class="md-ac"><button type="button" class="link" data-ml-ed="${tipo}:${esc(id)}">Corrigir</button><button type="button" class="link danger" data-ml-del="${tipo}:${esc(id)}">Excluir</button></td>` : "";
+  const thA = mdLancar() ? `<th aria-label="Ações"></th>` : "";
+  if (MD.vista === "dia") {
+    const info = new Map(); meds.forEach(m => mdInt(m).out.forEach(iv => info.set(iv.leitura.id, iv)));
+    const l = MD.d.leituras.filter(x => (!MD.fMed || x.medidor === MD.fMed) && (!desde || x.data >= desde)).sort((a, b) => b.data.localeCompare(a.data) || String(b.registradoEm || "").localeCompare(String(a.registradoEm || "")));
+    $("#ml-conta").textContent = `${l.length} lançamento${l.length === 1 ? "" : "s"}`;
+    box.innerHTML = `<div class="tablebox"><table><thead><tr><th>Data</th><th>Medidor</th><th class="num">Leitura</th><th>Consumo</th><th class="hide-s">Acumulado</th><th class="hide-m">Observação / lançado por</th>${thA}</tr></thead><tbody>
+      ${l.length ? l.map(x => { const m = mdMed(x.medidor) || {nome:"medidor excluído", tipo:"", unidade:""}, iv = info.get(x.id), lim = mdLim(m);
+        const am = m.id ? mdSomaFaixa(m, x.data.slice(0, 8) + "01", x.data) : {n:0}, ac = m.id && mdTemCiclo(m) ? mdAcumCiclo(m, x.data) : null, acima = iv && lim && iv.consumo / iv.dias > lim;
+        return `<tr class="${x.ciclo === "Sim" ? "md-ciclo" : ""}"><td class="md-nw">${fData(x.data)}${x.ciclo === "Sim" ? `<span class="pill md-pc">leitura da concessionária</span>` : ""}</td><td><span class="md-mn">${mdIco(m.tipo, "mini")}<span>${esc(m.nome)}<span class="sub">${esc(m.tipo)} · nº ${esc(m.numero || "")}</span></span></span></td><td class="num mono">${fNum(x.leitura)}</td>
+          <td>${iv ? `<b>${mdF(iv.consumo, 2)} ${esc(m.unidade)}</b>${iv.dias > 1 ? `<span class="sub">em ${iv.dias} dias · ${mdF(iv.consumo / iv.dias, 2)}/dia</span>` : ""}${x.virada === "Sim" ? ` <span class="pill p-ajuste">relógio virou</span>` : ""}${acima ? `<span class="sub md-exc">acima do limite de ${mdF(lim)} ${esc(m.unidade)}/dia (+${mdF(iv.consumo / iv.dias - lim, 2)})</span>` : ""}` : `<span class="muted">primeira leitura</span>`}</td>
+          <td class="hide-s md-acum">${am.n ? `mês: <b>${mdF(am.s, 2)}</b>` : "—"}${ac && ac.n ? `<span class="sub">ciclo: <b>${mdF(ac.s, 2)}</b> desde ${fData(ac.ini).slice(0, 5)}</span>` : ""}</td>
+          <td class="hide-m">${x.obs ? esc(x.obs) : ""}<span class="sub">${esc(x.registradoPor || "")}${x.atualizadoEm ? ` · corrigida ${fDataHora(x.atualizadoEm)}` : ""}</span></td>${acoes("l", x.id)}</tr>`; }).join("")
+        : `<tr><td colspan="7"><div class="empty">Nenhuma leitura neste período.${mdLancar() ? ` Use <b>+ Novo lançamento</b>.` : ""}</div></td></tr>`}</tbody></table></div>`;
+  } else {
+    const l = MD.d.contas.filter(x => (!MD.fMed || x.medidor === MD.fMed) && (!desde || x.mes >= desde.slice(0, 7))).sort((a, b) => b.mes.localeCompare(a.mes));
+    $("#ml-conta").textContent = `${l.length} lançamento${l.length === 1 ? "" : "s"}`;
+    box.innerHTML = `<div class="tablebox"><table><thead><tr><th>Mês</th><th>Medidor</th><th class="num">Consumo da conta</th><th class="num">Valor</th><th class="num hide-s">Preço por unidade</th><th class="hide-m">Vencimento</th><th class="num hide-m">Pelas leituras</th>${thA}</tr></thead><tbody>
+      ${l.length ? l.map(x => { const m = mdMed(x.medidor) || {nome:"medidor excluído", tipo:"", unidade:""}, pl = m.id ? mdMesSel(m, x.mes) : {n:0};
+        const c = x.consumo === "" ? NaN : Number(x.consumo), v = x.valor === "" ? NaN : Number(x.valor);
+        return `<tr><td>${mdRotMes(x.mes)}</td><td><span class="md-mn">${mdIco(m.tipo, "mini")}<span>${esc(m.nome)}<span class="sub">${esc(m.tipo)} · nº ${esc(m.numero || "")}</span></span></span></td>
+          <td class="num">${isNaN(c) ? "—" : mdF(c, 2) + " " + esc(m.unidade)}</td><td class="num"><b>${isNaN(v) ? "—" : fBRL(v)}</b></td><td class="num hide-s">${!isNaN(c) && !isNaN(v) && c > 0 ? fBRL(v / c) + "/" + esc(m.unidade) : "—"}</td>
+          <td class="hide-m">${x.vencimento ? fData(x.vencimento) : "—"}</td><td class="num hide-m">${pl.n ? mdF(pl.s, 2) + " " + esc(m.unidade) + `<span class="sub">${pl.n} dia${pl.n === 1 ? "" : "s"} com leitura</span>` : "—"}</td>${acoes("c", x.id)}</tr>`; }).join("")
+        : `<tr><td colspan="8"><div class="empty">Nenhuma conta neste período.${mdLancar() ? ` Use <b>+ Novo lançamento</b> para lançar a conta do mês.` : ""}</div></td></tr>`}</tbody></table></div>`;
+  }
+}
+// lançamento diário: a leitura de vários medidores de uma vez (deixa em branco o que não foi lido)
+function mdNovaLeitura(o){
+  if (!MD.d) return;
+  o = o || {};
+  const ed = o.id ? MD.d.leituras.find(x => x.id === o.id) : null;
+  const meds = ed ? [mdMed(ed.medidor)].filter(Boolean) : mdOrdem(MD.d.medidores).filter(m => m.ativo !== "Não" && (!o.medidor || m.id === o.medidor));
+  if (!meds.length) { toast("Cadastre um medidor ativo em Meus medidores.", true); return; }
+  $("#modal-box").classList.add("largo");
+  $("#modal-box").innerHTML = `<div id="mdl-w"><h3>${ed ? "Corrigir leitura" : "Novo lançamento diário"}</h3>
+    <p class="muted">${ed ? "" : "Digite o número que aparece no relógio de cada medidor. Deixe em branco os que não foram lidos. "}O consumo é a diferença para a leitura anterior.</p>
+    <div class="field md-data"><label for="mdl-data">Data da leitura <span class="req">*</span></label><input class="input" type="date" id="mdl-data" max="${hoje()}" value="${ed ? esc(ed.data) : hoje()}"></div>
+    <div class="md-ls">${meds.map((m, i) => `<div class="md-l">
+      <div class="md-l-n">${mdIco(m.tipo, "mini")}<span><b>${esc(m.nome)}</b><span class="sub">${esc(m.tipo)} · nº ${esc(m.numero)}</span><span class="sub" data-ant="${i}"></span></span></div>
+      <label class="field"><span>Leitura (${esc(m.unidade)})</span><input class="input num" inputmode="decimal" data-lt="${i}" value="${ed ? esc(String(ed.leitura).replace(".", ",")) : ""}" autocomplete="off" aria-label="Leitura de ${esc(m.nome)}"></label>
+      <label class="field"><span>Observação</span><input class="input" data-ob="${i}" maxlength="200" value="${ed ? esc(ed.obs || "") : ""}" aria-label="Observação de ${esc(m.nome)}"></label>
+      <div class="md-prev" data-prev="${i}" aria-live="polite"></div>
+      <label class="md-vir" data-virbox="${i}" hidden><input type="checkbox" data-vir="${i}" ${ed && ed.virada === "Sim" ? "checked" : ""}> O relógio virou (passou de ${mdNoves(m)} e recomeçou do zero)</label>
+      <label class="md-vir md-cic"><input type="checkbox" data-cic="${i}" ${ed && ed.ciclo === "Sim" ? "checked" : ""}> A concessionária leu o medidor neste dia (fecha o ciclo; o acumulado recomeça no dia seguinte)</label></div>`).join("")}</div>
+    <div class="actions" style="margin-top:12px"><button class="btn primary" type="button" id="mdl-ok">${ed ? "Salvar correção" : "Lançar"}</button><button class="btn" type="button" id="mdl-x">Cancelar</button><span class="hint" id="mdl-msg"></span></div></div>`;
+  $("#modal").hidden = false;
+  const ant = (m, data) => MD.d.leituras.filter(x => x.medidor === m.id && x.data < data && (!ed || x.id !== ed.id)).sort((a, b) => a.data < b.data ? -1 : 1).pop();
+  const atualizar = () => {
+    const data = $("#mdl-data").value || hoje();
+    meds.forEach((m, i) => {
+      const a = ant(m, data), v = mdNum($(`#modal-box [data-lt="${i}"]`).value), vb = $(`#modal-box [data-virbox="${i}"]`), pv = $(`#modal-box [data-prev="${i}"]`);
+      $(`#modal-box [data-ant="${i}"]`).textContent = a ? `Anterior: ${fNum(a.leitura)} em ${fData(a.data)}` : "Primeira leitura deste medidor";
+      const igual = MD.d.leituras.find(x => x.medidor === m.id && x.data === data && (!ed || x.id !== ed.id));
+      let txt = "", cls = "";
+      vb.hidden = true;
+      if (!isNaN(v) && igual) { txt = `Já há leitura em ${fData(data)} (${fNum(igual.leitura)}). Corrija a que já existe.`; cls = "err"; }
+      else if (!isNaN(v) && v >= Math.pow(10, Number(m.casas) || 0)) { txt = `O relógio tem ${m.casas} casas: confira o número.`; cls = "err"; }
+      else if (!isNaN(v) && a) {
+        let c = v - a.leitura;
+        if (c < 0) { vb.hidden = false; if ($(`#modal-box [data-vir="${i}"]`).checked) c += Math.pow(10, Number(m.casas) || 0); }
+        const dias = Math.max(1, mdDiasEntre(a.data, data));
+        if (c < 0) { txt = "Menor que a leitura anterior. Confira o número ou marque se o relógio virou."; cls = "err"; }
+        else {
+          txt = `Consumo: <b>${mdF(c, 2)} ${esc(m.unidade)}</b>${dias > 1 ? ` em ${dias} dias (${mdF(c / dias, 2)}/dia)` : ""}`;
+          const med = mdMediaDia(m, a.data), lim = mdLim(m);
+          if (lim && c / dias > lim) { txt += ` · <span class="md-alto">acima do limite de ${mdF(lim)} ${esc(m.unidade)}/dia (+${mdF(c / dias - lim, 2)})</span>`; cls = "alto"; }
+          else if (med > 0 && c / dias > med * 2.5) { txt += ` · <span class="md-alto">bem acima da média (${mdF(med, 2)}/dia)</span>`; cls = "alto"; }
+          if (mdTemCiclo(m)) { const ac = mdAcumCiclo(m, data); if (ac) txt += ` · ciclo: ${mdF(ac.s + c, 2)} ${esc(m.unidade)} desde ${fData(ac.ini).slice(0, 5)}`; }
+        }
+      }
+      pv.className = "md-prev " + cls; pv.innerHTML = txt;
+    });
+  };
+  atualizar();
+  $("#mdl-w").oninput = atualizar; $("#mdl-w").onchange = atualizar;
+  $("#mdl-x").onclick = fecharModal;
+  const primeiro = $('#modal-box [data-lt="0"]'); if (primeiro) primeiro.focus();
+  $("#mdl-ok").onclick = () => {
+    const data = $("#mdl-data").value, msg = $("#mdl-msg");
+    if (!data) { msg.className = "hint err"; msg.textContent = "Informe a data da leitura."; return; }
+    const leituras = [];
+    for (let i = 0; i < meds.length; i++) {
+      const t = $(`#modal-box [data-lt="${i}"]`).value.trim(); if (!t) continue;
+      const v = mdNum(t); if (isNaN(v) || v < 0) { msg.className = "hint err"; msg.textContent = `Leitura inválida para ${meds[i].nome}.`; return; }
+      leituras.push(Object.assign(ed ? {id:ed.id} : {}, {medidor:meds[i].id, data, leitura:v, virada:!$(`#modal-box [data-virbox="${i}"]`).hidden && $(`#modal-box [data-vir="${i}"]`).checked, ciclo:$(`#modal-box [data-cic="${i}"]`).checked, obs:$(`#modal-box [data-ob="${i}"]`).value}));
+    }
+    if (!leituras.length) { msg.className = "hint err"; msg.textContent = "Digite ao menos uma leitura."; return; }
+    enviar($("#mdl-ok"), msg, "medLeituras", {leituras}, r => { mdAplicar(r); fecharModal(); renderMedTudo(); });
+  };
+}
+const mdMesDe = s => { const t = String(s || "").trim(); let m = /^(\d{4})-(\d{1,2})/.exec(t); if (m) return m[1] + "-" + m[2].padStart(2, "0"); m = /^(\d{1,2})\/(\d{4})$/.exec(t); if (m) return m[2] + "-" + m[1].padStart(2, "0"); return ""; };
+function mdMesAnterior(){ const d = new Date(hoje() + "T12:00:00"); return iso(new Date(d.getFullYear(), d.getMonth() - 1, 1)).slice(0, 7); }
+// lançamento mensal: a conta da concessionária (consumo e valor) de um medidor
+function mdNovaConta(o){
+  if (!MD.d) return;
+  o = o || {};
+  const ed = o.id ? MD.d.contas.find(x => x.id === o.id) : null;
+  const meds = mdOrdem(MD.d.medidores).filter(m => m.ativo !== "Não" || (ed && m.id === ed.medidor));
+  if (!meds.length) { toast("Cadastre um medidor ativo em Meus medidores.", true); return; }
+  const sel = ed ? ed.medidor : o.medidor || (MD.fMed && meds.some(m => m.id === MD.fMed) ? MD.fMed : meds[0].id);
+  const n = v => v === "" || v === undefined || v === null ? "" : esc(String(v).replace(".", ","));
+  $("#modal-box").innerHTML = `<h3>${ed ? "Corrigir conta" : "Novo lançamento mensal"}</h3>
+    <p class="muted">Dados da conta da concessionária: consumo faturado e valor do mês.</p>
+    <form class="form" id="mdc-f" novalidate autocomplete="off">
+      <div class="field full"><label for="mdc-med">Medidor <span class="req">*</span></label><select class="input" id="mdc-med">${meds.map(m => `<option value="${esc(m.id)}" ${m.id === sel ? "selected" : ""}>${esc(m.tipo)} · ${esc(m.nome)} (nº ${esc(m.numero)})</option>`).join("")}</select></div>
+      <div class="field"><label for="mdc-mes">Mês de referência <span class="req">*</span></label><input class="input" type="month" id="mdc-mes" max="${hoje().slice(0, 7)}" value="${ed ? esc(ed.mes) : mdMesAnterior()}" placeholder="aaaa-mm"></div>
+      <div class="field"><label for="mdc-venc">Vencimento</label><input class="input" type="date" id="mdc-venc" value="${ed ? esc(ed.vencimento || "") : ""}"></div>
+      <div class="field"><label for="mdc-cons">Consumo da conta (<span id="mdc-un"></span>)</label><input class="input num" id="mdc-cons" inputmode="decimal" value="${ed ? n(ed.consumo) : ""}"></div>
+      <div class="field"><label for="mdc-val">Valor da conta (R$)</label><input class="input num" id="mdc-val" inputmode="decimal" value="${ed ? n(ed.valor) : ""}" placeholder="0,00"></div>
+      <div class="field full"><label for="mdc-obs">Observação</label><input class="input" id="mdc-obs" maxlength="200" value="${ed ? esc(ed.obs || "") : ""}"></div>
+      <p class="hint full" id="mdc-prev"></p>
+    </form>
+    <div class="actions"><button class="btn primary" type="button" id="mdc-ok">${ed ? "Salvar correção" : "Lançar conta"}</button><button class="btn" type="button" id="mdc-x">Cancelar</button><span class="hint" id="mdc-msg"></span></div>`;
+  $("#modal").hidden = false;
+  const atualizar = () => {
+    const m = mdMed($("#mdc-med").value), mes = mdMesDe($("#mdc-mes").value), c = mdNum($("#mdc-cons").value), v = mdNum($("#mdc-val").value);
+    $("#mdc-un").textContent = m ? m.unidade : "";
+    const p = [];
+    if (!isNaN(c) && !isNaN(v) && c > 0) p.push(`Preço: <b>${fBRL(v / c)}</b> por ${esc(m.unidade)}`);
+    if (m && mes) { const pl = mdMesSel(m, mes); p.push(pl.n ? `Pelas leituras: ${mdF(pl.s, 2)} ${esc(m.unidade)} em ${pl.n} dia${pl.n === 1 ? "" : "s"} de ${mdRotMes(mes)}` : `Sem leituras em ${mdRotMes(mes)}`); }
+    $("#mdc-prev").innerHTML = p.join(" · ");
+  };
+  atualizar();
+  $("#mdc-f").oninput = atualizar; $("#mdc-f").onchange = atualizar;
+  $("#mdc-x").onclick = fecharModal; $("#mdc-mes").focus();
+  $("#mdc-ok").onclick = () => {
+    const msg = $("#mdc-msg"), mes = mdMesDe($("#mdc-mes").value), ct = $("#mdc-cons").value.trim(), vt = $("#mdc-val").value.trim();
+    const erro = t => { msg.className = "hint err"; msg.textContent = t; };
+    if (!mes) return erro("Informe o mês de referência.");
+    if (!ct && !vt) return erro("Informe o consumo ou o valor da conta.");
+    const c = ct ? mdNum(ct) : "", v = vt ? mdNum(vt) : "";
+    if (ct && (isNaN(c) || c < 0)) return erro("Consumo inválido.");
+    if (vt && (isNaN(v) || v < 0)) return erro("Valor inválido.");
+    enviar($("#mdc-ok"), msg, "medContas", {conta:Object.assign(ed ? {id:ed.id} : {}, {medidor:$("#mdc-med").value, mes, consumo:c, valor:v, vencimento:$("#mdc-venc").value, obs:$("#mdc-obs").value})}, r => { mdAplicar(r); fecharModal(); renderMedTudo(); });
+  };
+}
+function mdExcluir(btn){
+  const [tipo, id] = btn.dataset.mlDel.split(":");
+  if (!btn.dataset.conf) { btn.dataset.conf = "1"; btn.textContent = "excluir?"; setTimeout(() => { if (btn.isConnected) { delete btn.dataset.conf; btn.textContent = "Excluir"; } }, 4000); return; }
+  enviar(btn, null, tipo === "l" ? "medLeituras" : "medContas", {op:"excluir", id}, r => { mdAplicar(r); renderMedTudo(); });
+}
+
+// ---- Meus medidores ----
+function renderMedidores(){
+  const sec = $("#t-medidores"); if (!sec || sec.hidden) return;
+  $("#md-novo").hidden = !mdLancar();
+  const box = $("#md-corpo"); if (mdCarregando(box)) return;
+  const meds = mdOrdem(MD.d.medidores).sort((a, b) => (a.ativo === "Não") - (b.ativo === "Não"));
+  $("#md-conta").textContent = meds.length ? `${meds.filter(m => m.ativo !== "Não").length} ativo${meds.filter(m => m.ativo !== "Não").length === 1 ? "" : "s"}${meds.some(m => m.ativo === "Não") ? ` · ${meds.filter(m => m.ativo === "Não").length} inativo(s)` : ""}` : "";
+  if (!meds.length) { box.innerHTML = `<div class="empty">Nenhum medidor cadastrado ainda.${mdLancar() ? ` Clique em <b>+ Novo medidor</b> para cadastrar o primeiro (água, energia ou gás).` : ""}</div>`; return; }
+  const h = hoje();
+  box.innerHTML = `<div class="md-grid">${meds.map(m => {
+    const it = mdInt(m), ult = it.ls[it.ls.length - 1], dias = ult ? mdDiasEntre(ult.data, h) : null, f30 = mdSomaFaixa(m, mdSomaDia(h, -29), h);
+    const usa = it.ls.length || MD.d.contas.some(c => c.medidor === m.id), inat = m.ativo === "Não";
+    return `<article class="panel md-card ${inat ? "inativo" : ""}"><div class="md-card-h">${mdIco(m.tipo)}<div><h3>${esc(m.nome)}</h3><span class="muted">${esc(m.tipo)}${m.local ? " · " + esc(m.local) : ""}</span></div>${inat ? `<span class="pill p-ajuste">Inativo</span>` : ""}</div>
+      <dl class="md-dl"><div><dt>Número</dt><dd class="mono">${esc(m.numero)}</dd></div><div><dt>Casas</dt><dd>${esc(m.casas)}</dd></div><div><dt>Unidade</dt><dd>${esc(m.unidade)}</dd></div>
+        <div><dt>Última leitura</dt><dd>${ult ? `<b class="mono">${fNum(ult.leitura)}</b> em ${fData(ult.data)}${!inat && dias > 7 ? ` <span class="pill s-baixo">há ${dias} dias</span>` : ""}` : "nenhuma"}</dd></div>
+        <div><dt>Consumo em 30 dias</dt><dd>${f30.n ? `<b>${mdF(f30.s, 2)} ${esc(m.unidade)}</b><span class="sub">${mdF(f30.s / f30.n, 2)}/dia</span>` : "—"}</dd></div>
+        ${mdLim(m) ? `<div><dt>Limite diário</dt><dd>${mdF(mdLim(m))} ${esc(m.unidade)}/dia${(() => { const n = mdDiasAcima(m, mdSomaDia(h, -29), h); return n ? ` <span class="pill s-baixo">${n} dia${n === 1 ? "" : "s"} acima em 30 dias</span>` : ""; })()}</dd></div>` : ""}
+        ${mdTemCiclo(m) || m.proxCiclo ? `<div><dt>Ciclo da concessionária</dt><dd>${(() => { const ac = mdAcumCiclo(m, mdSomaDia(h, 1)); return ac ? `<b>${mdF(ac.s, 2)} ${esc(m.unidade)}</b> desde ${fData(ac.ini)}` : "sem leitura da concessionária marcada"; })()}${m.proxCiclo && m.proxCiclo >= h ? `<span class="sub">próxima leitura prevista: ${fData(m.proxCiclo)} (${mdDiasEntre(h, m.proxCiclo) === 0 ? "hoje" : "em " + mdDiasEntre(h, m.proxCiclo) + " dia" + (mdDiasEntre(h, m.proxCiclo) === 1 ? "" : "s")})</span>` : ""}</dd></div>` : ""}</dl>
+      ${m.obs ? `<p class="muted md-obs-t">${esc(m.obs)}</p>` : ""}
+      <div class="md-card-a">${mdLancar() && !inat ? `<button type="button" class="btn small primary" data-md-ler="${esc(m.id)}">Lançar leitura</button>` : ""}<button type="button" class="btn small" data-md-rel="${esc(m.id)}">Ver no relatório</button>${mdLancar() ? `<button type="button" class="btn small" data-md-ed="${esc(m.id)}">Editar</button>` : ""}${mdLancar() && !usa ? `<button type="button" class="link danger" data-md-del="${esc(m.id)}">Excluir</button>` : ""}</div></article>`; }).join("")}</div>`;
+}
+function mdEditarMedidor(id){
+  const m = id ? mdMed(id) : null;
+  const v = m || {tipo:"", nome:"", numero:"", casas:5, unidade:"", limite:"", proxCiclo:"", local:"", obs:"", ativo:"Sim"};
+  $("#modal-box").innerHTML = `<h3>${m ? "Editar medidor" : "Novo medidor"}</h3>
+    <form class="form" id="mdm-f" novalidate autocomplete="off">
+      <div class="field full"><label for="mdm-tipo">Tipo de concessionária <span class="req">*</span></label><select class="input" id="mdm-tipo"><option value="">Selecione…</option>${MD_TIPOS.map(t => `<option ${t === v.tipo ? "selected" : ""}>${t}</option>`).join("")}</select></div>
+      <div class="field full"><label for="mdm-nome">Nome / identificação <span class="req">*</span></label><input class="input" id="mdm-nome" maxlength="60" value="${esc(v.nome)}" placeholder="Ex.: Guarita norte"><span class="hint">Como a equipe reconhece o medidor.</span></div>
+      <div class="field full"><label for="mdm-num">Número do medidor <span class="req">*</span></label><input class="input mono" id="mdm-num" maxlength="40" value="${esc(v.numero)}" placeholder="Ex.: 123456789"><span class="hint">Número de série / registro do medidor (está na conta e no próprio relógio).</span></div>
+      <div class="field"><label for="mdm-casas">Número de casas do medidor <span class="req">*</span></label><input class="input num" id="mdm-casas" type="number" min="3" max="12" step="1" value="${esc(v.casas)}"><span class="hint" id="mdm-casas-h"></span></div>
+      <div class="field"><label for="mdm-un">Unidade de medida <span class="req">*</span></label><select class="input" id="mdm-un"><option value="">Selecione…</option>${[["m³","m³ (metro cúbico)"],["kWh","kWh (quilowatt-hora)"],["Litros","Litros"]].map(([k, r]) => `<option value="${k}" ${k === v.unidade ? "selected" : ""}>${r}</option>`).join("")}</select></div>
+      <div class="field"><label for="mdm-lim">Limite diário (opcional)</label><input class="input num" id="mdm-lim" inputmode="decimal" value="${v.limite !== "" && v.limite !== undefined ? esc(String(v.limite).replace(".", ",")) : ""}" placeholder="Ex.: 70"><span class="hint">Consumo máximo esperado por dia. Os dias acima ficam destacados.</span></div>
+      <div class="field"><label for="mdm-prox">Próxima leitura da concessionária</label><input class="input" type="date" id="mdm-prox" value="${esc(v.proxCiclo || "")}"><span class="hint">Data prevista da leitura da concessionária (ex.: Iguá), se souber.</span></div>
+      <div class="field full"><label for="mdm-local">Local</label><input class="input" id="mdm-local" maxlength="80" value="${esc(v.local || "")}" placeholder="Ex.: caixa ao lado da portaria"></div>
+      <div class="field full"><label for="mdm-obs">Observação</label><input class="input" id="mdm-obs" maxlength="300" value="${esc(v.obs || "")}"></div>
+      ${m ? `<label class="field full md-chk"><input type="checkbox" id="mdm-ativo" ${v.ativo !== "Não" ? "checked" : ""}> Medidor ativo (desmarque se foi trocado ou desligado; o histórico continua nos relatórios)</label>` : ""}
+    </form>
+    <div class="actions"><button class="btn primary" type="button" id="mdm-ok">Salvar medidor</button><button class="btn" type="button" id="mdm-x">Cancelar</button><span class="hint" id="mdm-msg"></span></div>`;
+  $("#modal").hidden = false;
+  let unMexida = !!m;
+  const casasH = () => { const c = Number($("#mdm-casas").value); $("#mdm-casas-h").textContent = c >= 3 && c <= 12 ? `Quantos números inteiros o relógio mostra (até ${"9".repeat(c)}). Serve para entender quando ele passa do máximo e recomeça do zero.` : "Entre 3 e 12."; };
+  casasH(); $("#mdm-casas").oninput = casasH;
+  $("#mdm-un").onchange = () => { unMexida = true; };
+  $("#mdm-tipo").onchange = () => { const t = $("#mdm-tipo").value; if (!unMexida && MD_INFO[t]) $("#mdm-un").value = MD_INFO[t].un; };
+  $("#mdm-x").onclick = fecharModal; $("#mdm-tipo").focus();
+  $("#mdm-ok").onclick = () => {
+    const msg = $("#mdm-msg"), erro = t => { msg.className = "hint err"; msg.textContent = t; };
+    const lt = $("#mdm-lim").value.trim(), lim = lt ? mdNum(lt) : "";
+    if (lt && !(lim > 0)) return erro("O limite diário deve ser um número maior que zero (ou deixe em branco).");
+    const o = {tipo:$("#mdm-tipo").value, nome:$("#mdm-nome").value.trim(), numero:$("#mdm-num").value.trim(), casas:Number($("#mdm-casas").value), unidade:$("#mdm-un").value, limite:lim, proxCiclo:$("#mdm-prox").value, local:$("#mdm-local").value, obs:$("#mdm-obs").value, ativo:m ? $("#mdm-ativo").checked : true};
+    if (!o.tipo) return erro("Escolha o tipo de concessionária.");
+    if (!o.nome) return erro("Dê um nome ao medidor.");
+    if (!o.numero) return erro("Informe o número do medidor.");
+    if (!(Number.isInteger(o.casas) && o.casas >= 3 && o.casas <= 12)) return erro("O número de casas deve ficar entre 3 e 12.");
+    if (!o.unidade) return erro("Escolha a unidade de medida.");
+    if (m) o.id = m.id;
+    enviar($("#mdm-ok"), msg, "medMedidor", {medidor:o}, r => { mdAplicar(r); fecharModal(); renderMedTudo(); });
+  };
+}
+
+// ---- Relatórios ----
+function mdRelDados(tipo, P, modo){
+  const todos = mdOrdem(MD.d.medidores.filter(m => m.tipo === tipo));
+  const selIds = (MD.rSel[tipo] || []).filter(id => todos.some(m => m.id === id));
+  const meds = selIds.length ? todos.filter(m => selIds.includes(m.id)) : todos;
+  const un = mdUnidade(meds, tipo), cor = m => MD_CORES[todos.indexOf(m) % MD_CORES.length];
+  const dias = mdDias(P.de, P.ate), cats = modo === "mes" ? mdMeses(P.de, P.ate) : dias;
+  const series = meds.map(m => {
+    const mp = mdDiario(m), f = mdFator(m, un);
+    const v = modo === "mes" ? cats.map(ym => { let s = 0, n = 0; for (const [d, x] of mp) if (d.slice(0, 7) === ym && d >= P.de && d <= P.ate) { s += x; n++; } return n ? s * f : null; })
+      : cats.map(d => mp.has(d) ? mp.get(d) * f : null);
+    return {m, cor:cor(m), v, nome:m.nome};
+  });
+  let total = 0; const comDado = new Set();
+  meds.forEach(m => { const f = mdFator(m, un); for (const [d, x] of mdDiario(m)) if (d >= P.de && d <= P.ate) { total += x * f; comDado.add(d); } });
+  const h = hoje(), janela = (de, ate) => { let s = 0; const ds = new Set(); meds.forEach(m => { const f = mdFator(m, un); for (const [d, x] of mdDiario(m)) if (d >= de && d <= ate) { s += x * f; ds.add(d); } }); return ds.size ? s / ds.size : null; };
+  const ult14 = janela(mdSomaDia(h, -13), h), ant14 = janela(mdSomaDia(h, -27), mdSomaDia(h, -14));
+  const ids = new Set(meds.map(m => m.id)), cs = MD.d.contas.filter(c => ids.has(c.medidor));
+  const doPer = cs.filter(c => c.mes >= P.de.slice(0, 7) && c.mes <= P.ate.slice(0, 7));
+  const soma = (l, k) => l.reduce((s, c) => s + (c[k] === "" || c[k] === undefined ? 0 : Number(c[k]) * (k === "consumo" ? mdFator(mdMed(c.medidor) || {}, un) : 1)), 0);
+  const temV = l => l.some(c => c.valor !== "" && c.valor !== undefined);
+  const ultMes = cs.length ? cs.map(c => c.mes).sort().pop() : "", ultL = cs.filter(c => c.mes === ultMes);
+  const contasMes = ym => { const l = cs.filter(c => c.mes === ym); return l.length ? {consumo:l.some(c => c.consumo !== "") ? soma(l, "consumo") : null, valor:temV(l) ? soma(l, "valor") : null} : null; };
+  const comCiclo = meds.filter(mdTemCiclo), ciclos = comCiclo.map(m => mdAcumCiclo(m, mdSomaDia(h, 1))).filter(Boolean);
+  const ciclo = ciclos.length ? {s:ciclos.reduce((a, c, i) => a + c.s * mdFator(comCiclo[i], un), 0), ini:[...new Set(ciclos.map(c => c.ini))]} : null;
+  const comLim = meds.filter(mdLim), limites = [...new Set(comLim.map(m => mdLim(m) * mdFator(m, un)))];
+  const acima = comLim.length ? comLim.reduce((a, m) => a + mdDiasAcima(m, P.de, P.ate), 0) : null;
+  const proxs = meds.map(m => m.proxCiclo).filter(d => d && d >= h).sort();
+  return {tipo, todos, meds, selIds, un, cats, series, total, diasCom:comDado.size, ult14, ant14, ciclo, acima, limite:limites.length === 1 && comLim.length === meds.length ? limites[0] : 0, limTxt:comLim.map(m => `${m.nome}: ${mdF(mdLim(m))} ${m.unidade}/dia`).join(" · "), prox:proxs[0] || "", valorPer:temV(doPer) ? soma(doPer, "valor") : null, nContasPer:doPer.length,
+    ultConta:ultMes ? {mes:ultMes, valor:temV(ultL) ? soma(ultL, "valor") : null, consumo:ultL.some(c => c.consumo !== "") ? soma(ultL, "consumo") : null} : null, contasMes, modo};
+}
+const mdPasso = max => { if (!(max > 0)) return 1; const raw = max / 5, p = Math.pow(10, Math.floor(Math.log10(raw))), n = raw / p; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p; };
+// gráfico em SVG (linhas por dia; barras por mês). Cores inline para servir também no PDF.
+function mdGrafSvg(R, W){
+  const H = W < 560 ? 230 : 300, pl = 62, pr = 14, pt = 14, pb = 40, iw = W - pl - pr, ih = H - pt - pb;
+  const vals = R.series.flatMap(s => s.v).filter(v => v !== null), max = Math.max(0, ...vals, R.modo !== "mes" && R.limite ? R.limite * 1.05 : 0);
+  const passo = mdPasso(max), top = Math.max(passo, Math.ceil(max / passo) * passo), dec = passo < 1 ? 2 : passo < 10 && passo % 1 ? 1 : 0;
+  const n = R.cats.length, x = i => pl + iw * (i + .5) / n, y = v => pt + ih - ih * v / top;
+  const rot = c => R.modo === "mes" ? mdRotMes(c) : fData(c).slice(0, 5);
+  let g = "";
+  for (let v = 0; v <= top + 1e-9; v += passo) g += `<line x1="${pl}" x2="${W - pr}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="#d6dee8" stroke-width="1"/><text x="${pl - 6}" y="${(y(v) + 4).toFixed(1)}" text-anchor="end" font-size="11" fill="#5b6b7d">${mdF(v, dec)}</text>`;
+  const cabe = Math.max(1, Math.floor(iw / (R.modo === "mes" ? 52 : 46))), pulo = Math.ceil(n / cabe);
+  R.cats.forEach((c, i) => { if ((n - 1 - i) % pulo === 0) g += `<text x="${x(i).toFixed(1)}" y="${H - pb + 16}" text-anchor="middle" font-size="11" fill="#5b6b7d">${rot(c)}</text>`; });
+  g += `<text transform="translate(14 ${pt + ih / 2}) rotate(-90)" text-anchor="middle" font-size="11" fill="#5b6b7d">Consumo (${esc(R.un)})</text>`;
+  if (R.limite && R.modo !== "mes" && R.limite <= top) g += `<line x1="${pl}" x2="${W - pr}" y1="${y(R.limite).toFixed(1)}" y2="${y(R.limite).toFixed(1)}" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="6 4"/><text x="${W - pr}" y="${(y(R.limite) - 5).toFixed(1)}" text-anchor="end" font-size="11" fill="#dc2626">limite ${mdF(R.limite)} ${esc(R.un)}/dia</text>`;
+  if (R.modo === "mes") {
+    const gw = iw / n * .72, bw = gw / Math.max(1, R.series.length);
+    R.series.forEach((s, k) => s.v.forEach((v, i) => { if (v === null) return; const x0 = x(i) - gw / 2 + k * bw, h = Math.max(0, ih * v / top);
+      g += `<rect x="${x0.toFixed(1)}" y="${(pt + ih - h).toFixed(1)}" width="${Math.max(1, bw - 2).toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${s.cor}"><title>${mdRotMes(R.cats[i])} · ${esc(s.nome)}: ${mdF(v, 2)} ${esc(R.un)}</title></rect>`; }));
+  } else {
+    const pontos = n <= 62;
+    R.series.forEach(s => {
+      let d = "", aberto = false;
+      s.v.forEach((v, i) => { if (v === null) { aberto = false; return; } d += (aberto ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1); aberto = true; });
+      g += `<path d="${d}" fill="none" stroke="${s.cor}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>`;
+      g += s.v.map((v, i) => v === null ? "" : `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="${pontos ? 3.2 : 6}" fill="${pontos ? s.cor : "transparent"}" stroke="${pontos ? "#fff" : "none"}" stroke-width="1.2"><title>${fData(R.cats[i])} · ${esc(s.nome)}: ${mdF(v, 2)} ${esc(R.un)}</title></circle>`).join("");
+    });
+  }
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Consumo ${R.modo === "mes" ? "mensal" : "diário"} de ${esc(R.tipo)}">${g}</svg>`;
+}
+function mdCards(R){
+  const comp = R.ult14 !== null && R.ant14 ? (R.ult14 - R.ant14) / R.ant14 : null;
+  const card = (rot, v, sub, cor, ico, subCls) => `<div class="pp-card md-kpi"><span class="pp-txt"><span class="pp-rot">${rot}</span><b class="pp-v num">${v}</b><span class="pp-sub ${subCls || ""}">${sub}</span></span><span class="pp-ico ${cor}"><svg viewBox="0 0 24 24" aria-hidden="true">${ico}</svg></span></div>`;
+  return card("Consumo no período", R.diasCom ? `${mdF(R.total, 2)} ${esc(R.un)}` : "—", R.valorPer !== null ? `${fBRL(R.valorPer)} em ${R.nContasPer} conta${R.nContasPer === 1 ? "" : "s"}` : "Sem valor informado", (MD_INFO[R.tipo] || {}).cor || "azul", (MD_INFO[R.tipo] || MD_INFO["Água"]).ico)
+    + card("Média diária", R.diasCom ? `${mdF(R.total / R.diasCom, 2)} ${esc(R.un)}/dia` : "—", comp === null ? "Sem dados das 2 semanas anteriores para comparar" : `${comp > 0 ? "+" : ""}${mdF(comp * 100, 1)}% nas últimas 2 semanas, comparado às 2 anteriores`, "verde", '<path d="M4 18 9 12l4 3 7-8M15 7h5v5"/>', comp === null ? "" : comp > .1 ? "md-sobe" : comp < -.1 ? "ok" : "")
+    + (R.ciclo ? card("Ciclo da concessionária", `${mdF(R.ciclo.s, 2)} ${esc(R.un)}`, `${R.ciclo.ini.length === 1 ? `desde ${fData(R.ciclo.ini[0])}` : "desde a última leitura de cada medidor"}${R.prox ? ` · próxima leitura: ${fData(R.prox)}` : ""}`, "teal", '<path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v4h-4"/>') : "")
+    + (R.acima !== null ? card("Dias acima do limite", String(R.acima), `no período · ${esc(R.limTxt)}`, R.acima ? "vermelho" : "verde", '<path d="M12 4 2.5 20h19zM12 10v4.5M12 17.5h.01"/>', R.acima ? "md-sobe" : "ok") : "")
+    + card("Última conta", R.ultConta && R.ultConta.valor !== null ? fBRL(R.ultConta.valor) : "—", R.ultConta ? `${mdRotMes(R.ultConta.mes)}${R.ultConta.consumo !== null ? ` · ${mdF(R.ultConta.consumo, 2)} ${esc(R.un)}` : ""}${R.ultConta.consumo && R.ultConta.valor !== null ? ` · ${fBRL(R.ultConta.valor / R.ultConta.consumo)}/${esc(R.un)}` : ""}` : "Nenhuma conta lançada", "roxo", '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3"/>');
+}
+// linhas da tabela (as mesmas no site, na planilha e no PDF)
+function mdTabela(R){
+  const cab = [R.modo === "mes" ? "Mês" : "Data"].concat(R.series.map(s => `${s.nome} (${R.un})`), R.series.length > 1 ? [`Total (${R.un})`] : [], R.modo === "mes" ? [`Conta: consumo (${R.un})`, "Conta: valor (R$)", `R$ por ${R.un}`] : []);
+  const linhas = R.cats.map((c, i) => {
+    const vs = R.series.map(s => s.v[i]), t = vs.some(v => v !== null) ? vs.reduce((a, v) => a + (v || 0), 0) : null;
+    const l = [c].concat(vs, R.series.length > 1 ? [t] : []);
+    if (R.modo === "mes") { const k = R.contasMes(c); l.push(k ? k.consumo : null, k ? k.valor : null, k && k.consumo && k.valor !== null ? k.valor / k.consumo : null); }
+    return l;
+  }).filter(l => l.slice(1).some(v => v !== null)).reverse();
+  return {cab, linhas};
+}
+function renderMedRel(){
+  const sec = $("#t-medrel"); if (!sec || sec.hidden) return;
+  $("#mr-per").value = MD.rPer; $("#mr-tipo").value = MD.rTipo;
+  const box = $("#mr-corpo"); if (mdCarregando(box)) return;
+  const P = mdPeriodo(MD.rPer), tipos = MD_TIPOS.filter(t => MD.d.medidores.some(m => m.tipo === t));
+  $("#mr-de").textContent = `${fData(P.de)} a ${fData(P.ate)}`;
+  if (!tipos.length) { box.innerHTML = `<div class="empty">Nenhum medidor cadastrado ainda. Cadastre em <b>Meus medidores</b> e lance as leituras para ver os relatórios.</div>`; return; }
+  const Rs = tipos.map(t => mdRelDados(t, P, MD.rTipo));
+  box.innerHTML = Rs.map((R, k) => { const vis = MD.rVis[R.tipo] || "graf", info = MD_INFO[R.tipo], T = mdTabela(R);
+    const fmtC = (v, j) => v === null ? "—" : j === 0 ? (R.modo === "mes" ? mdRotMes(v) : fData(v)) : /R\$/.test(T.cab[j]) ? fBRL(v) : mdF(v, 2);
+    return `<section class="panel md-sec" data-tipo="${esc(R.tipo)}">
+      <div class="md-sec-h"><h3 class="md-tit ${info.cor}"><svg viewBox="0 0 24 24" aria-hidden="true">${info.ico}</svg>${esc(R.tipo)}</h3>
+        <div class="ind-vistas md-vis" role="tablist" aria-label="Mostrar ${esc(R.tipo)}"><button type="button" role="tab" data-mr-vis="graf" data-tipo="${esc(R.tipo)}" aria-selected="${vis === "graf"}">Gráficos</button><button type="button" role="tab" data-mr-vis="tab" data-tipo="${esc(R.tipo)}" aria-selected="${vis === "tab"}">Tabela</button></div></div>
+      <div class="pp-cards md-cards">${mdCards(R)}</div>
+      <div class="md-filtro"><span class="md-filtro-r">Medidores:</span><div class="md-chips"><button type="button" class="md-chip ${R.selIds.length ? "" : "on"}" data-mr-todos="${esc(R.tipo)}" aria-pressed="${!R.selIds.length}">Todos os medidores</button>${R.todos.map((m, i) => `<button type="button" class="md-chip ${R.selIds.includes(m.id) ? "on" : ""}" data-mr-m="${esc(m.id)}" data-tipo="${esc(R.tipo)}" aria-pressed="${R.selIds.includes(m.id)}"><i style="background:${MD_CORES[i % MD_CORES.length]}"></i>${esc(m.nome)} (${esc(m.numero)})${m.ativo === "Não" ? " · inativo" : ""}</button>`).join("")}</div></div>
+      <div class="md-graf-box" ${vis === "tab" ? "hidden" : ""}><h4 class="md-graf-t">Consumo ${R.modo === "mes" ? "mensal" : "diário"} - ${esc(R.tipo)} (${esc(P.rot.toLowerCase())})</h4><p class="hint md-graf-s">${R.modo === "mes" ? "Soma das leituras de cada mês" : "Valores rateados quando há intervalo entre leituras"}</p>
+        <div class="pp-leg">${R.series.map(s => `<span><i style="background:${s.cor}"></i>${esc(s.nome)}</span>`).join("")}</div>
+        <div class="md-graf" id="mr-g${k}">${R.diasCom ? "" : `<div class="empty">Sem leituras neste período.</div>`}</div></div>
+      <div class="md-tab" ${vis === "graf" ? "hidden" : ""}>${T.linhas.length ? `<div class="tablebox"><table><thead><tr>${T.cab.map((c, j) => `<th class="${j ? "num" : ""}">${esc(c)}</th>`).join("")}</tr></thead><tbody>${T.linhas.map(l => `<tr>${l.map((v, j) => `<td class="${j ? "num" : ""}">${fmtC(v, j)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>` : `<div class="empty">Sem dados neste período.</div>`}</div>
+    </section>`; }).join("");
+  MD.ultRel = Rs;
+  mdDesenhar();
+}
+function mdDesenhar(){
+  (MD.ultRel || []).forEach((R, k) => { const el = $("#mr-g" + k); if (!el || !R.diasCom || el.closest("[hidden]")) return; el.innerHTML = mdGrafSvg(R, Math.max(300, Math.round(el.clientWidth || 700))); });
+}
+let mdResizeT;
+window.addEventListener("resize", () => { clearTimeout(mdResizeT); mdResizeT = setTimeout(() => { if ($("#t-medrel") && !$("#t-medrel").hidden) mdDesenhar(); }, 200); });
+function mdBaixar(buf, nome){
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([buf], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"})); a.download = nome;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+}
+function mdExcel(){
+  if (!MD.ultRel || !MD.ultRel.length) { toast("Não há dados para exportar.", true); return; }
+  try {
+    const P = mdPeriodo(MD.rPer), X = xlsxMini(), cab = {b:true, cor:"FFFFFFFF", fill:"FF1F4E79", wrap:false}, tit = {b:true, wrap:false};
+    let r = 1, larg = 1;
+    X.cel(r, 1, `Central de medições — ${P.rot} (${fData(P.de)} a ${fData(P.ate)}) · ${MD.rTipo === "mes" ? "dados mensais" : "dados diários"}`, tit); r += 2;
+    MD.ultRel.forEach(R => {
+      const T = mdTabela(R); larg = Math.max(larg, T.cab.length);
+      X.cel(r++, 1, R.tipo, tit);
+      X.cel(r, 1, "Consumo no período"); X.cel(r++, 2, R.diasCom ? `${mdF(R.total, 2)} ${R.un}` : "—");
+      X.cel(r, 1, "Média diária"); X.cel(r++, 2, R.diasCom ? `${mdF(R.total / R.diasCom, 2)} ${R.un}/dia` : "—");
+      X.cel(r, 1, "Valor das contas no período"); X.cel(r++, 2, R.valorPer !== null ? fBRL(R.valorPer) : "sem valor informado");
+      T.cab.forEach((c, j) => X.cel(r, j + 1, c, cab)); r++;
+      T.linhas.slice().reverse().forEach(l => { l.forEach((v, j) => X.cel(r, j + 1, j === 0 ? (R.modo === "mes" ? mdRotMes(v) : fData(v)) : v === null ? "" : Math.round(v * 100) / 100, j ? {h:"right", num:/R\$/.test(T.cab[j]) ? '"R$" #,##0.00' : "#,##0.00"} : {})); r++; });
+      r++;
+    });
+    for (let j = 1; j <= larg; j++) X.col(j, j === 1 ? 28 : 20);
+    mdBaixar(X.gerar("Medicoes"), `Medicoes - Pier ${hoje()}.xlsx`);
+    registrarTela("exportar_medicoes", P.rot);
+  } catch(e){ toast(e.message || "Não foi possível gerar a planilha.", true); }
+}
+function mdPDF(){
+  if (!MD.ultRel || !MD.ultRel.length) { toast("Não há dados para o relatório.", true); return; }
+  const P = mdPeriodo(MD.rPer);
+  registrarTela("imprimir_medicoes", P.rot);
+  const tmp = document.createElement("div");
+  const corpo = MD.ultRel.map(R => { const T = mdTabela(R), fmtC = (v, j) => v === null ? "—" : j === 0 ? (R.modo === "mes" ? mdRotMes(v) : fData(v)) : /R\$/.test(T.cab[j]) ? fBRL(v) : mdF(v, 2);
+    tmp.innerHTML = mdCards(R);
+    const kpis = [...tmp.querySelectorAll(".pp-card")].map(c => `<div class="k"><span>${esc(c.querySelector(".pp-rot").textContent)}</span><b>${esc(c.querySelector(".pp-v").textContent)}</b><small>${esc(c.querySelector(".pp-sub").textContent)}</small></div>`).join("");
+    return `<h2>${esc(R.tipo)} <small>${esc(R.meds.map(m => m.nome).join(", "))}</small></h2><div class="kpis">${kpis}</div>
+      ${R.diasCom ? `<div class="leg">${R.series.map(s => `<span><i style="background:${s.cor}"></i>${esc(s.nome)}</span>`).join("")}</div>${mdGrafSvg(R, 700)}` : ""}
+      ${T.linhas.length ? `<table><tr>${T.cab.map(c => `<th>${esc(c)}</th>`).join("")}</tr>${T.linhas.map(l => `<tr>${l.map((v, j) => `<td class="${j ? "n" : ""}">${fmtC(v, j)}</td>`).join("")}</tr>`).join("")}</table>` : `<p>Sem dados neste período.</p>`}`; }).join("");
+  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório de medições - ${esc(P.rot)}</title><style>
+    @page{size:A4;margin:12mm} body{font:11px Calibri,Arial,sans-serif;color:#1f2a37;margin:0}
+    h1{font-size:16px;margin:0} .cab{border-bottom:3px solid #1f3a56;padding-bottom:6px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:flex-end}
+    h2{font-size:13px;background:#1f3a56;color:#fff;padding:5px 7px;margin:14px 0 6px;break-after:avoid} h2 small{font-weight:normal;opacity:.85}
+    .kpis{display:flex;gap:8px;margin-bottom:6px} .k{flex:1;border:1px solid #c9d4df;border-radius:6px;padding:6px 8px} .k span,.k small{display:block;color:#4b5b6b} .k b{font-size:15px}
+    .leg{display:flex;gap:14px;justify-content:center;font-size:10px;color:#4b5b6b} .leg i{display:inline-block;width:18px;height:8px;margin-right:4px;border-radius:2px}
+    svg{display:block;margin:0 auto 6px;break-inside:avoid} table{border-collapse:collapse;width:100%;margin-bottom:6px} th,td{border:1px solid #c9d4df;padding:3px 5px;text-align:left} th{background:#eef3f7;font-size:10px} td.n{text-align:right}
+    .nota{font-size:10px;color:#455}
+  </style></head><body>
+    <div class="cab"><div><h1>PIER RESIDÊNCIAS — RELATÓRIO DE MEDIÇÕES</h1><div>${esc(P.rot)} · ${fData(P.de)} a ${fData(P.ate)} · ${MD.rTipo === "mes" ? "dados mensais" : "dados diários"}</div></div><div class="nota">Emitido em ${fData(hoje())} por ${esc(S.nome || "")}</div></div>
+    ${corpo}
+    <p class="nota">Consumo calculado pela diferença entre as leituras dos relógios; quando há dias sem leitura, o consumo é dividido igualmente entre eles. Valores em R$ conforme as contas lançadas.</p>
+  </body></html>`;
+  let fr = $("#md-print-frame"); if (fr) fr.remove();
+  fr = document.createElement("iframe"); fr.id = "md-print-frame"; fr.setAttribute("aria-hidden", "true");
+  fr.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
+  document.body.appendChild(fr);
+  fr.contentDocument.open(); fr.contentDocument.write(html); fr.contentDocument.close();
+  setTimeout(() => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch(e){ toast("Não foi possível abrir a impressão.", true); } }, 100);
+  return html;
+}
+
+// ---- Importar do Excel ----
+function mdAcharMed(txt){
+  const t = norm(String(txt ?? "")).replace(/\s+/g, " ").trim(); if (!t) return null;
+  const sem = t.replace(/[\s.-]/g, ""), L = MD.d.medidores;
+  return L.find(m => norm(m.numero).replace(/[\s.-]/g, "") === sem) || L.find(m => norm(m.nome).trim() === t) || L.find(m => norm(`${m.tipo} · ${m.nome}`) === t || norm(`${m.tipo} - ${m.nome}`) === t) || null;
+}
+function mdMesPlan(v){
+  if (typeof v === "number" || v instanceof Date) { const d = dataPlanilha(v); return d ? d.slice(0, 7) : ""; }
+  const t = norm(String(v ?? "")).trim(); if (!t) return "";
+  let m = /^(\d{4})-(\d{1,2})/.exec(t); if (m) return m[1] + "-" + m[2].padStart(2, "0");
+  m = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.exec(t); if (m) return (m[3].length === 2 ? "20" + m[3] : m[3]) + "-" + m[2].padStart(2, "0");
+  m = /^(\d{1,2})[/-](\d{4}|\d{2})$/.exec(t); if (m) return (m[2].length === 2 ? "20" + m[2] : m[2]) + "-" + m[1].padStart(2, "0");
+  m = /^([a-z]{3})[a-z]*[/ -]*(\d{4}|\d{2})$/.exec(t); if (m) { const i = PP_MESES.indexOf(m[1]); if (i >= 0) return (m[2].length === 2 ? "20" + m[2] : m[2]) + "-" + String(i + 1).padStart(2, "0"); }
+  return "";
+}
+function mdLerPlanilha(F){
+  if (!F) return null;
+  const t = (r, c) => { const v = F.val(r, c); return v === undefined || v === null ? "" : v; };
+  const n = s => norm(String(s)).replace(/\s+/g, " ").trim();
+  let rc = -1, col = {};
+  for (let r = F.r0; r <= Math.min(F.r1, F.r0 + 15) && rc < 0; r++) {
+    const m = {};
+    for (let c = F.c0; c <= F.c1; c++) {
+      const h = n(t(r, c)); if (!h) continue;
+      if (/^venc/.test(h)) m.venc = c; else if (/^(mes|referencia|competencia)/.test(h)) m.mes = c; else if (/^data/.test(h)) m.data = c;
+      else if (/^(medidor|n.? ?do medidor|numero do medidor|hidrometro|relogio)/.test(h)) m.med = c; else if (/^leitura/.test(h)) m.leit = c;
+      else if (/^consumo/.test(h)) m.cons = c; else if (/^valor/.test(h)) m.val = c; else if (/^obs/.test(h)) m.obs = c;
+    }
+    if ("med" in m && (("data" in m && "leit" in m) || (("mes" in m || "data" in m) && ("cons" in m || "val" in m)))) { rc = r; col = m; }
+  }
+  if (rc < 0) return null;
+  const leituras = [], contas = [], avisos = [], modoL = "leit" in col;
+  for (let r = rc + 1; r <= F.r1; r++) {
+    const medT = t(r, col.med), linha = r + 1;
+    const vazia = !String(medT).trim() && (modoL ? String(t(r, col.leit)).trim() === "" : String(t(r, col.cons ?? -1)).trim() === "" && String(t(r, col.val ?? -1)).trim() === "");
+    if (vazia) continue;
+    const m = mdAcharMed(medT);
+    if (!m) { avisos.push(`Linha ${linha}: medidor "${String(medT).trim() || "(vazio)"}" não cadastrado.`); continue; }
+    const obs = "obs" in col ? String(t(r, col.obs)).trim() : "";
+    if (modoL) {
+      const lt = t(r, col.leit); if (String(lt).trim() === "") continue;
+      const data = dataPlanilha(t(r, col.data)), v = mdNum(lt);
+      if (!data) { avisos.push(`Linha ${linha}: data inválida.`); continue; }
+      if (isNaN(v) || v < 0) { avisos.push(`Linha ${linha}: leitura inválida.`); continue; }
+      leituras.push({_linha:linha, medidor:m.id, data, leitura:v, obs, _m:m});
+    } else {
+      const mes = "mes" in col ? mdMesPlan(t(r, col.mes)) : (dataPlanilha(t(r, col.data)) || "").slice(0, 7);
+      if (!mes) { avisos.push(`Linha ${linha}: mês inválido.`); continue; }
+      const c = "cons" in col ? t(r, col.cons) : "", v = "val" in col ? t(r, col.val) : "";
+      const cn = String(c).trim() === "" ? "" : mdNum(c), vn = String(v).trim() === "" ? "" : mdNum(v);
+      if ((cn !== "" && isNaN(cn)) || (vn !== "" && isNaN(vn))) { avisos.push(`Linha ${linha}: consumo ou valor inválido.`); continue; }
+      contas.push({_linha:linha, medidor:m.id, mes, consumo:cn, valor:vn, vencimento:"venc" in col ? dataPlanilha(t(r, col.venc)) : "", obs, _m:m});
+    }
+  }
+  return {leituras, contas, avisos};
+}
+// planilha no modelo do Pier (CONTROLE HIDRÔMETROS): linha com DIA e o nome de cada medidor; embaixo, LEITURA, DIFERENÇA, ACUMULADO PERÍODO...
+// Lê só as colunas LEITURA (0 ou vazio = dia sem leitura). Onde o "acumulado período" recomeça, a leitura do dia anterior
+// foi a da concessionária (as linhas verdes da planilha).
+function mdLerGrade(F){
+  if (!F) return null;
+  const t = (r, c) => { const v = F.val(r, c); return v === undefined || v === null ? "" : v; };
+  const n = s => norm(String(s)).replace(/\s+/g, " ").trim();
+  for (let r = F.r0; r <= Math.min(F.r1 - 1, F.r0 + 20); r++) {
+    let cd = -1; for (let c = F.c0; c <= F.c1; c++) { const h = n(t(r, c)); if (h === "dia" || h === "data") { cd = c; break; } }
+    if (cd < 0) continue;
+    const sub = r + 1, cols = [];
+    for (let c = cd + 1; c <= F.c1; c++) if (/^leitura/.test(n(t(sub, c)))) cols.push(c);
+    if (!cols.length) continue;
+    let cObs = -1; for (let c = cd + 1; c <= F.c1; c++) if (/^observ/.test(n(t(r, c))) || /^observ/.test(n(t(sub, c)))) cObs = c;
+    const blocos = cols.map((c, k) => {
+      let nome = ""; for (let x = c; x > cd && !nome; x--) nome = String(t(r, x)).trim();
+      const fim = k + 1 < cols.length ? cols[k + 1] : F.c1 + 1;
+      let cAc = -1; for (let x = c + 1; x < fim; x++) if (/^acumulado periodo|^acum\.? ciclo/.test(n(t(sub, x)))) cAc = x;
+      return {c, nome:nome || `Coluna ${k + 1}`, cAc, linhas:[]};
+    });
+    for (let rr = sub + 1; rr <= F.r1; rr++) {
+      const data = dataPlanilha(t(rr, cd)); if (!data) continue;
+      let obs = cObs >= 0 ? String(t(rr, cObs)).trim() : "";
+      blocos.forEach(b => {
+        const v = t(rr, b.c), num = typeof v === "number" ? v : mdNum(v);
+        if (String(v).trim() === "" || !(num > 0)) return;
+        b.linhas.push({_linha:rr + 1, data, leitura:num, obs, ac:b.cAc >= 0 ? mdNum(t(rr, b.cAc)) : NaN}); obs = "";
+      });
+    }
+    blocos.forEach(b => {
+      if (b.cAc >= 0) for (let i = 1; i < b.linhas.length; i++) { const a = b.linhas[i - 1], x = b.linhas[i]; if (!isNaN(a.ac) && !isNaN(x.ac) && x.ac < a.ac && mdDiasEntre(a.data, x.data) === 1) a.ciclo = true; }
+      b.linhas.forEach(l => delete l.ac);
+    });
+    return {blocos:blocos.filter(b => b.linhas.length)};
+  }
+  return null;
+}
+// medidor com o mesmo nome (ou contido no nome da coluna: "GUARITA SUL - NAUTICA" → "Guarita sul") ou com o mesmo número
+function mdAutoMed(nome){
+  const t = norm(nome).replace(/\s+/g, " ").trim(), sem = t.replace(/[\s.-]/g, ""); if (!t) return null;
+  const L = MD.d.medidores.filter(m => m.ativo !== "Não").concat(MD.d.medidores.filter(m => m.ativo === "Não"));
+  return L.find(m => norm(m.nome).trim() === t) || L.find(m => norm(m.numero).replace(/[\s.-]/g, "") === sem)
+    || L.filter(m => { const k = norm(m.nome).trim(); return k && (t.includes(k) || k.includes(t)); }).sort((a, b) => b.nome.length - a.nome.length)[0] || null;
+}
+// planilha de controle no mesmo modelo (dia a dia do ano, com leitura, diferença, acumulados e as leituras da concessionária em verde)
+function mdControle(){
+  if (!MD.d) return;
+  try {
+    const ano = hoje().slice(0, 4), de = ano + "-01-01", ate = ano + "-12-31", h = hoje();
+    let meds = mdOrdem(MD.d.medidores).filter(m => (!MD.fMed || m.id === MD.fMed) && (m.ativo !== "Não" || MD.d.leituras.some(l => l.medidor === m.id && l.data >= de)));
+    if (!meds.length) { toast("Nenhum medidor para exportar.", true); return; }
+    const X = xlsxMini(), VERDE = "FF92D050", AZUL = "FFDDEBF7";
+    const cab = {b:true, cor:"FFFFFFFF", fill:"FF1F4E79", h:"center"}, sub = {b:true, fill:"FFD9E1F2", h:"center", size:9};
+    const blocos = meds.map(m => ({m, cols:["LEITURA", "DIFERENÇA"].concat(mdTemCiclo(m) ? ["ACUM. CICLO CONCESSIONÁRIA"] : [], mdLim(m) ? [`EXCEDENTE DE ${mdF(mdLim(m))}${m.unidade} DIÁRIO`] : [], ["ACUM. MÊS", "ACUM. ANO"])}));
+    const ncol = 1 + blocos.reduce((a, b) => a + b.cols.length, 0) + 1;
+    X.cel(1, 1, `CONTROLE DE MEDIÇÕES — PIER RESIDÊNCIAS — ${ano}`, {b:true, size:14, h:"center", borda:false}); X.merge(1, 1, 1, ncol);
+    X.cel(3, 1, "LEITURA DA CONCESSIONÁRIA (fim/início do ciclo)", {fill:VERDE, b:true}); X.merge(3, 1, 3, 3);
+    X.cel(4, 1, "INÍCIO DO MÊS", {fill:AZUL, b:true}); X.merge(4, 1, 4, 3);
+    X.cel(6, 1, "DIA", cab); X.cel(7, 1, "", cab); X.merge(6, 1, 7, 1); X.col(1, 12);
+    let c = 2;
+    blocos.forEach(b => {
+      b.c0 = c;
+      X.cel(6, c, `${b.m.nome.toUpperCase()} (nº ${b.m.numero} · ${b.m.unidade})`, cab);
+      for (let j = 1; j < b.cols.length; j++) X.cel(6, c + j, "", cab);
+      X.merge(6, c, 6, c + b.cols.length - 1);
+      b.cols.forEach((k, j) => { X.cel(7, c + j, k, sub); X.col(c + j, j === 0 ? 12 : 13); });
+      c += b.cols.length;
+    });
+    X.cel(6, c, "OBSERVAÇÕES", cab); X.cel(7, c, "", cab); X.merge(6, c, 7, c); X.col(c, 36);
+    X.row(7, 30);
+    const porDia = new Map(); MD.d.leituras.forEach(l => { if (l.data >= de && l.data <= ate) porDia.set(l.medidor + "|" + l.data, l); });
+    const ultDado = blocos.map(b => { const ls = mdInt(b.m).ls; return ls.length ? ls[ls.length - 1].data : ""; });
+    const N2 = "#,##0.00", NL = "#,##0.0##";
+    mdDias(de, ate).forEach((d, i) => {
+      const r = 8 + i, l1 = d.slice(8) === "01", ciclos = [];
+      const obs = [];
+      blocos.forEach((b, k) => {
+        const m = b.m, l = porDia.get(m.id + "|" + d), mp = mdDiario(m), passado = d <= (ultDado[k] || "") && d <= h;
+        if (l && l.ciclo === "Sim") ciclos.push(k);
+        if (l && l.obs) obs.push(blocos.length > 1 ? `${m.nome}: ${l.obs}` : l.obs);
+        const est = l && l.ciclo === "Sim" ? {fill:VERDE, h:"right", num:NL} : {h:"right", num:NL};
+        X.cel(r, b.c0, l ? l.leitura : "", est);
+        const dif = mp.has(d) ? Math.round(mp.get(d) * 100) / 100 : null;
+        let j = 1;
+        X.cel(r, b.c0 + j++, passado && dif !== null ? dif : "", {h:"right", num:N2});
+        if (mdTemCiclo(m)) { const ac = passado ? mdAcumCiclo(m, d) : null; X.cel(r, b.c0 + j++, ac && dif !== null ? Math.round(ac.s * 100) / 100 : "", {h:"right", num:N2}); }
+        if (mdLim(m)) { const sobra = dif !== null && passado ? Math.round((mdLim(m) - dif) * 100) / 100 : ""; X.cel(r, b.c0 + j++, sobra, sobra !== "" && sobra < 0 ? {h:"right", num:N2, cor:"FFC00000", b:true} : {h:"right", num:N2}); }
+        X.cel(r, b.c0 + j++, passado ? Math.round(mdSomaFaixa(m, d.slice(0, 8) + "01", d).s * 100) / 100 : "", {h:"right", num:N2});
+        X.cel(r, b.c0 + j++, passado ? Math.round(mdSomaFaixa(m, de, d).s * 100) / 100 : "", {h:"right", num:N2});
+      });
+      X.cel(r, 1, fData(d), ciclos.length ? {fill:VERDE, h:"center"} : l1 ? {fill:AZUL, h:"center", b:true} : {h:"center"});
+      X.cel(r, c, obs.join(" · "));
+    });
+    mdBaixar(X.gerar(ano), `Controle de medicoes ${ano} - Pier.xlsx`);
+    registrarTela("exportar_medicoes", `Planilha de controle ${ano}`);
+  } catch(e){ toast(e.message || "Não foi possível gerar a planilha.", true); }
+}
+async function mdImportar(file){
+  if (!file || !MD.d) return;
+  if (!/\.xlsx$/i.test(file.name)) { toast("Escolha uma planilha .xlsx.", true); return; }
+  if (!MD.d.medidores.length) { toast("Cadastre os medidores em Meus medidores antes de importar.", true); return; }
+  let abas;
+  try {
+    const buf = await file.arrayBuffer();
+    try { abas = await xlsxLer(buf); }
+    catch(e){ if (!e || !e.semLeitor) throw e; await carregarXLSX(); const wb = XLSX.read(buf, {type:"array"}); abas = wb.SheetNames.map(nm => ({nome:nm, folha:xlsxFolhaSheetJS(wb.Sheets[nm])})); }
+  } catch(e){ toast(e.message || "Não foi possível ler a planilha.", true); return; }
+  const L = [], C = [], A = [], usadas = [], G = [];
+  abas.forEach(a => {
+    const g = mdLerGrade(a.folha);
+    if (g && g.blocos.length) { usadas.push(a.nome); g.blocos.forEach(b => { const ja = G.find(x => norm(x.nome) === norm(b.nome)); if (ja) ja.linhas.push(...b.linhas); else G.push(b); }); return; }
+    const r = mdLerPlanilha(a.folha); if (!r) return; usadas.push(a.nome); r.leituras.forEach(x => L.push(x)); r.contas.forEach(x => C.push(x)); r.avisos.forEach(x => A.push(`${a.nome} · ${x}`));
+  });
+  if (!usadas.length) { toast("Não encontrei as colunas. Use a planilha de controle (DIA e LEITURA de cada medidor) ou o modelo: Data, Medidor e Leitura (diário) ou Mês, Medidor, Consumo e Valor (mensal).", true); return; }
+  if (G.length) return mdImportarGrade(G, usadas);
+  if (!L.length && !C.length) { toast(A.length ? A.slice(0, 3).join(" ") : "A planilha não tem lançamentos.", true); return; }
+  const porMed = new Map(); L.concat(C).forEach(x => porMed.set(x._m.id, (porMed.get(x._m.id) || 0) + 1));
+  $("#modal-box").classList.add("largo");
+  $("#modal-box").innerHTML = `<h3>Importar lançamentos</h3>
+    <p>Aba${usadas.length > 1 ? "s" : ""} <b>${usadas.map(esc).join(", ")}</b>: <b>${L.length}</b> leitura${L.length === 1 ? "" : "s"} e <b>${C.length}</b> conta${C.length === 1 ? "" : "s"} mensa${C.length === 1 ? "l" : "is"}.</p>
+    <div class="tablebox flat"><table><thead><tr><th>Medidor</th><th class="num">Linhas</th></tr></thead><tbody>${[...porMed].map(([id, q]) => { const m = mdMed(id); return `<tr><td>${esc(m.tipo)} · ${esc(m.nome)} (nº ${esc(m.numero)})</td><td class="num">${q}</td></tr>`; }).join("")}</tbody></table></div>
+    ${A.length ? `<p class="hint err">${A.slice(0, 6).map(esc).join("<br>")}${A.length > 6 ? `<br>+ ${A.length - 6} aviso(s)` : ""}</p><p class="hint">As linhas com aviso ficam de fora.</p>` : ""}
+    <div class="notice warn">As leituras são conferidas uma a uma: as que já estavam lançadas (mesmo medidor, data e número) são puladas; leituras menores que a anterior só entram quando a queda indica que o relógio virou. Contas do mesmo mês e medidor são atualizadas.</div>
+    <div class="actions" style="margin-top:12px"><button class="btn primary" type="button" id="mi-ok">Importar</button><button class="btn" type="button" id="mi-no">Cancelar</button><span class="hint" id="mi-msg"></span></div>`;
+  $("#modal").hidden = false; $("#mi-no").onclick = fecharModal;
+  const tira = x => { const o = Object.assign({}, x); delete o._m; return o; };
+  $("#mi-ok").onclick = () => enviar($("#mi-ok"), $("#mi-msg"), "medImportar", {leituras:L.map(tira), contas:C.map(tira)}, r => { mdAplicar(r); fecharModal(); renderMedTudo(); });
+}
+// prévia da planilha de controle: cada coluna LEITURA vira um medidor (escolhido aqui; já vem o de mesmo nome)
+function mdImportarGrade(G, usadas){
+  const meds = mdOrdem(MD.d.medidores), fx = l => { const ds = l.map(x => x.data).sort(); return ds.length ? `${fData(ds[0])} a ${fData(ds[ds.length - 1])}` : "—"; };
+  G.forEach(b => { b.sel = (mdAutoMed(b.nome) || {}).id || ""; });
+  $("#modal-box").classList.add("largo");
+  $("#modal-box").innerHTML = `<h3>Importar a planilha de controle</h3>
+    <p>Aba${usadas.length > 1 ? "s" : ""} <b>${usadas.map(esc).join(", ")}</b>. Confira o medidor de cada coluna de leitura (dias com 0 ou em branco ficam de fora):</p>
+    <div class="tablebox flat"><table><thead><tr><th>Coluna da planilha</th><th class="num">Leituras</th><th class="hide-s">Período</th><th class="num hide-s">Da concessionária</th><th>Medidor no sistema</th></tr></thead><tbody>
+      ${G.map((b, i) => `<tr><td><b>${esc(b.nome)}</b></td><td class="num">${b.linhas.length}</td><td class="hide-s">${fx(b.linhas)}</td><td class="num hide-s">${b.linhas.filter(x => x.ciclo).length || "—"}</td>
+        <td><select class="input md-gsel" style="min-width:200px" data-gm="${i}" aria-label="Medidor da coluna ${esc(b.nome)}"><option value="">— não importar —</option>${meds.map(m => `<option value="${esc(m.id)}" ${m.id === b.sel ? "selected" : ""}>${esc(m.nome)} (${esc(m.tipo)} · nº ${esc(m.numero)})</option>`).join("")}</select></td></tr>`).join("")}</tbody></table></div>
+    <p class="hint">As leituras que já estão no sistema (mesmo medidor, data e número) são puladas. Os dias em verde da planilha (leitura da concessionária) são marcados para o acumulado do ciclo.</p>
+    <div class="actions" style="margin-top:12px"><button class="btn primary" type="button" id="mi-ok">Importar</button><button class="btn" type="button" id="mi-no">Cancelar</button><span class="hint" id="mi-msg"></span></div>`;
+  $("#modal").hidden = false; $("#mi-no").onclick = fecharModal;
+  $$("#modal-box [data-gm]").forEach(s => s.onchange = () => { G[+s.dataset.gm].sel = s.value; });
+  $("#mi-ok").onclick = () => {
+    const usados = G.filter(b => b.sel), msg = $("#mi-msg");
+    if (!usados.length) { msg.className = "hint err"; msg.textContent = "Escolha o medidor de ao menos uma coluna."; return; }
+    if (new Set(usados.map(b => b.sel)).size < usados.length) { msg.className = "hint err"; msg.textContent = "Duas colunas estão com o mesmo medidor."; return; }
+    const leituras = usados.flatMap(b => b.linhas.map(l => Object.assign({}, l, {medidor:b.sel})));
+    enviar($("#mi-ok"), msg, "medImportar", {leituras}, r => { mdAplicar(r); fecharModal(); renderMedTudo(); });
+  };
+}
+function mdModelo(){
+  if (MD.vista !== "mes") return mdControle();
+  if (!MD.d) return;
+  try {
+    const X = xlsxMini(), cab = {b:true, cor:"FFFFFFFF", fill:"FF1F4E79", wrap:false}, meds = mdOrdem(MD.d.medidores).filter(m => m.ativo !== "Não");
+    if (MD.vista === "mes") {
+      [["Mês",12],["Medidor",22],["Consumo",14],["Valor (R$)",14],["Vencimento",14],["Observação",30]].forEach(([c, w], j) => { X.cel(1, j + 1, c, cab); X.col(j + 1, w); });
+      const mes = mdMesAnterior().split("-").reverse().join("/");
+      meds.forEach((m, i) => { X.cel(i + 2, 1, mes); X.cel(i + 2, 2, m.numero); });
+      mdBaixar(X.gerar("Contas"), "Modelo contas mensais - Pier.xlsx");
+    } else {
+      [["Data",12],["Medidor",22],["Leitura",14],["Observação",30]].forEach(([c, w], j) => { X.cel(1, j + 1, c, cab); X.col(j + 1, w); });
+      meds.forEach((m, i) => { X.cel(i + 2, 1, fData(hoje())); X.cel(i + 2, 2, m.numero); });
+      mdBaixar(X.gerar("Leituras"), "Modelo leituras - Pier.xlsx");
+    }
+  } catch(e){ toast(e.message || "Não foi possível gerar o modelo.", true); }
+}
+if ($("#t-medlanc")) {
+  $("#ml-vistas").addEventListener("click", ev => { const b = ev.target.closest("[data-v]"); if (b) { MD.vista = b.dataset.v; renderMedLanc(); } });
+  $("#ml-med").addEventListener("change", ev => { MD.fMed = ev.target.value; renderMedLanc(); });
+  $("#ml-per").addEventListener("change", ev => { MD.fPer = ev.target.value; renderMedLanc(); });
+  $("#ml-novo").addEventListener("click", () => MD.vista === "mes" ? mdNovaConta({medidor:MD.fMed}) : mdNovaLeitura({medidor:MD.fMed}));
+  $("#ml-importar").addEventListener("click", () => $("#ml-arq").click());
+  $("#ml-arq").addEventListener("change", ev => { const f = ev.target.files[0]; ev.target.value = ""; mdImportar(f); });
+  $("#ml-modelo").addEventListener("click", mdModelo);
+  $("#md-novo").addEventListener("click", () => mdEditarMedidor(null));
+  $("#mr-per").addEventListener("change", ev => { MD.rPer = ev.target.value; renderMedRel(); });
+  $("#mr-tipo").addEventListener("change", ev => { MD.rTipo = ev.target.value; renderMedRel(); });
+  $("#mr-excel").addEventListener("click", mdExcel);
+  $("#mr-pdf").addEventListener("click", mdPDF);
+  document.addEventListener("click", ev => {
+    const el = ev.target.closest("[data-ml-ed],[data-ml-del],[data-md-ler],[data-md-ed],[data-md-del],[data-md-rel],[data-mr-vis],[data-mr-todos],[data-mr-m]");
+    if (!el || !el.closest("#t-medlanc, #t-medidores, #t-medrel")) return;
+    const d = el.dataset;
+    if (d.mlEd) { const [tp, id] = d.mlEd.split(":"); if (tp === "l") mdNovaLeitura({id}); else mdNovaConta({id}); }
+    else if (d.mlDel) mdExcluir(el);
+    else if (d.mdLer) mdNovaLeitura({medidor:d.mdLer});
+    else if (d.mdEd) mdEditarMedidor(d.mdEd);
+    else if (d.mdDel) { if (!el.dataset.conf) { el.dataset.conf = "1"; el.textContent = "excluir?"; return; } enviar(el, null, "medMedidor", {op:"excluir", medidor:{id:d.mdDel}}, r => { mdAplicar(r); renderMedTudo(); }); }
+    else if (d.mdRel) { const m = mdMed(d.mdRel); if (m) { MD.rSel[m.tipo] = [m.id]; setTab("medrel"); } }
+    else if (d.mrVis) { MD.rVis[d.tipo] = d.mrVis; renderMedRel(); }
+    else if (d.mrTodos) { MD.rSel[d.mrTodos] = []; renderMedRel(); }
+    else if (d.mrM) { const s = new Set(MD.rSel[d.tipo] || []); if (s.has(d.mrM)) s.delete(d.mrM); else s.add(d.mrM); MD.rSel[d.tipo] = [...s]; renderMedRel(); }
+  });
 }
 
 // ---------- início ----------

@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap"></noscript>
-<link rel="stylesheet" href="estilo.css?v=20261024unid">
+<link rel="stylesheet" href="estilo.css?v=20261024med">
 </head>
 <body>
 <div class="login" id="login" hidden>
@@ -268,6 +268,29 @@
   </section>
 
   <!-- RONDA (setor Administração): vistorias preventivas no modelo do Checklist Consolidado -->
+  <section id="t-medlanc" hidden>
+    <div class="un-head"><div><h2 class="sec">Sinalizar consumo</h2><p class="muted">Leituras dos relógios (lançamentos diários) e contas da concessionária (lançamentos mensais).</p></div>
+      <div class="un-ferr"><button class="btn" type="button" id="ml-importar">Importar do Excel</button><button class="btn" type="button" id="ml-modelo">Baixar modelo</button><button class="btn primary" type="button" id="ml-novo">+ Novo lançamento</button><input type="file" id="ml-arq" accept=".xlsx" hidden></div></div>
+    <div class="ind-vistas md-abas" id="ml-vistas" role="tablist" aria-label="Lançamentos"><button type="button" role="tab" data-v="dia" aria-selected="true">Lançamentos diários</button><button type="button" role="tab" data-v="mes" aria-selected="false">Lançamentos mensais</button></div>
+    <div class="toolbar md-filtros"><label class="md-lbl">Medidor <select class="input" id="ml-med"><option value="">Todos</option></select></label>
+      <label class="md-lbl">Período <select class="input" id="ml-per"><option value="7">Últimos 7 dias</option><option value="30" selected>Últimos 30 dias</option><option value="90">Últimos 90 dias</option><option value="365">Último ano</option><option value="todos">Tudo</option></select></label><span class="hint" id="ml-conta"></span></div>
+    <div id="ml-corpo"><div class="empty">Carregando as medições…</div></div>
+  </section>
+
+  <section id="t-medidores" hidden>
+    <div class="un-head"><div><h2 class="sec">Meus medidores</h2><p class="muted">Relógios de água, energia e gás do condomínio. <span id="md-conta"></span></p></div>
+      <div class="un-ferr"><button class="btn primary" type="button" id="md-novo">+ Novo medidor</button></div></div>
+    <div id="md-corpo"><div class="empty">Carregando os medidores…</div></div>
+  </section>
+
+  <section id="t-medrel" hidden>
+    <div class="un-head"><div><h2 class="sec">Relatórios de consumo</h2><p class="muted">Água, energia e gás pelas leituras dos medidores, com o valor das contas. <span id="mr-de"></span></p></div></div>
+    <div class="panel md-relbar"><label class="md-lbl">Período <select class="input" id="mr-per"><option value="7">Últimos 7 dias</option><option value="30" selected>Últimos 30 dias</option><option value="90">Últimos 90 dias</option><option value="mes">Este mês</option><option value="mesant">Mês passado</option><option value="12m">Últimos 12 meses</option><option value="ano">Este ano</option></select></label>
+      <label class="md-lbl">Tipo <select class="input" id="mr-tipo"><option value="dia">Dados diários</option><option value="mes">Dados mensais</option></select></label>
+      <span class="md-relbar-a"><button class="btn md-xls" type="button" id="mr-excel">Excel</button><button class="btn md-pdf" type="button" id="mr-pdf">PDF</button></span></div>
+    <div id="mr-corpo"><div class="empty">Carregando os relatórios…</div></div>
+  </section>
+
   <section id="t-rondas" hidden>
     <div id="rd-lista-box">
       <div class="sec-head"><h2 class="sec">Ronda</h2><span class="muted">Vistorias preventivas do condomínio: ficha semanal por bloco, ficha diária das áreas comuns, checklist-mestre A a I, pendências e fechamento semanal.</span></div>
@@ -655,6 +678,6 @@
 
 <script src="config.js"></script>
 <script src="nfe.js?v=20261015s"></script>
-<script src="app.js?v=20261024unid"></script>
+<script src="app.js?v=20261024med"></script>
 </body>
 </html>
