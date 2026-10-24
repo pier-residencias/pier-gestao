@@ -26,7 +26,7 @@ const API = (window.ESTOQUE_API_URL || "").trim();
 const S = {
   usuario:"", nome:"", token:"", perfil:"", perms:{}, rel:null, eq:null, dashPreset:"mes", itens:new Map(), emprestimos:[], movs:[],
   tab:"painel", tipo:"saida", picked:null, iStatus:"", hTipo:"", histMes:mesDe(), ocupado:false, ultima:null,
-  os:[], colab:[], oFiltro:"aberto", fotos:new Map(), dem:[], prev:[], dFiltro:"aberto", nfArq:[], nfAnexo:null, nfLida:null,
+  os:[], colab:[], oFiltro:"aberto", fotos:new Map(), dem:[], prev:[], dFiltro:"aberto", nfArq:[], nfAnexo:null, nfLida:null, nfAuto:null,
   iPer:{tipo:"", modo:"mes", mes:mesDe(), dia:hoje()}, mesesCarregados:[],
   setores:["Manutenção"], setor:"Manutenção", empTodos:[], locais:{}, pend:null, adm:false
 };
@@ -856,6 +856,11 @@ $("#f-mov").addEventListener("submit", async ev => {
   if (t==="entrada" && valorTxt && !Number.isFinite(valor)) { msg.textContent = "Valor unitário inválido."; return; }
   const mov = { tipo:t, itemId:it.id, qtd, data, obs:$("#m-obs").value.trim() };
   if (t==="entrada") Object.assign(mov, { fornecedor:$("#m-forn").value.trim(), nf:$("#m-nf").value.trim(), valorUnit:valor, responsavel:$("#m-recebeu").value.trim() });
+  if (t==="entrada" && S.nfArq.length) {
+    if (S.nfLida && S.nfLida.lendo) { msg.textContent = "Aguarde: a nota anexada ainda está sendo lida."; return; }
+    const dv = divergenciaNF(mov.nf);
+    if (dv) { msg.textContent = `O campo Nota fiscal ${dv.campo ? `diz ${dv.campo}` : "está vazio"}, mas a nota anexada é a ${dv.doc}. Corrija o campo ou use “Conferir e registrar”, onde dá para confirmar um número diferente.`; return; }
+  }
   let nfIds = [];
   if (t==="entrada") {
     if (S.nfArq.length) {
@@ -2058,6 +2063,33 @@ function renderDashDem(R){
 const chaveNF = () => norm($("#m-forn").value.trim()) + "|" + norm($("#m-nf").value.trim());
 const nfAnexoValido = () => !!(S.nfAnexo && S.nfAnexo.ids.length && S.nfAnexo.chave === chaveNF());
 const idsNF = v => { const s = String(v||""), l = s.match(/\/d\/([A-Za-z0-9_-]{10,})/g); return l ? l.map(x => x.slice(3)) : s.split(/[\s,]+/).filter(x => /^[A-Za-z0-9_-]{10,}$/.test(x)); };
+// Fornecedor e Nota fiscal preenchidos pelo PRÓPRIO SITE a partir de um documento (PDF ou foto da nota).
+// Um campo continua "automático" só enquanto tiver exatamente o valor que o site colocou: o que a pessoa digita nunca é
+// apagado nem trocado. O automático sai junto com o documento e é trocado quando outro documento é lido.
+const nfNum = v => String(v ?? "").replace(/\D/g, "").replace(/^0+/, "");
+const CAMPOS_AUTO = [["#m-forn", "forn", "fornecedor"], ["#m-nf", "nf", "numero"]];
+function limparAutoNF(){
+  if (!S.nfAuto) return;
+  CAMPOS_AUTO.forEach(([id, k]) => { if (S.nfAuto[k] && $(id).value.trim() === S.nfAuto[k]) $(id).value = ""; });
+  S.nfAuto = null;
+}
+function aplicarAutoNF(dados, origem){
+  const ant = S.nfAuto || {}, novo = {origem, forn: "", nf: ""};
+  CAMPOS_AUTO.forEach(([id, k, campo]) => {
+    const atual = $(id).value.trim(), v = String((dados && dados[campo]) || "").trim();
+    if (!atual || (ant[k] && atual === ant[k])) { $(id).value = v; novo[k] = v; }
+  });
+  S.nfAuto = novo;
+}
+// o documento lido que está anexado agora (só ele conta para comparar o número)
+const docLidoAnexado = () => S.nfLida && S.nfLida.dados && !S.nfLida.lendo && S.nfArq.includes(S.nfLida.arquivo) ? S.nfLida : null;
+// número digitado diferente do número do documento anexado (null quando não há o que comparar)
+function divergenciaNF(campo){
+  const d = docLidoAnexado(), doc = d ? String(d.dados.numero || "").trim() : "";
+  if (!doc) return null;
+  const v = String(campo ?? $("#m-nf").value).trim();
+  return nfNum(v) === nfNum(doc) ? null : {doc, campo: v, foto: !!d.foto};
+}
 function renderNfAnexo(){
   const lista = $("#m-nf-lista"); if (!lista) return;
   if (S.nfArq.length) {
@@ -2065,7 +2097,8 @@ function renderNfAnexo(){
     lista.innerHTML = S.nfArq.map((f,i) => `<span class="nf-chip">${f.type==="application/pdf" ? "PDF" : "Foto"} · ${esc(f.name.length>28 ? f.name.slice(0,25)+"…" : f.name)} <button type="button" class="link small-link" data-nfx="${i}" aria-label="Tirar ${esc(f.name)}">tirar</button></span>`).join("")
       + (L && L.arquivo && S.nfArq.includes(L.arquivo) ? (L.lendo ? `<span class="nf-chip"><span class="spin" aria-hidden="true"></span> ${L.foto ? `Lendo a foto da nota… <span id="nf-prog">${L.prog||""}</span>` : "Lendo os itens da nota…"}</span>`
         : L.erro ? `<span class="nf-chip">${esc(L.erro)}</span>`
-        : `<button type="button" class="btn primary small" id="m-nf-ler">Conferir e registrar ${L.dados.itens.length} ${L.dados.itens.length===1?"item":"itens"} da nota${L.dados.numero ? " " + esc(L.dados.numero) : ""}</button>`) : "");
+        : `<button type="button" class="btn primary small" id="m-nf-ler">Conferir e registrar ${L.dados.itens.length} ${L.dados.itens.length===1?"item":"itens"} da nota${L.dados.numero ? " " + esc(L.dados.numero) : ""}</button>`
+          + ((dv => dv ? `<span class="nf-chip aviso" id="m-nf-div">Atenção: o campo Nota fiscal ${dv.campo ? `diz <b>${esc(dv.campo)}</b>` : "está vazio"}, mas a nota anexada é a <b>${esc(dv.doc)}</b>.</span>` : "")(divergenciaNF()))) : "");
     const b = $("#m-nf-ler"); if (b) b.onclick = () => abrirLote();
   } else if (nfAnexoValido()) {
     const n = S.nfAnexo.ids.length;
@@ -2076,7 +2109,14 @@ $("#m-nf-arq").addEventListener("change", () => {
   const novos = [...$("#m-nf-arq").files].filter(f => /^image\//.test(f.type) || f.type === "application/pdf");
   const grande = novos.find(f => f.type === "application/pdf" && f.size > 7*1024*1024);
   if (grande) toast(`O PDF ${grande.name} passa de 7 MB. Tire uma foto da nota no lugar.`, true);
-  S.nfArq = S.nfArq.concat(novos.filter(f => f !== grande)).slice(0, 4);
+  // uma nota por lançamento: um PDF sozinho, ou até 4 fotos da mesma nota. Nada é deixado de lado sem aviso.
+  const aceitos = novos.filter(f => f !== grande), juntos = S.nfArq.concat(aceitos);
+  const nPdf = juntos.filter(f => f.type === "application/pdf").length, nFoto = juntos.length - nPdf;
+  const recusa = !aceitos.length ? "" : nPdf > 1 ? (S.nfArq.some(f => f.type === "application/pdf") ? "Já há um PDF anexado. Uma nota por vez: tire o anexo atual antes de anexar outra nota." : "Escolha um PDF só: cada lançamento recebe uma nota.")
+    : nPdf && nFoto ? "PDF e fotos não vão juntos: anexe o PDF da nota ou as fotos dela, não os dois."
+    : juntos.length > 4 ? "No máximo 4 fotos da mesma nota. Tire alguma antes de anexar outra." : "";
+  if (recusa) toast(`${recusa} Nada foi anexado (${aceitos.map(f => f.name).join(", ")}).`, true);
+  else S.nfArq = juntos;
   $("#m-nf-arq").value = ""; renderNfAnexo();
   lerNotaSeNovo();
 });
@@ -2091,7 +2131,7 @@ function lerNotaSeNovo(){
 $("#m-nf-lista").addEventListener("click", e => {
   const b = e.target.closest("[data-nfx]"); if (!b) return;
   if (b.dataset.nfx === "reuso") S.nfAnexo = null; else S.nfArq.splice(Number(b.dataset.nfx), 1);
-  if (S.nfLida && !S.nfArq.includes(S.nfLida.arquivo)) S.nfLida = null;
+  if (S.nfLida && !S.nfArq.includes(S.nfLida.arquivo)) { S.nfLida = null; limparAutoNF(); }
   renderNfAnexo(); lerNotaSeNovo();
 });
 ["#m-forn","#m-nf"].forEach(sel => $(sel).addEventListener("input", renderNfAnexo));
@@ -2143,10 +2183,7 @@ async function lerNotaPDF(file){
   } catch(e){ erro = e && e.message === "leitor" ? "Não deu para carregar o leitor de PDF. Verifique a internet." : "Não consegui ler este PDF. Lance os itens à mão."; }
   if (!S.nfLida || S.nfLida.arquivo !== file) return;
   S.nfLida = {arquivo:file, dados, erro};
-  if (dados) {
-    if (dados.fornecedor && !$("#m-forn").value.trim()) $("#m-forn").value = dados.fornecedor;
-    if (dados.numero && !$("#m-nf").value.trim()) $("#m-nf").value = dados.numero;
-  }
+  aplicarAutoNF(dados, file); // sem leitura: o automático de um documento anterior sai e os campos ficam para a pessoa
   renderNfAnexo();
   // a conferência abre sozinha, já preenchida
   if (dados && dados.itens.length && $("#modal").hidden && S.tab === "registrar") abrirLote();
@@ -2321,10 +2358,7 @@ async function lerNotaFoto(fotos, chave){
   } finally { if (worker) try { await worker.terminate(); } catch(e){} }
   if (!vivo()) return;
   S.nfLida = {arquivo:fotos[0], chave, foto:true, dados, erro};
-  if (dados) {
-    if (dados.fornecedor && !$("#m-forn").value.trim()) $("#m-forn").value = dados.fornecedor;
-    if (dados.numero && !$("#m-nf").value.trim()) $("#m-nf").value = dados.numero;
-  }
+  aplicarAutoNF(dados, chave);
   renderNfAnexo();
   if (dados && dados.itens.length && $("#modal").hidden && S.tab === "registrar") abrirLote();
 }
@@ -2378,6 +2412,9 @@ function abrirLote(){
   const N = L.dados, todos = itensArr(), podeNovo = can("itens_cadastrar");
   const mem2 = memNF.nova(), mem1 = memNF.antiga();
   const forn0 = $("#m-forn").value.trim() || N.fornecedor, nf0 = $("#m-nf").value.trim() || N.numero;
+  // número e fornecedor do DOCUMENTO: o que a pessoa digitou vale, mas a diferença aparece e precisa ser resolvida
+  const docNF = String(N.numero || "").trim(), docForn = String(N.fornecedor || "").trim();
+  const div = {conf: false, par: ""};
   const linhas = N.itens.map((it, i) => {
     const chave = chaveProduto(forn0, it);
     const c = LeitorNF.classificar(it, todos, {podeNovo, memoria: mem2[chave] || null, antiga: typeof mem1[chave] === "string" ? mem1[chave] : ""});
@@ -2460,9 +2497,29 @@ function abrirLote(){
     return partes.join("");
   }
   const repConfirmada = () => rep.conf.ok && nfNorm(rep.conf.num) === nfNorm($("#lt-nf").value) && rep.conf.mot.trim().length >= 10;
+  // número da conferência diferente do número lido no documento: só passa usando o do documento ou confirmando o digitado
+  const divNF = () => { const v = $("#lt-nf").value.trim(); return docNF && nfNorm(v) && nfNorm(v) !== nfNorm(docNF) ? {par: nfNorm(v) + "|" + nfNorm(docNF), v} : null; };
+  const divResolvida = () => { const d = divNF(); return !d || (div.conf && div.par === d.par); };
+  const divForn = () => { const v = $("#lt-forn").value.trim(); return docForn && v && fornCurto(v) !== fornCurto(docForn) ? v : ""; };
+  function renderDiv(){
+    const box = $("#lt-div"); if (!box) return;
+    const d = divNF(), f = divForn();
+    if (d && div.par !== d.par) div.conf = false;
+    const html = (d ? `<div class="notice crit lote-div"><b>Número diferente do documento:</b> a conferência está com a nota <b>${esc(d.v)}</b>, mas o documento anexado é a nota <b>${esc(docNF)}</b>.
+        ${N.foto ? "O número foi lido da foto e pode ter saído errado. " : ""}O que for finalizado entra com o número do campo “Nota fiscal”.
+        <div class="actions"><button type="button" class="btn small" id="lt-div-usar">Usar ${esc(docNF)} (do documento)</button></div>
+        <label class="lote-conf"><input type="checkbox" id="lt-div-ok" ${div.conf ? "checked" : ""}> Confirmo: o número correto é ${esc(d.v)}</label></div>` : "")
+      + (f ? `<div class="notice warn lote-div">O fornecedor do campo (<b>${esc(f)}</b>) é diferente do que foi lido no documento (<b>${esc(docForn)}</b>). <button type="button" class="link small-link" id="lt-forn-usar">Usar o do documento</button></div>` : "");
+    if (box.dataset.html === html) return;
+    box.innerHTML = html; box.dataset.html = html;
+    const u = $("#lt-div-usar"); if (u) u.onclick = () => { $("#lt-nf").value = docNF; div.conf = false; conferirRepeticao(); sairDaRevisao(); atualizarTudo(); };
+    const c = $("#lt-div-ok"); if (c) c.onchange = () => { const d2 = divNF(); div.conf = c.checked && !!d2; div.par = d2 ? d2.par : ""; sairDaRevisao(); atualizarTudo(); };
+    const fu = $("#lt-forn-usar"); if (fu) fu.onclick = () => { $("#lt-forn").value = docForn; conferirRepeticao(); sairDaRevisao(); atualizarTudo(); };
+  }
   function pendencias(dups){
     const out = [];
     if (!nfNorm($("#lt-nf").value)) out.push("Informe o número da nota fiscal.");
+    if (!divResolvida()) out.push(`O número da nota (${$("#lt-nf").value.trim()}) é diferente do documento anexado (${docNF}): use o do documento ou confirme o número digitado.`);
     if (rep.estado === "conferindo") out.push("Aguarde: conferindo se a nota já foi lançada…");
     if ((rep.estado === "repetida" || rep.estado === "falhou") && !repConfirmada()) out.push(rep.estado === "repetida" ? "Esta nota já foi lançada: confirme a nova entrega ou feche sem lançar." : "Não foi possível conferir se a nota já foi lançada: tente de novo ou confirme.");
     const v = vivas();
@@ -2481,11 +2538,12 @@ function abrirLote(){
 
   const soma = N.itens.reduce((t, it) => t + (Number(it.valorTotal)||0), 0);
   $("#modal-box").innerHTML = `
-    <h3>Conferir a nota${nf0 ? " " + esc(nf0) : ""}</h3>
-    <p class="muted" style="margin:-6px 0 10px">${esc([forn0, N.data ? "emitida em " + fData(N.data) : "", N.valorTotal != null ? "total " + fBRL(N.valorTotal) : ""].filter(Boolean).join(" · "))}.</p>
+    <h3 id="lt-tit">Conferir a nota${nf0 ? " " + esc(nf0) : ""}</h3>
+    <p class="muted" id="lt-sub" style="margin:-6px 0 10px">${esc([forn0, N.data ? "emitida em " + fData(N.data) : "", N.valorTotal != null ? "total " + fBRL(N.valorTotal) : ""].filter(Boolean).join(" · "))}.</p>
     <p class="lote-resumo" id="lt-resumo"></p>
     ${N.foto ? `<div class="notice">Estes itens foram lidos da <b>foto</b> da nota. Confira nomes, quantidades e valores com a nota antes de finalizar.${N.valorTotal != null && Math.abs(soma - N.valorTotal) > 0.05 ? " A soma dos itens não bate com o total da nota: pode ter faltado algum item." : ""}</div>` : ""}
     <div id="lt-rep"></div>
+    <div id="lt-div"></div>
     <form class="form" id="f-lote" novalidate autocomplete="off">
       <div class="field"><label for="lt-forn">Fornecedor</label><input class="input" id="lt-forn" value="${esc(forn0)}" list="dl-forn"></div>
       <div class="field"><label for="lt-nf">Nota fiscal</label><input class="input" id="lt-nf" value="${esc(nf0)}" inputmode="numeric"></div>
@@ -2587,7 +2645,10 @@ function abrirLote(){
     const v = vivas(), dups = duplicadas();
     const repTxt = rep.estado === "repetida" ? `<p class="lote-aviso crit">Nota já lançada antes: será registrada de novo, com o motivo “${esc(rep.conf.mot.trim())}”.</p>` : rep.estado === "falhou" ? `<p class="lote-aviso crit">Sem conferir se a nota já foi lançada, com o motivo “${esc(rep.conf.mot.trim())}”.</p>` : "";
     const saldo = {}; // saldo previsto acumulado: duas linhas no mesmo material somam em sequência
-    $("#lt-rev").innerHTML = `<h4>Confira antes de registrar</h4>${repTxt}<ol>${v.map(l => {
+    const nfRev = $("#lt-nf").value.trim(), fornRev = $("#lt-forn").value.trim();
+    const cabRev = `<p class="lote-rev-nota">Nota <b>${esc(nfRev)}</b>${fornRev ? ` · <b>${esc(fornRev)}</b>` : ""} · entrada em ${esc(fData($("#lt-data").value || hoje()))}</p>`
+      + (divNF() ? `<p class="lote-aviso crit">Número confirmado diferente do documento anexado (${esc(docNF)}).</p>` : "");
+    $("#lt-rev").innerHTML = `<h4>Confira antes de registrar</h4>${cabRev}${repTxt}<ol>${v.map(l => {
       const el = linhaEl(l), qtd = pQtd($("[data-k=qtd]", el).value), novo = l.sel === "__novo", it = novo ? null : itemDe(l.sel), r = comparar(l);
       const antes = it ? (l.sel in saldo ? saldo[l.sel] : (Number(it.qtd) || 0)) : 0, depois = antes + qtd; if (it) saldo[l.sel] = depois;
       const nome = novo ? (($("[data-k=nome]", el) || {}).value || "").trim() || nomeDeNota(l.it.descricao) : (it ? it.nome : "—");
@@ -2604,6 +2665,10 @@ function abrirLote(){
   // ----- estado da tela: selos, avisos de cada linha, pendências e botão -----
   function atualizarTudo(){
     if (!form.isConnected) return;
+    const nfV = $("#lt-nf").value.trim(), fornV = $("#lt-forn").value.trim();
+    $("#lt-tit").textContent = "Conferir a nota" + (nfV ? " " + nfV : "");
+    $("#lt-sub").textContent = [fornV, N.data ? "emitida em " + fData(N.data) : "", N.valorTotal != null ? "total " + fBRL(N.valorTotal) : ""].filter(Boolean).join(" · ") + ".";
+    renderDiv();
     const dups = duplicadas();
     linhas.forEach(l => {
       const el = linhaEl(l); if (!el) return;
@@ -2639,7 +2704,7 @@ function abrirLote(){
   let espera = null;
   form.addEventListener("input", e => {
     if (["lt-nf","lt-forn"].includes(e.target.id)) { clearTimeout(espera); espera = setTimeout(conferirRepeticao, 700); }
-    if (e.target.matches("[data-k=qtd],[data-k=valor],[data-k=nome],#lt-nf")) { sairDaRevisao(); atualizarTudo(); }
+    if (e.target.matches("[data-k=qtd],[data-k=valor],[data-k=nome],#lt-nf,#lt-forn")) { sairDaRevisao(); atualizarTudo(); }
   });
   form.addEventListener("click", e => {
     const b = e.target.closest("[data-k=esquecer]"); if (!b) return;
@@ -2767,7 +2832,7 @@ renderMemBtn();
 
 // depois de finalizar a nota, a tela Registrar mostra o que entrou e fica limpa para a próxima
 function mostrarResumoNota(R){
-  S.nfArq = []; S.nfLida = null; S.nfAnexo = null;
+  S.nfArq = []; S.nfLida = null; S.nfAnexo = null; S.nfAuto = null;
   ["m-forn","m-nf","m-valor","m-qtd","m-obs","m-recebeu"].forEach(id => $("#"+id).value = "");
   S.picked = null; renderPicked(); renderNfAnexo();
   const soma = R.itens.reduce((t, r) => t + (r.valor !== "" && r.valor != null ? Number(r.valor) * Number(r.qtd) : 0), 0);

@@ -350,6 +350,7 @@ td.mono{white-space:nowrap}
 .nf-lista{display:flex;gap:6px;flex-wrap:wrap}
 .nf-chip{display:inline-flex;gap:8px;align-items:center;background:var(--surface-2);border-radius:6px;padding:5px 10px;font-size:.85rem}
 .nf-chip.ok{background:var(--ok-bg)}
+.nf-chip.aviso{background:var(--crit-bg);display:inline;line-height:1.4}
 .nf-ver{display:grid;gap:12px}
 .nf-item{min-height:60px;display:flex;align-items:center;gap:8px}
 .foto-ver.nf-img{width:100%;height:auto;max-height:70vh;background:var(--surface-2)}
@@ -396,6 +397,9 @@ td.mono{white-space:nowrap}
 .lote-pend[hidden]{display:none}
 .lote-rep ul{margin:6px 0 8px;padding-left:20px}
 .lote-rep .actions{margin-top:8px}
+.lote-div .actions{margin:8px 0 6px}
+.lote-div{margin-bottom:10px}
+.lote-rev-nota{margin:0 0 8px}
 .rep-conf{margin-top:10px}
 .rep-campos{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:10px;margin-top:8px}
 .rep-campos[hidden]{display:none}
