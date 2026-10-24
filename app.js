@@ -35,7 +35,7 @@ const SETORES_PERM = [["Manutenção","setor_manutencao"],["Limpeza","setor_limp
 const setoresDasPerms = p => { const l = SETORES_PERM.filter(x => p && p[x[1]]).map(x => x[0]); return l.length ? l : ["Manutenção"]; };
 const doSetor = x => setorDe(x) === S.setor;
 const can = p => !!(S.perms && S.perms[p]);
-const ABAS_PERM = {painel:["painel"], demandas:["dem_ver","dem_executar","dem_delegar"], os:["os_ver","os_abrir","os_atender","os_gerenciar"], registrar:["registrar_saida","registrar_entrada","registrar_troca","registrar_emprestimo"], itens:["itens_ver"], historico:["historico_ver"], emprestimos:["devolver","registrar_emprestimo"], dashboard:["dashboard"], indicadores:["dashboard"], categorias:["itens_ver"], prestadores:["os_ver","os_abrir","os_atender","os_gerenciar","dem_ver","dem_executar","dem_delegar"], equipe:["os_gerenciar","dem_delegar"], minhaequipe:["os_gerenciar","dem_delegar"], usuarios:["usuarios"], inicio:["pendencias","usuarios","acessos"], pendencias:["pendencias"], pdpainel:["pendencias"], rondas:["ronda_ver","ronda_fazer"], unidades:["un_ver","un_editar"], uncadastro:["un_ver","un_editar"], unconfig:["un_editar"], medlanc:["med_lancar"], medidores:["med_ver","med_lancar"], medrel:["med_ver","med_lancar"], cotacoes:["pendencias"], acessos:["acessos"]};
+const ABAS_PERM = {painel:["painel"], demandas:["dem_ver","dem_executar","dem_delegar"], os:["os_ver","os_abrir","os_atender","os_gerenciar"], registrar:["registrar_saida","registrar_entrada","registrar_troca","registrar_emprestimo"], itens:["itens_ver"], historico:["historico_ver"], emprestimos:["devolver","registrar_emprestimo"], dashboard:["dashboard"], indicadores:["dashboard"], categorias:["itens_ver"], prestadores:["os_ver","os_abrir","os_atender","os_gerenciar","dem_ver","dem_executar","dem_delegar"], equipe:["os_gerenciar","dem_delegar"], minhaequipe:["os_gerenciar","dem_delegar"], usuarios:["usuarios"], inicio:["pendencias","usuarios","acessos"], pendencias:["pendencias"], pdpainel:["pendencias"], rondas:["ronda_ver","ronda_fazer"], unidades:["un_ver","un_editar"], uncadastro:["un_ver","un_editar"], unconfig:["un_editar"], medlanc:["med_lancar"], medidores:["med_ver","med_lancar"], medrel:["med_ver","med_lancar"], esreservas:["espacos"], esvistorias:["espacos"], esespacos:["espacos"], cotacoes:["pendencias"], acessos:["acessos"]};
 // Se o navegador ainda estiver com a página antiga guardada, o menu Administração não existe nela:
 // o resto do sistema continua funcionando normalmente.
 const TEM_ADM = !!(document.getElementById("tab-adm") && document.getElementById("adm-menu") && document.getElementById("t-pendencias"));
@@ -44,13 +44,14 @@ if (!TEM_ADM || !document.getElementById("t-pdpainel")) delete ABAS_PERM.pdpaine
 if (!TEM_ADM || !document.getElementById("t-inicio")) delete ABAS_PERM.inicio;
 if (!TEM_ADM || !document.getElementById("t-rondas")) delete ABAS_PERM.rondas;
 if (!TEM_ADM || !document.getElementById("t-unidades")) { delete ABAS_PERM.unidades; delete ABAS_PERM.uncadastro; delete ABAS_PERM.unconfig; }
+if (!TEM_ADM || !document.getElementById("t-esreservas")) { delete ABAS_PERM.esreservas; delete ABAS_PERM.esvistorias; delete ABAS_PERM.esespacos; }
 if (!TEM_ADM || !document.getElementById("t-medlanc")) { delete ABAS_PERM.medlanc; delete ABAS_PERM.medidores; delete ABAS_PERM.medrel; }
 if (!document.getElementById("t-indicadores")) delete ABAS_PERM.indicadores;
 if (!TEM_ADM || !document.getElementById("t-acessos")) delete ABAS_PERM.acessos;
 // O que aparece depende de como a pessoa entrou: Manutenção (tudo do estoque, OS e demandas),
 // Limpeza (só o estoque da limpeza) ou Administração (só o menu Administração).
 // "inicio" primeiro: é a tela que abre ao entrar pela Administração
-const ABAS_ADM = ["inicio","pendencias","pdpainel","cotacoes","rondas","unidades","uncadastro","unconfig","medlanc","medidores","medrel","usuarios","acessos"];
+const ABAS_ADM = ["inicio","pendencias","pdpainel","cotacoes","rondas","unidades","uncadastro","unconfig","medlanc","medidores","medrel","esreservas","esvistorias","esespacos","usuarios","acessos"];
 const TIPOS_LIMPEZA = ["saida","entrada"];
 const modo = () => S.adm ? "Administração" : S.setor;
 // Mesmo menu nos três setores (pedido de 24/10/2026); cada pessoa vê só o que o perfil permite.
@@ -61,7 +62,7 @@ const modo = () => S.adm ? "Administração" : S.setor;
 // Ronda: só no setor Administração (pedido de 24/10/2026)
 // Unidades e moradores: só no setor Administração (pedido de 24/10/2026; dados pessoais)
 // Central de medições (água, energia e gás): só no setor Administração (pedido de 24/10/2026)
-const SO_ADM = ["inicio","pdpainel","pendencias","cotacoes","rondas","unidades","uncadastro","unconfig","medlanc","medidores","medrel"], FORA_LIMPEZA = ["demandas","emprestimos","minhaequipe"], SO_MANUT = ["prestadores"];
+const SO_ADM = ["inicio","pdpainel","pendencias","cotacoes","rondas","unidades","uncadastro","unconfig","medlanc","medidores","medrel","esreservas","esvistorias","esespacos"], FORA_LIMPEZA = ["demandas","emprestimos","minhaequipe"], SO_MANUT = ["prestadores"];
 const naManut = () => !S.adm && S.setor !== "Limpeza";
 const abaNoModo = t => t === "painel" ? !S.adm : SO_ADM.includes(t) ? S.adm : SO_MANUT.includes(t) ? naManut() : !(!S.adm && S.setor === "Limpeza" && FORA_LIMPEZA.includes(t));
 const ehSindico = () => norm(S.perfil).includes("sindico");
@@ -169,7 +170,7 @@ function mostrarLogin(msg){
   ($("#l-usuario").value ? $("#l-senha") : $("#l-usuario")).focus();
 }
 // sair encerra a sessão também no servidor: o código guardado no aparelho deixa de valer
-function encerrarLocal(msg){ S.token = ""; S.perms = {}; S.rel = null; S.eq = null; S.pend = null; unLimparMemoria(); mdLimpar(); fecharModal(); apagarSessao(); abrirMenuAdm(false); fecharMenu(); mostrarLogin(msg); renderMenu(); }
+function encerrarLocal(msg){ S.token = ""; S.perms = {}; S.rel = null; S.eq = null; S.pend = null; unLimparMemoria(); mdLimpar(); esLimpar(); fecharModal(); apagarSessao(); abrirMenuAdm(false); fecharMenu(); mostrarLogin(msg); renderMenu(); }
 function sair(msg){
   const tk = S.token;
   if (tk && API) { try { fetch(API, {method:"POST", body:JSON.stringify({acao:"sair", token:tk}), redirect:"follow", keepalive:true}).catch(()=>{}); } catch(e){} }
@@ -310,6 +311,7 @@ function setTab(t){
   if (t==="rondas") { renderRondas(); carregarRondas(true); }
   if (t==="unidades" || t==="uncadastro" || t==="unconfig") { renderUnidadesTudo(); carregarUnidades(); }
   if (t==="medlanc" || t==="medidores" || t==="medrel") { renderMedTudo(); carregarMed(); }
+  if (t==="esreservas" || t==="esvistorias" || t==="esespacos") { renderEspTudo(); carregarEsp(); }
   if (t==="inicio") { renderInicio(); if (can("pendencias")) carregarPend(); }
   if (t==="acessos") carregarAcessos();
   if (t==="cotacoes") { renderCot(); carregarCot(); }
@@ -418,6 +420,8 @@ const MENU = [
     {t:"unidades", rot:"Lista de unidades"}, {t:"uncadastro", rot:"Atualização cadastral"}, {t:"unconfig", rot:"Configurações"}]},
   {g:"Central de medições", ico:'<path d="M3 7.5c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0M3 12.5c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0M3 17.5c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0"/>', itens:[
     {t:"medlanc", rot:"Sinalizar consumo"}, {t:"medidores", rot:"Meus medidores"}, {t:"medrel", rot:"Relatórios"}]},
+  {g:"Espaços", ico:'<path d="M4 21V5a1 1 0 0 1 1-1h9v17M14 8h5v13M3 21h18M10 12v1"/>', itens:[
+    {t:"esvistorias", rot:"Checklist"}, {t:"esreservas", rot:"Reservas", b:"b-esp"}, {t:"esespacos", rot:"Espaços"}]},
   {g:"Administração", ico:'<path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 6.5M18 14.5a6 6 0 0 1 3.5 5.5"/>', itens:[
     {t:"usuarios", rot:"Usuários"}, {t:"equipe", rot:"Equipe"}, {t:"minhaequipe", rot:"Minha equipe"}, {t:"acessos", rot:"Histórico de acessos"}]},
   {g:"Gestão", ico:'<path d="M5 19V11M10 19V6M15 19v-5M20 19V9"/>', itens:[{t:"dashboard", rot:"Dashboard do estoque"}]}
@@ -7077,6 +7081,253 @@ if ($("#t-medlanc")) {
     else if (d.mrTodos) { MD.rSel[d.mrTodos] = []; renderMedRel(); }
     else if (d.mrM) { const s = new Set(MD.rSel[d.tipo] || []); if (s.has(d.mrM)) s.delete(d.mrM); else s.add(d.mrM); MD.rSel[d.tipo] = [...s]; renderMedRel(); }
   });
+}
+
+// ---------- espaços: reservas (lidas dos e-mails da administradora), checklist de entrega/devolução e cadastro (só Administração) ----------
+const ES = { d:null, carregando:false, erro:"", em:0, vista:"proximas", fEsp:"", q:"" };
+const ES_ITENS = ["Chaves entregues / devolvidas","Limpeza do salão e dos banheiros","Louças, copos e talheres (quantidade)","Geladeira e freezer","Fogão, forno e cooktop","Churrasqueira","Mesas e cadeiras","Ar-condicionado e ventiladores","Iluminação e tomadas","Som e TV","Lixo retirado","Paredes, piso, vidros e mobiliário sem danos"];
+const ES_ST = ["Solicitada","Pré-reserva","Confirmada","Cancelada","Recusada","Realizada"];
+const ES_COR = {"Solicitada":"ambar","Pré-reserva":"ambar","Confirmada":"ok","Cancelada":"cinza","Recusada":"verm","Realizada":"conc"};
+const esAtiva = r => r.status !== "Cancelada" && r.status !== "Recusada";
+const esUn = r => [r.bloco, r.unidade ? "Unid. " + r.unidade : ""].filter(Boolean).join(" · ") || "—";
+const esDiaSem = d => ["dom","seg","ter","qua","qui","sex","sáb"][new Date(d + "T12:00:00").getDay()] || "";
+const esVist = (r, fase) => ES.d.vistorias.find(v => v.reserva === r.id && v.fase === fase);
+function esLimpar(){ ES.d = null; ES.erro = ""; }
+function esAplicar(r){ if (!r || !Array.isArray(r.reservas)) return false; ES.d = {espacos:r.espacos || [], reservas:r.reservas, vistorias:r.vistorias || []}; ES.em = Date.now(); esBadge(); return true; }
+async function carregarEsp(forcar){
+  if (!TEM_ADM || !S.token || ES.carregando || !["esreservas","esvistorias","esespacos"].some(podeAba)) return;
+  if (!forcar && ES.d && Date.now() - ES.em < 60000) { renderEspTudo(); return; }
+  ES.carregando = true;
+  try { esAplicar(await api("espacos")); ES.erro = ""; } catch(e){ ES.erro = e.message; toast(e.message, true); }
+  finally { ES.carregando = false; renderEspTudo(); }
+}
+function renderEspTudo(){ renderEsReservas(); renderEsVistorias(); renderEsEspacos(); }
+function esCarregando(box){
+  if (ES.erro && !ES.d) { box.innerHTML = `<div class="notice crit">${esc(ES.erro)}${/desconhecida/i.test(ES.erro) ? " Os Espaços precisam do Apps Script novo (colar o código e implantar uma nova versão)." : ""}</div>`; return true; }
+  if (!ES.d) { box.innerHTML = `<div class="empty"><span class="spin" aria-hidden="true"></span> Carregando…</div>`; return true; }
+  return false;
+}
+// pré-reservas e solicitações ainda por confirmar (data de hoje em diante)
+function esBadge(){ const b = $("#b-esp"); if (!b || !ES.d) return; const n = ES.d.reservas.filter(r => (r.status === "Pré-reserva" || r.status === "Solicitada") && r.data >= hoje()).length; b.textContent = n; b.hidden = !n; menuBadges(); }
+// ---- Reservas ----
+function renderEsReservas(){
+  const sec = $("#t-esreservas"); if (!sec || sec.hidden) return;
+  $$("#er-vistas [data-v]").forEach(b => b.setAttribute("aria-selected", b.dataset.v === ES.vista ? "true" : "false"));
+  const box = $("#er-corpo"); if (esCarregando(box)) return;
+  const h = hoje(), L = ES.d.reservas;
+  $("#er-esp").innerHTML = `<option value="">Todos os espaços</option>` + ES.d.espacos.map(e => `<option ${e.nome === ES.fEsp ? "selected" : ""}>${esc(e.nome)}</option>`).join("");
+  const pend = r => r.status === "Pré-reserva" || r.status === "Solicitada";
+  const nV = {proximas:L.filter(r => r.data >= h && esAtiva(r)).length, pendentes:L.filter(r => pend(r) && r.data >= h).length};
+  $$("#er-vistas [data-v]").forEach(b => { const n = nV[b.dataset.v]; b.querySelector(".badge") && (b.querySelector(".badge").textContent = n || "", b.querySelector(".badge").hidden = !n); });
+  const q = norm(ES.q).trim();
+  const vis = L.filter(r => (ES.vista === "proximas" ? r.data >= h && esAtiva(r) : ES.vista === "pendentes" ? pend(r) && r.data >= h : ES.vista === "passadas" ? r.data < h : true)
+    && (!ES.fEsp || r.espaco === ES.fEsp) && (!q || norm([r.solicitacao, r.bloco, r.unidade, r.espaco, r.obs].join(" ")).includes(q)));
+  if (ES.vista === "passadas" || ES.vista === "todas") vis.reverse();
+  const conflito = r => esAtiva(r) && L.some(x => x !== r && esAtiva(x) && x.espaco === r.espaco && x.data === r.data);
+  $("#er-conta").textContent = `${vis.length} reserva${vis.length === 1 ? "" : "s"}`;
+  const vi = (r, f) => { const v = esVist(r, f); return v ? `<span class="md-st ${Number(v.problemas) ? "verm" : "ok"}" title="${esc(f)} feita em ${fDataHora(v.feitoEm)}">${f === "Entrega" ? "Entrega" : "Devolução"} ${Number(v.problemas) ? "· " + v.problemas + " problema(s)" : "✓"}</span>` : ""; };
+  box.innerHTML = `<div class="tablebox md-hist"><table><thead><tr><th>Data</th><th>Espaço</th><th>Bloco / unidade</th><th class="hide-s">Solicitação</th><th>Status</th><th class="hide-m">Checklist</th><th>Ações</th></tr></thead><tbody>
+    ${vis.length ? vis.map(r => `<tr><td class="md-nw"><b>${fData(r.data)}</b><span class="sub">${esDiaSem(r.data)}${r.data === h ? " · hoje" : ""}</span></td><td>${esc(r.espaco)}</td><td>${esc(esUn(r))}</td>
+      <td class="hide-s mono">${esc(r.solicitacao || "—")}<span class="sub">${esc(r.origem === "e-mail" ? "pelo e-mail" : r.origem === "colado" ? "e-mail colado" : "manual")}</span></td>
+      <td><span class="md-st ${ES_COR[r.status] || "cinza"}">${esc(r.status)}</span>${conflito(r) ? `<span class="md-st verm" title="Outra reserva ativa no mesmo espaço e dia">conflito de data</span>` : ""}</td>
+      <td class="hide-m">${vi(r, "Entrega")}${vi(r, "Devolução")}${!esVist(r, "Entrega") && !esVist(r, "Devolução") ? "—" : ""}</td>
+      <td class="md-ac">${pend(r) ? `<button type="button" class="btn small primary" data-er-conf="${esc(r.id)}">Confirmar</button>` : ""}${esAtiva(r) ? `<button type="button" class="btn small" data-er-vist="${esc(r.id)}">Checklist</button>` : ""}<button type="button" class="md-ib" data-er-ed="${esc(r.id)}" title="Editar" aria-label="Editar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></svg></button></td></tr>`).join("")
+      : `<tr><td colspan="7"><div class="empty">Nenhuma reserva aqui. As reservas entram sozinhas pelos e-mails da administradora, ou use <b>Colar e-mail</b> / <b>+ Nova reserva</b>.</div></td></tr>`}</tbody></table></div>`;
+}
+function esEditar(id){
+  const r = id ? ES.d.reservas.find(x => x.id === id) : null, v = r || {espaco:(ES.d.espacos[0] || {}).nome || "Espaço Gourmet", data:hoje(), status:"Confirmada"};
+  $("#modal-box").innerHTML = `<h3>${r ? "Reserva" + (r.solicitacao ? " " + esc(r.solicitacao) : "") : "Nova reserva"}</h3>
+    <form class="form" id="er-f" novalidate autocomplete="off">
+      <div class="field"><label for="er-e">Espaço</label><input class="input" id="er-e" list="er-dl" value="${esc(v.espaco || "")}" maxlength="60"><datalist id="er-dl">${ES.d.espacos.map(e => `<option>${esc(e.nome)}</option>`).join("")}</datalist></div>
+      <div class="field"><label for="er-d">Data <span class="req">*</span></label><input class="input" type="date" id="er-d" value="${esc(v.data || "")}"></div>
+      <div class="field"><label for="er-b">Bloco</label><input class="input" id="er-b" value="${esc(v.bloco || "")}" maxlength="60" placeholder="Ex.: BL 06 - MYCONOS"></div>
+      <div class="field"><label for="er-u">Unidade</label><input class="input" id="er-u" value="${esc(v.unidade || "")}" maxlength="20"></div>
+      <div class="field"><label for="er-s">Nº da solicitação</label><input class="input mono" id="er-s" value="${esc(v.solicitacao || "")}" maxlength="20"></div>
+      <div class="field"><label for="er-st">Status</label><select class="input" id="er-st">${ES_ST.map(s => `<option ${s === v.status ? "selected" : ""}>${s}</option>`).join("")}</select></div>
+      <div class="field full"><label for="er-o">Observação</label><input class="input" id="er-o" value="${esc(v.obs || "")}" maxlength="300"></div>
+    </form>
+    <div class="actions"><button class="btn primary" type="button" id="er-ok">Salvar</button><button class="btn" type="button" id="er-x">Cancelar</button>${r ? `<button class="link danger" type="button" id="er-del">Excluir reserva</button>` : ""}<span class="hint" id="er-msg"></span></div>`;
+  $("#modal").hidden = false; $("#er-x").onclick = fecharModal;
+  const fim = x => { if (esAplicar(x)) { fecharModal(); renderEspTudo(); } };
+  $("#er-ok").onclick = () => enviar($("#er-ok"), $("#er-msg"), "espReserva", {reserva:Object.assign(r ? {id:r.id} : {}, {espaco:$("#er-e").value, data:$("#er-d").value, bloco:$("#er-b").value, unidade:$("#er-u").value, solicitacao:$("#er-s").value, status:$("#er-st").value, obs:$("#er-o").value})}, fim);
+  if ($("#er-del")) $("#er-del").onclick = ev => { const b = ev.target; if (!b.dataset.conf) { b.dataset.conf = "1"; b.textContent = "Confirmar exclusão"; return; } enviar(b, $("#er-msg"), "espReserva", {op:"excluir", reserva:{id:r.id}}, fim); };
+}
+function esColar(){
+  $("#modal-box").classList.add("largo");
+  $("#modal-box").innerHTML = `<h3>Colar e-mail de reserva</h3>
+    <p class="muted">Abra o e-mail da reserva, selecione tudo (Ctrl+A), copie (Ctrl+C) e cole aqui.</p>
+    <textarea class="input" id="ec-t" rows="9" placeholder="Reserva - PRÉ RESERVA ESPAÇO GOURMET&#10;Bloco: …&#10;Unidade: …&#10;Número da Solicitação: …"></textarea>
+    <div id="ec-prev" class="hint" style="margin-top:8px"></div>
+    <div class="actions" style="margin-top:12px"><button class="btn" type="button" id="ec-ler">Ler</button><button class="btn primary" type="button" id="ec-ok" disabled>Cadastrar</button><button class="btn" type="button" id="ec-x">Cancelar</button><span class="hint" id="ec-msg"></span></div>`;
+  $("#modal").hidden = false; $("#ec-x").onclick = fecharModal; $("#ec-t").focus();
+  $("#ec-t").oninput = () => { $("#ec-ok").disabled = true; $("#ec-prev").innerHTML = ""; };
+  $("#ec-ler").onclick = async () => {
+    const r = await enviar($("#ec-ler"), $("#ec-msg"), "espColar", {texto:$("#ec-t").value, previa:true});
+    if (!r || !r.lida) return; $("#ec-msg").textContent = "";
+    const x = r.lida, ja = ES.d.reservas.find(z => String(z.solicitacao) === x.solicitacao);
+    $("#ec-prev").innerHTML = `<div class="notice">${ja ? `<b>Já cadastrada</b> (status atual: ${esc(ja.status)}) — vai ser atualizada.<br>` : ""}Solicitação <b>${esc(x.solicitacao)}</b> · <b>${esc(x.espaco)}</b> · ${x.data ? fData(x.data) : "sem data"} · ${esc([x.bloco, x.unidade && "Unid. " + x.unidade].filter(Boolean).join(" · "))} · status <b>${esc(x.status)}</b></div>`;
+    $("#ec-ok").disabled = false;
+  };
+  $("#ec-ok").onclick = () => enviar($("#ec-ok"), $("#ec-msg"), "espColar", {texto:$("#ec-t").value}, x => { if (esAplicar(x)) { fecharModal(); renderEspTudo(); } });
+}
+// ---- Checklist (vistoria de entrega e devolução) ----
+function renderEsVistorias(){
+  const sec = $("#t-esvistorias"); if (!sec || sec.hidden) return;
+  const box = $("#ev-corpo"); if (esCarregando(box)) return;
+  const h = hoje(), ini = mdSomaDia(h, -7), fim = mdSomaDia(h, 2);
+  const fazer = ES.d.reservas.filter(r => esAtiva(r) && r.status !== "Realizada" && r.data >= ini && r.data <= fim)
+    .flatMap(r => [!esVist(r, "Entrega") ? {r, f:"Entrega"} : null, r.data <= h && !esVist(r, "Devolução") ? {r, f:"Devolução"} : null].filter(Boolean));
+  const V = ES.d.vistorias, R = id => ES.d.reservas.find(x => x.id === id);
+  box.innerHTML = `<h3 class="md-sub-t">Para fazer</h3>${fazer.length ? `<div class="es-fazer">${fazer.map(({r, f}) => `<div class="panel es-f"><div><b>${f === "Entrega" ? "Entrega" : "Devolução"}</b> · ${esc(r.espaco)}<span class="sub">${fData(r.data)} (${esDiaSem(r.data)}) · ${esc(esUn(r))}</span></div><button type="button" class="btn small primary" data-ev-fazer="${esc(r.id)}|${f}">Fazer checklist</button></div>`).join("")}</div>`
+      : `<p class="muted">Nenhuma vistoria pendente para reservas de ${fData(ini)} a ${fData(fim)}.</p>`}
+    <h3 class="md-sub-t">Vistorias feitas</h3>
+    <div class="tablebox md-hist"><table><thead><tr><th>Data</th><th>Espaço</th><th>Fase</th><th class="hide-s">Reserva</th><th>Resultado</th><th class="hide-m">Feita por</th></tr></thead><tbody>
+    ${V.length ? V.map(v => { const r = R(v.reserva); return `<tr class="click" tabindex="0" data-ev-ver="${esc(v.id)}"><td class="md-nw"><b>${fData(v.data)}</b></td><td>${esc(v.espaco)}</td><td>${esc(v.fase)}</td><td class="hide-s">${r ? `${fData(r.data)} · ${esc(esUn(r))}` : "avulsa"}</td>
+      <td><span class="md-st ${Number(v.problemas) ? "verm" : "ok"}">${Number(v.problemas) ? v.problemas + " problema(s)" : "✓ Tudo OK"}</span></td><td class="hide-m">${esc(v.feitoPor)}<span class="sub">${fDataHora(v.feitoEm)}</span></td></tr>`; }).join("")
+      : `<tr><td colspan="6"><div class="empty">Nenhuma vistoria ainda.</div></td></tr>`}</tbody></table></div>`;
+}
+function esVistoria(resId, fase){
+  const r = resId ? ES.d.reservas.find(x => x.id === resId) : null;
+  const esps = ES.d.espacos.filter(e => e.ativo !== "Não");
+  const espNome = r ? r.espaco : (esps[0] || {}).nome || "";
+  const itensDe = n => { const e = ES.d.espacos.find(x => x.nome === n); return e && e.itens.length ? e.itens : ES_ITENS; };
+  const ent = r ? esVist(r, "Entrega") : null;
+  $("#modal-box").classList.add("largo");
+  const desenhar = (nome, fs) => {
+    const itens = itensDe(nome), antes = fs === "Devolução" && ent ? new Map(ent.itens.map(x => [x.i, x])) : null;
+    $("#ev-itens").innerHTML = itens.map((it, i) => { const a = antes && antes.get(it);
+      return `<div class="es-it"><span class="es-it-n">${esc(it)}${a ? `<span class="sub">na entrega: ${esc(a.st)}${a.obs ? " — " + esc(a.obs) : ""}</span>` : ""}</span>
+        <span class="es-seg" role="radiogroup" aria-label="${esc(it)}">${["OK","Problema","N/A"].map(st => `<label><input type="radio" name="ev${i}" value="${st}"><span>${st}</span></label>`).join("")}</span>
+        <input class="input es-it-o" data-ev-o="${i}" maxlength="200" placeholder="O que foi encontrado" hidden></div>`; }).join("");
+    $("#ev-itens").dataset.itens = JSON.stringify(itens);
+  };
+  $("#modal-box").innerHTML = `<h3>Checklist de ${fase === "Devolução" ? "devolução" : "entrega"}</h3>
+    <p class="muted">${r ? `${esc(r.espaco)} · reserva de ${fData(r.data)} · ${esc(esUn(r))}${r.solicitacao ? " · solicitação " + esc(r.solicitacao) : ""}` : "Vistoria avulsa (sem reserva)"}</p>
+    <div class="form">${r ? "" : `<div class="field"><label for="ev-e">Espaço</label><select class="input" id="ev-e">${esps.map(e => `<option>${esc(e.nome)}</option>`).join("")}</select></div>
+      <div class="field"><label for="ev-f">Fase</label><select class="input" id="ev-f"><option>Entrega</option><option ${fase === "Devolução" ? "selected" : ""}>Devolução</option></select></div>`}
+      <div class="field"><label for="ev-resp">Morador / responsável presente</label><input class="input" id="ev-resp" maxlength="80"></div></div>
+    <div class="actions" style="margin:8px 0"><button type="button" class="btn small" id="ev-tudo">Marcar todos OK</button></div>
+    <div id="ev-itens" class="es-its"></div>
+    <div class="field full"><label for="ev-obs">Observação geral</label><textarea class="input" id="ev-obs" rows="2" maxlength="500"></textarea></div>
+    <div class="actions"><button class="btn primary" type="button" id="ev-ok">Salvar checklist</button><button class="btn" type="button" id="ev-x">Cancelar</button><span class="hint" id="ev-msg"></span></div>`;
+  $("#modal").hidden = false; $("#ev-x").onclick = fecharModal;
+  desenhar(espNome, fase);
+  if ($("#ev-e")) { $("#ev-e").onchange = () => desenhar($("#ev-e").value, $("#ev-f").value); $("#ev-f").onchange = () => desenhar($("#ev-e").value, $("#ev-f").value); }
+  $("#ev-itens").onchange = ev => { const m = /^ev(\d+)$/.exec(ev.target.name || ""); if (m) { const o = $(`#ev-itens [data-ev-o="${m[1]}"]`); o.hidden = ev.target.value !== "Problema"; if (!o.hidden) o.focus(); } };
+  $("#ev-tudo").onclick = () => $$("#ev-itens input[value=OK]").forEach(x => { x.checked = true; $(`#ev-itens [data-ev-o="${x.name.slice(2)}"]`).hidden = true; });
+  $("#ev-ok").onclick = () => {
+    const itens = JSON.parse($("#ev-itens").dataset.itens).map((it, i) => { const c = $(`#ev-itens input[name="ev${i}"]:checked`); return {i:it, st:c ? c.value : "", obs:c && c.value === "Problema" ? $(`#ev-itens [data-ev-o="${i}"]`).value : ""}; });
+    enviar($("#ev-ok"), $("#ev-msg"), "espVistoria", {vistoria:{reserva:r ? r.id : "", espaco:r ? r.espaco : $("#ev-e").value, fase:r ? fase : $("#ev-f").value, itens, responsavel:$("#ev-resp").value, obs:$("#ev-obs").value}}, x => { if (esAplicar(x)) { fecharModal(); renderEspTudo(); } });
+  };
+}
+function esVerVistoria(id){
+  const v = ES.d.vistorias.find(x => x.id === id); if (!v) return;
+  $("#modal-box").classList.add("largo");
+  $("#modal-box").innerHTML = `<h3>Checklist de ${esc(v.fase.toLowerCase())} · ${esc(v.espaco)}</h3>
+    <p class="muted">${fData(v.data)} · feito por ${esc(v.feitoPor)} (${fDataHora(v.feitoEm)})${v.responsavel ? " · responsável: " + esc(v.responsavel) : ""}</p>
+    <div class="tablebox flat"><table><tbody>${v.itens.map(x => `<tr><td>${esc(x.i)}</td><td><span class="md-st ${x.st === "Problema" ? "verm" : x.st === "OK" ? "ok" : "cinza"}">${esc(x.st)}</span></td><td>${esc(x.obs || "")}</td></tr>`).join("")}</tbody></table></div>
+    ${v.obs ? `<p>${esc(v.obs)}</p>` : ""}<div class="actions" style="margin-top:10px"><button class="btn" type="button" id="ev-fx">Fechar</button></div>`;
+  $("#modal").hidden = false; $("#ev-fx").onclick = fecharModal;
+}
+// ---- Espaços ----
+function renderEsEspacos(){
+  const sec = $("#t-esespacos"); if (!sec || sec.hidden) return;
+  const box = $("#ee-corpo"); if (esCarregando(box)) return;
+  const h = hoje();
+  box.innerHTML = ES.d.espacos.length ? `<div class="md-grid">${ES.d.espacos.map(e => { const prox = ES.d.reservas.filter(r => r.espaco === e.nome && esAtiva(r) && r.data >= h);
+    return `<article class="panel md-card ${e.ativo === "Não" ? "inativo" : ""}"><div class="md-card-h"><span class="pp-ico laranja"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V5a1 1 0 0 1 1-1h9v17M14 8h5v13M3 21h18M10 12v1"/></svg></span><div><h3>${esc(e.nome)}</h3><span class="muted">${[e.capacidade && "até " + e.capacidade + " pessoas", e.horario].filter(Boolean).map(esc).join(" · ") || "&nbsp;"}</span></div>${e.ativo === "Não" ? `<span class="pill p-ajuste">Inativo</span>` : ""}</div>
+      <dl class="md-dl"><div><dt>Próximas reservas</dt><dd><b>${prox.length}</b>${prox[0] ? ` · próxima em ${fData(prox[0].data)}` : ""}</dd></div><div><dt>Itens do checklist</dt><dd>${e.itens.length}</dd></div></dl>
+      ${e.regras ? `<p class="muted md-obs-t es-regras">${esc(e.regras)}</p>` : ""}
+      <div class="md-card-a"><button type="button" class="btn small" data-ee-ed="${esc(e.id)}">Editar</button></div></article>`; }).join("")}</div>`
+    : `<div class="empty">Nenhum espaço cadastrado. Clique em <b>+ Novo espaço</b> (o Espaço Gourmet também é criado sozinho quando chega a primeira reserva).</div>`;
+}
+function esEspaco(id){
+  const e = id ? ES.d.espacos.find(x => x.id === id) : null, v = e || {nome:"", capacidade:"", horario:"08:00 às 24:00", regras:"", itens:ES_ITENS, ativo:"Sim"};
+  $("#modal-box").classList.add("largo");
+  $("#modal-box").innerHTML = `<h3>${e ? "Editar espaço" : "Novo espaço"}</h3>
+    <form class="form" id="ee-f" novalidate autocomplete="off">
+      <div class="field"><label for="ee-n">Nome <span class="req">*</span></label><input class="input" id="ee-n" value="${esc(v.nome)}" maxlength="60" placeholder="Ex.: Espaço Gourmet"></div>
+      <div class="field"><label for="ee-c">Capacidade (pessoas)</label><input class="input" id="ee-c" value="${esc(v.capacidade)}" maxlength="20"></div>
+      <div class="field full"><label for="ee-h">Horário de uso</label><input class="input" id="ee-h" value="${esc(v.horario)}" maxlength="60"></div>
+      <div class="field full"><label for="ee-r">Regras</label><textarea class="input" id="ee-r" rows="4" maxlength="3000">${esc(v.regras)}</textarea></div>
+      <div class="field full"><label for="ee-i">Itens do checklist (um por linha)</label><textarea class="input" id="ee-i" rows="8">${esc(v.itens.join("\n"))}</textarea></div>
+      ${e ? `<label class="field full md-chk"><input type="checkbox" id="ee-a" ${v.ativo !== "Não" ? "checked" : ""}> Espaço ativo</label>` : ""}
+    </form>
+    <div class="actions"><button class="btn primary" type="button" id="ee-ok">Salvar</button><button class="btn" type="button" id="ee-x">Cancelar</button><span class="hint" id="ee-msg"></span></div>`;
+  $("#modal").hidden = false; $("#ee-x").onclick = fecharModal; $("#ee-n").focus();
+  $("#ee-ok").onclick = () => enviar($("#ee-ok"), $("#ee-msg"), "espEspaco", {espaco:Object.assign(e ? {id:e.id} : {}, {nome:$("#ee-n").value, capacidade:$("#ee-c").value, horario:$("#ee-h").value, regras:$("#ee-r").value, itens:$("#ee-i").value.split("\n").map(x => x.trim()).filter(Boolean), ativo:e ? $("#ee-a").checked : true})}, x => { if (esAplicar(x)) { fecharModal(); renderEspTudo(); } });
+}
+if ($("#t-esreservas")) {
+  $("#er-vistas").addEventListener("click", ev => { const b = ev.target.closest("[data-v]"); if (b) { ES.vista = b.dataset.v; renderEsReservas(); } });
+  $("#er-esp").addEventListener("change", ev => { ES.fEsp = ev.target.value; renderEsReservas(); });
+  $("#er-q").addEventListener("input", ev => { ES.q = ev.target.value; renderEsReservas(); });
+  $("#er-nova").addEventListener("click", () => ES.d && esEditar(null));
+  $("#er-colar").addEventListener("click", () => ES.d && esColar());
+  $("#er-ler").addEventListener("click", ev => enviar(ev.target, null, "espEmails", {}, x => { esAplicar(x); renderEspTudo(); }));
+  $("#ev-avulsa").addEventListener("click", () => ES.d && esVistoria("", "Entrega"));
+  $("#ee-novo").addEventListener("click", () => ES.d && esEspaco(null));
+  document.addEventListener("click", ev => {
+    const el = ev.target.closest("[data-er-conf],[data-er-vist],[data-er-ed],[data-ev-fazer],[data-ev-ver],[data-ee-ed]");
+    if (!el || !el.closest("#t-esreservas, #t-esvistorias, #t-esespacos")) return;
+    const d = el.dataset;
+    if (d.erConf) { const r = ES.d.reservas.find(x => x.id === d.erConf); enviar(el, null, "espReserva", {reserva:Object.assign({}, r, {status:"Confirmada"})}, x => { esAplicar(x); renderEspTudo(); }); }
+    else if (d.erVist) { const r = ES.d.reservas.find(x => x.id === d.erVist); esVistoria(r.id, !esVist(r, "Entrega") ? "Entrega" : "Devolução"); }
+    else if (d.erEd) esEditar(d.erEd);
+    else if (d.evFazer) { const [id, f] = d.evFazer.split("|"); esVistoria(id, f); }
+    else if (d.evVer) esVerVistoria(d.evVer);
+    else if (d.eeEd) esEspaco(d.eeEd);
+  });
+}
+
+// ---- PDF "Solicitações" do site da administradora: data, título (espaço), e linhas com bloco, unidade e status ----
+const ES_MESES = ["janeiro","fevereiro","marco","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+const esEspDoTitulo = t => { const e = String(t).replace(/pr[ée][\s-]*reserva|cancelamento( da| de)?|reserva/gi, "").replace(/^[\s:–-]+|[\s:–-]+$/g, "").trim().toLowerCase().replace(/(^|\s)\S/g, x => x.toUpperCase()).replace(/\b(De|Da|Do|E)\b/g, x => x.toLowerCase()); return e || "Espaço Gourmet"; };
+const esBlocoLimpo = b => String(b).replace(/\s+/g, " ").trim().replace(/^(BL\s*\d+)\s*-\s*BL\s*\d+\s*-\s*/i, "$1 - ");
+const esChave = x => [x.data, norm(x.espaco).replace(/\s+/g, " ").trim(), (/BL\s*0*(\d+)/i.exec(String(x.bloco || "")) || [, norm(x.bloco)])[1], String(x.unidade || "").replace(/\D/g, "").replace(/^0+/, "")].join("|");
+function esLerBCF(linhas){
+  let data = "", esp = "Espaço Gourmet", pre = true; const out = [];
+  linhas.forEach(l0 => {
+    const l = String(l0).replace(/\s+/g, " ").trim(), n = norm(l);
+    let m = /^(\d{1,2}) ([a-z]+)\/(\d{4})$/.exec(n);
+    if (m) { const k = ES_MESES.indexOf(m[2]); if (k >= 0) data = `${m[3]}-${String(k + 1).padStart(2, "0")}-${m[1].padStart(2, "0")}`; return; }
+    if (/^hora\b.*bloco.*unidade/.test(n)) return;
+    m = /^(?:(\d{1,2}[:h]\d{2})\s+)?(bl\s*\d+.*?)\s+(\d{2,5})\s+(iniciada|confirmada|aprovada|cancelada|recusada|reprovada|finalizada|concluida|aguardando[a-z ]*?)(?:\s+(.*))?$/.exec(n);
+    if (m && data) {
+      const ini = n.indexOf(m[2]), bloco = esBlocoLimpo(l.slice(ini, ini + m[2].length).toUpperCase()), st = m[4];
+      const status = /confirm|aprov/.test(st) ? "Confirmada" : /cancel/.test(st) ? "Cancelada" : /recus|reprov/.test(st) ? "Recusada" : /finaliz|conclu/.test(st) ? "Realizada" : pre ? "Pré-reserva" : "Solicitada";
+      out.push({data, espaco:esp, hora:m[1] || "", bloco, unidade:m[3], status, obs:m[5] ? l.slice(l.length - m[5].length) : ""});
+      return;
+    }
+    if (/reserva|espaco|salao|churrasq|quadra|piscina/.test(n) && !/^\d/.test(n)) { esp = esEspDoTitulo(l); pre = /pre[\s-]*reserva/.test(n); }
+  });
+  return out;
+}
+async function esImportarPDF(file){
+  if (!file || !ES.d) return;
+  if (!/\.pdf$/i.test(file.name)) { toast("Escolha o PDF de solicitações do site da administradora.", true); return; }
+  let lista;
+  try {
+    const lib = await carregarPDFjs(), doc = await lib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise, pags = [];
+    for (let i = 1; i <= Math.min(doc.numPages, 30); i++) { const pg = await doc.getPage(i); pags.push((await pg.getTextContent()).items); }
+    lista = esLerBCF(LeitorNF.montarLinhas(pags));
+  } catch(e){ toast("Não consegui ler este PDF.", true); return; }
+  if (!lista.length) { toast("Não encontrei reservas neste PDF (datas e linhas com Bloco, Unidade e Status).", true); return; }
+  const porChave = new Map(ES.d.reservas.map(r => [esChave(r), r]));
+  const est = lista.map(x => { const r = porChave.get(esChave(x)); return {x, r, acao:!r ? "nova" : r.status === x.status || r.status === "Realizada" ? "igual" : "muda"}; });
+  const n = k => est.filter(e => e.acao === k).length;
+  $("#modal-box").classList.add("largo");
+  $("#modal-box").innerHTML = `<h3>Importar reservas do PDF</h3>
+    <p><b>${lista.length}</b> reserva${lista.length === 1 ? "" : "s"} de ${fData(lista[0].data)} a ${fData(lista[lista.length - 1].data)}: <b>${n("nova")}</b> nova${n("nova") === 1 ? "" : "s"}, <b>${n("muda")}</b> com status diferente e ${n("igual")} já em dia.</p>
+    <div class="tablebox flat"><table><thead><tr><th>Data</th><th>Espaço</th><th>Bloco / unidade</th><th>Status no PDF</th><th>No sistema</th></tr></thead><tbody>
+      ${est.map(({x, r, acao}) => `<tr><td class="md-nw">${fData(x.data)}</td><td>${esc(x.espaco)}</td><td>${esc(esUn(x))}</td><td><span class="md-st ${ES_COR[x.status] || "cinza"}">${esc(x.status)}</span></td><td>${acao === "nova" ? `<span class="md-st conc">nova</span>` : acao === "muda" ? `era ${esc(r.status)}` : "igual"}</td></tr>`).join("")}</tbody></table></div>
+    <p class="hint">O PDF não traz o número da solicitação: a reserva é reconhecida pela data, espaço, bloco e unidade.</p>
+    <div class="actions" style="margin-top:12px"><button class="btn primary" type="button" id="ep-ok" ${n("nova") + n("muda") ? "" : "disabled"}>Importar</button><button class="btn" type="button" id="ep-x">Cancelar</button><span class="hint" id="ep-msg"></span></div>`;
+  $("#modal").hidden = false; $("#ep-x").onclick = fecharModal;
+  $("#ep-ok").onclick = () => enviar($("#ep-ok"), $("#ep-msg"), "espImportar", {lista}, x => { if (esAplicar(x)) { fecharModal(); renderEspTudo(); } });
+}
+if ($("#t-esreservas")) {
+  $("#er-pdf").addEventListener("click", () => $("#er-arq").click());
+  $("#er-arq").addEventListener("change", ev => { const f = ev.target.files[0]; ev.target.value = ""; esImportarPDF(f); });
 }
 
 // ---------- início ----------

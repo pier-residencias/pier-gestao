@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap"></noscript>
-<link rel="stylesheet" href="estilo.css?v=20261024hist">
+<link rel="stylesheet" href="estilo.css?v=20261024esp">
 </head>
 <body>
 <div class="login" id="login" hidden>
@@ -71,6 +71,7 @@
     <button role="tab" data-tab="usuarios" aria-selected="false">Usuários</button>
     <span class="badge alert" id="b-prest" hidden>0</span>
     <span class="badge" id="b-ronda" hidden>0</span>
+    <span class="badge alert" id="b-esp" hidden>0</span>
    </div>
     <button type="button" class="admbtn" id="tab-adm" aria-haspopup="true" aria-expanded="false" aria-controls="adm-menu" hidden aria-label="Administração"><span class="lbl-l">Administração</span><span class="lbl-c" aria-hidden="true">Adm.</span> <span class="badge alert" id="b-adm" hidden>0</span> <span class="car" aria-hidden="true">▾</span></button>
   </div>
@@ -289,6 +290,26 @@
       <label class="md-lbl">Tipo <select class="input" id="mr-tipo"><option value="dia">Dados diários</option><option value="mes">Dados mensais</option></select></label>
       <span class="md-relbar-a"><button class="btn md-xls" type="button" id="mr-excel">Excel</button><button class="btn md-pdf" type="button" id="mr-pdf">PDF</button></span></div>
     <div id="mr-corpo"><div class="empty">Carregando os relatórios…</div></div>
+  </section>
+
+  <section id="t-esreservas" hidden>
+    <div class="un-head"><div><h2 class="sec">Reservas</h2><p class="muted">As reservas feitas no site da administradora entram sozinhas pelos e-mails (a cada 15 minutos). Confira, confirme e faça o checklist.</p></div>
+      <div class="un-ferr"><button class="btn" type="button" id="er-colar">Colar e-mail</button><button class="btn" type="button" id="er-ler">Ler e-mails agora</button><button class="btn" type="button" id="er-pdf">Importar PDF da BCF</button><input type="file" id="er-arq" accept=".pdf,application/pdf" hidden><button class="btn primary" type="button" id="er-nova">+ Nova reserva</button></div></div>
+    <div class="ind-vistas" id="er-vistas" role="tablist" aria-label="Reservas"><button type="button" role="tab" data-v="proximas" aria-selected="true">Próximas <span class="badge" hidden></span></button><button type="button" role="tab" data-v="pendentes" aria-selected="false">A confirmar <span class="badge" hidden></span></button><button type="button" role="tab" data-v="passadas" aria-selected="false">Anteriores</button><button type="button" role="tab" data-v="todas" aria-selected="false">Todas</button></div>
+    <div class="toolbar md-filtros"><select class="input" id="er-esp" aria-label="Espaço"><option value="">Todos os espaços</option></select><input class="input" id="er-q" type="search" placeholder="Solicitação, bloco ou unidade" aria-label="Pesquisar"><span class="hint" id="er-conta"></span></div>
+    <div id="er-corpo"><div class="empty">Carregando…</div></div>
+  </section>
+
+  <section id="t-esvistorias" hidden>
+    <div class="un-head"><div><h2 class="sec">Checklist dos espaços</h2><p class="muted">Vistoria de entrega (antes do evento) e de devolução (depois), item a item.</p></div>
+      <div class="un-ferr"><button class="btn" type="button" id="ev-avulsa">+ Vistoria avulsa</button></div></div>
+    <div id="ev-corpo"><div class="empty">Carregando…</div></div>
+  </section>
+
+  <section id="t-esespacos" hidden>
+    <div class="un-head"><div><h2 class="sec">Espaços</h2><p class="muted">Espaços que podem ser reservados, com regras e itens do checklist.</p></div>
+      <div class="un-ferr"><button class="btn primary" type="button" id="ee-novo">+ Novo espaço</button></div></div>
+    <div id="ee-corpo"><div class="empty">Carregando…</div></div>
   </section>
 
   <section id="t-rondas" hidden>
@@ -678,7 +699,7 @@
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="config.js"></script>
-<script src="nfe.js?v=20261024hist"></script>
-<script src="app.js?v=20261024hist"></script>
+<script src="nfe.js?v=20261024esp"></script>
+<script src="app.js?v=20261024esp"></script>
 </body>
 </html>
