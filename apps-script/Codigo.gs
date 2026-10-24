@@ -96,6 +96,19 @@ const ABAS = {
     ],
     num: ['intervalo', 'prazoDias']
   },
+  // rondas (vistorias preventivas): cabeçalho em colunas; os itens da ficha e os dados extras em JSON
+  ronda: {
+    nome: 'Rondas',
+    criar: true,
+    cols: [
+      ['id', 'ID'], ['numero', 'Número'], ['tipo', 'Tipo'], ['alvo', 'Local'], ['data', 'Data'], ['inicio', 'Início'], ['fim', 'Fim'],
+      ['responsaveis', 'Responsáveis'], ['acesso', 'Condições de acesso'], ['osRel', 'OS relacionadas'], ['obs', 'Observação'],
+      ['status', 'Situação'], ['resumo', 'Resumo'], ['extras', 'Extras (não editar)'], ['itens', 'Itens (não editar)'],
+      ['criadaPor', 'Criada por'], ['criadaPorUsuario', 'Usuário que criou'], ['criadaEm', 'Criada em'],
+      ['atualizadoEm', 'Atualizado em'], ['atualizadoPor', 'Atualizado por']
+    ],
+    num: []
+  },
   // prestadores de serviço da manutenção (contratos, visitas e documentos); documentos e visitas em JSON
   prest: {
     nome: 'Prestadores',
@@ -233,7 +246,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-10-24 cotação paralela';
+const VERSAO = '2026-10-24 ronda';
 
 function doGet() {
   return json({ ok: true, app: 'Pier Gestão', versao: VERSAO });
@@ -295,6 +308,8 @@ function doPost(e) {
     if (req.acao === 'usuarios') { pode('usuarios'); return json(Object.assign(base, { equipe: equipe() })); }
     if (req.acao === 'cotLista') { pode('pendencias'); return json(Object.assign(base, cotLista())); }
     if (req.acao === 'cotVerArquivo') { pode('pendencias'); const f = cotVerArquivo(req); auditar(conta, 'Abriu arquivo de cotação', f.nome); delete f.nome; return json(Object.assign(base, { arquivo: f })); }
+    if (req.acao === 'rondas') { rondaExigir(conta, false); return json(Object.assign(base, rondaLista())); }
+    if (req.acao === 'rondaFotoVer') { rondaExigir(conta, false); const f = rondaFotoVer(req); delete f.nome; return json(Object.assign(base, { foto: f })); }
     if (req.acao === 'prestVerDoc') { prestExigir(conta, false); const f = prestVerDoc(req); auditar(conta, 'Abriu documento de prestador', f.nome); delete f.nome; return json(Object.assign(base, { arquivo: f })); }
     if (req.acao === 'cotIA') { pode('pendencias'); return json(Object.assign(base, cotIA(req, conta))); }
     if (req.acao === 'pendencias') { pode('pendencias'); return json(Object.assign(base, { pendencias: pendLista(), pendVersao: PEND_VERSAO })); }
@@ -334,6 +349,10 @@ function doPost(e) {
         case 'prestVisita': prestExigir(conta, true); msg = prestVisita(req, conta); break;
         case 'prestDoc': prestExigir(conta, true); msg = prestDoc(req, conta); break;
         case 'prestDocRemover': prestExigir(conta, true); msg = prestDocRemover(req, conta); break;
+        case 'rondaSalvar': rondaExigir(conta, true); msg = rondaSalvar(req, conta); extra.ronda = msg.ronda; msg = msg.texto; extra.semDados = true; break;
+        case 'rondaFoto': rondaExigir(conta, true); msg = rondaFoto(req, conta); extra.ronda = msg.ronda; msg = msg.texto; extra.semDados = true; break;
+        case 'rondaFotoRemover': rondaExigir(conta, true); msg = rondaFotoRemover(req, conta); extra.ronda = msg.ronda; msg = msg.texto; extra.semDados = true; break;
+        case 'rondaResolver': rondaExigir(conta, true); msg = rondaResolver(req, conta); extra.ronda = msg.ronda; msg = msg.texto; extra.semDados = true; break;
         case 'prestImportar': prestExigir(conta, true); msg = prestImportar(req, conta); break;
         case 'pendExcluir': pode('pendencias'); msg = pendExcluir(req.id); extra.pendencias = true; break;
         default: throw falha('Ação desconhecida.');
@@ -345,7 +364,7 @@ function doPost(e) {
     }
     if (extra.pendencias) return json(Object.assign(base, { msg, pendencias: pendLista(), pendVersao: PEND_VERSAO }));
     if (extra.equipe) return json(Object.assign(base, { msg }, extra));
-    if (extra.semDados) return json(Object.assign(base, { msg }, extra.cot ? { cot: extra.cot } : {}));
+    if (extra.semDados) return json(Object.assign(base, { msg }, extra.cot ? { cot: extra.cot } : {}, extra.ronda ? { ronda: extra.ronda } : {}));
     return json(Object.assign(base, { msg, dados: dados(req.meses, conta) }, extra));
   } catch (err) {
     // tentativas sem permissão ficam no histórico de auditoria
@@ -718,7 +737,9 @@ const PERMISSOES = [
   ['exportar', 'Exportar', 'Exportar planilhas', 'Controle'],
   ['usuarios', 'Usuários', 'Gerenciar usuários e permissões', 'Controle'],
   ['pendencias', 'Pendências', 'Ver e atualizar o controle de pendências do síndico (menu Administração)', 'Administração'],
-  ['acessos', 'Histórico de acessos', 'Ver quem entrou no sistema, quando e de qual aparelho (menu Administração)', 'Administração']
+  ['acessos', 'Histórico de acessos', 'Ver quem entrou no sistema, quando e de qual aparelho (menu Administração)', 'Administração'],
+  ['ronda_fazer', 'Fazer ronda', 'Preencher as fichas de ronda (vistoria), pôr fotos e marcar pendências como resolvidas (setor Administração)', 'Ronda'],
+  ['ronda_ver', 'Ver rondas', 'Ver as rondas, as pendências e o fechamento semanal (setor Administração)', 'Ronda']
 ];
 const PADRAO_MANUTENCAO = ['painel', 'itens_ver', 'historico_ver', 'registrar_saida', 'registrar_entrada',
   'registrar_troca', 'registrar_emprestimo', 'devolver', 'itens_cadastrar', 'os_ver', 'os_abrir', 'os_atender', 'dem_ver', 'dem_executar',
@@ -1850,6 +1871,157 @@ function prestVerDoc(r) {
   return f;
 }
 
+// ---------- ronda (vistorias preventivas do condomínio) ----------
+// Fichas: por bloco (níveis × categorias), diária das áreas comuns e checklist-mestre A a I (modelo do Checklist Consolidado).
+// Códigos: OK, P (pendente), C (crítico), NA (não se aplica), NV (não verificado). P, C e NV pedem observação/motivo.
+// P e C ficam na lista de pendências até alguém marcar como resolvido. Fotos ficam na pasta "Rondas - Pier Gestão".
+const RONDA_TIPOS = { bloco: 'Ficha do bloco', areas: 'Áreas comuns', checklist: 'Checklist' };
+const RONDA_COD = ['OK', 'P', 'C', 'NA', 'NV'];
+const RONDA_ST = { andamento: 'Em andamento', concluida: 'Concluída' };
+const RONDA_DIAS = 60, RONDA_MAX_FOTOS = 3, RONDA_MAX_ITENS = 120;
+function pastaRondas() { return pastaDrive('PASTA_RONDAS', 'Rondas - Pier Gestão'); }
+function rondaExigir(conta, fazer) {
+  const p = conta.perms || {};
+  const ok = fazer ? !!p.ronda_fazer : !!(p.ronda_ver || p.ronda_fazer);
+  if (!ok) { const e = falha(fazer ? 'Seu perfil não tem permissão para fazer ronda.' : 'Seu perfil não tem permissão para ver as rondas.'); e.negado = true; throw e; }
+}
+const rondaJSON = (v, padrao) => { try { const x = JSON.parse(String(v || '')); return x && typeof x === 'object' ? x : padrao; } catch (e) { return padrao; } };
+function rondaLer(x) {
+  const o = Object.assign({}, x); delete o._row;
+  o.itens = rondaJSON(x.itens, []); if (!Array.isArray(o.itens)) o.itens = [];
+  o.extras = rondaJSON(x.extras, {});
+  return o;
+}
+const rondaAberta = i => (i.c === 'P' || i.c === 'C') && !i.res;
+// últimas 8 semanas, mais as antigas que ainda têm pendência aberta
+function rondaLista() {
+  const corte = somarDias(hoje(), -RONDA_DIAS);
+  const lista = linhas(tabela('ronda')).map(rondaLer).filter(r => String(r.data) >= corte || r.itens.some(rondaAberta));
+  lista.sort((a, b) => String(b.data + b.inicio).localeCompare(String(a.data + a.inicio)));
+  return { rondas: lista, rondaDias: RONDA_DIAS };
+}
+function rondaResumo(itens) {
+  const n = {}; RONDA_COD.forEach(c => { n[c] = 0; });
+  itens.forEach(i => { if (n[i.c] !== undefined) n[i.c]++; });
+  return RONDA_COD.filter(c => n[c]).map(c => n[c] + ' ' + c).join(' · ');
+}
+// itens que vêm do site: só os campos permitidos; fotos e resolução continuam as que já estavam no servidor
+function rondaItens(lista, antes) {
+  if (!Array.isArray(lista)) throw falha('Ficha inválida.');
+  if (lista.length > RONDA_MAX_ITENS) throw falha('Ficha grande demais.');
+  const ant = {}; (antes || []).forEach(i => { ant[i.k] = i; });
+  const vistos = {};
+  return lista.map(i => {
+    const k = texto(i.k, 40);
+    if (!k || vistos[k]) throw falha('Ficha inválida (item repetido).');
+    vistos[k] = true;
+    const c = String(i.c || '');
+    if (c && RONDA_COD.indexOf(c) < 0) throw falha('Código inválido na ficha: use OK, P, C, NA ou NV.');
+    const a = ant[k] || {};
+    const o = { k, g: texto(i.g, 80), r: texto(i.r, 300), c, o: texto(i.o, 300) };
+    if (i.p) o.p = texto(i.p, 200);
+    if (a.f && a.f.length) o.f = a.f;
+    if (a.res && (c === 'P' || c === 'C')) { o.res = a.res; if (a.ro) o.ro = a.ro; }
+    return o;
+  });
+}
+function rondaSalvar(r, conta) {
+  const v = r.ronda || {}, op = String(r.op || 'salvar');
+  const t = tabela('ronda'), todas = linhas(t);
+  const atual = v.id ? todas.find(x => x.id === texto(v.id, 40)) : null;
+  if (v.id && !atual) throw falha('Ronda não encontrada. Atualize a tela.');
+  const ler = id => rondaLer(linhas(t).find(x => x.id === id));
+  if (op === 'reabrir') {
+    if (!atual || atual.status !== RONDA_ST.concluida) throw falha('Só uma ronda concluída pode ser reaberta.');
+    gravar(t, { status: RONDA_ST.andamento, fim: '', atualizadoEm: agora(), atualizadoPor: conta.nome }, atual._row);
+    AUDIT_DET = 'Reabriu a ronda ' + atual.numero;
+    return { texto: 'Ronda ' + atual.numero + ' reaberta para correção.', ronda: ler(atual.id) };
+  }
+  if (atual && atual.status !== RONDA_ST.andamento) throw falha('Esta ronda já foi concluída. Para corrigir, reabra.');
+  const tipo = atual ? atual.tipo : String(v.tipo || '');
+  if (!RONDA_TIPOS[tipo]) throw falha('Tipo de ficha inválido.');
+  const alvo = texto(v.alvo, 80) || (atual && atual.alvo) || '';
+  if (!alvo) throw falha('Informe o local da ronda.');
+  const data = texto(v.data, 10) || (atual && atual.data) || hoje();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) throw falha('Data inválida.');
+  if (data > hoje()) throw falha('A data da ronda não pode ser depois de hoje.');
+  const itens = rondaItens(v.itens || [], atual ? rondaJSON(atual.itens, []) : []);
+  const extras = {};
+  Object.keys(v.extras || {}).slice(0, 12).forEach(k => { extras[texto(k, 30)] = texto(v.extras[k], 200); });
+  const campos = {
+    alvo, data, responsaveis: texto(v.responsaveis, 120) || conta.nome, acesso: texto(v.acesso, 200), osRel: texto(v.osRel, 120),
+    obs: texto(v.obs, 1000), itens: JSON.stringify(itens), extras: JSON.stringify(extras), resumo: rondaResumo(itens),
+    atualizadoEm: agora(), atualizadoPor: conta.nome
+  };
+  if (op === 'concluir') {
+    const falta = itens.filter(i => !i.c);
+    if (!itens.length) throw falha('A ficha está vazia.');
+    if (falta.length) throw falha('Faltam ' + falta.length + ' ite' + (falta.length === 1 ? 'm' : 'ns') + ' sem código (OK, P, C, NA ou NV). Não marque OK em local não observado: use NV e informe o motivo.');
+    const semObs = itens.filter(i => (i.c === 'P' || i.c === 'C' || i.c === 'NV') && !i.o);
+    if (semObs.length) throw falha('Descreva o problema (P ou C) ou o motivo (NV) em: ' + semObs.slice(0, 3).map(i => (i.g ? i.g + ' · ' : '') + i.r).join('; ') + (semObs.length > 3 ? '…' : '') + '.');
+    campos.status = RONDA_ST.concluida; campos.fim = agora();
+  }
+  if (atual) {
+    gravar(t, campos, atual._row);
+    AUDIT_DET = (op === 'concluir' ? 'Concluiu' : 'Salvou') + ' a ronda ' + atual.numero + ' (' + alvo + ')' + (campos.resumo ? ': ' + campos.resumo : '');
+    const c = itens.filter(i => i.c === 'C').length;
+    return { texto: op === 'concluir' ? 'Ronda ' + atual.numero + ' concluída.' + (c ? ' Atenção: ' + c + ' ite' + (c === 1 ? 'm crítico' : 'ns críticos') + ' — comunique a Gerência.' : '') : 'Ronda salva.', ronda: ler(atual.id) };
+  }
+  const max = todas.reduce((m, x) => { const z = /(\d+)\s*$/.exec(x.numero || ''); return z ? Math.max(m, Number(z[1])) : m; }, 0);
+  const id = novoId('RD'), numero = 'RD-' + ('000' + (max + 1)).slice(-4);
+  gravar(t, Object.assign({ id, numero, tipo, inicio: agora(), fim: '', status: RONDA_ST.andamento, criadaPor: conta.nome, criadaPorUsuario: conta.usuario, criadaEm: agora() }, campos));
+  AUDIT_DET = 'Iniciou a ronda ' + numero + ' (' + RONDA_TIPOS[tipo] + ' · ' + alvo + ')';
+  return { texto: 'Ronda ' + numero + ' iniciada.', ronda: ler(id) };
+}
+function rondaAchar(id) {
+  const t = tabela('ronda'), x = linhas(t).find(r => r.id === texto(id, 40));
+  if (!x) throw falha('Ronda não encontrada. Atualize a tela.');
+  return { t, x, itens: rondaJSON(x.itens, []) };
+}
+function rondaFoto(r, conta) {
+  const { t, x, itens } = rondaAchar(r.id);
+  const it = itens.find(i => i.k === String(r.k || ''));
+  if (!it) throw falha('Salve a ficha antes de pôr a foto neste item.');
+  if ((it.f || []).length >= RONDA_MAX_FOTOS) throw falha('Cada item aceita até ' + RONDA_MAX_FOTOS + ' fotos.');
+  if (r.mime !== 'image/jpeg') throw falha('Foto inválida.');
+  const b64 = String(r.b64 || '');
+  if (!b64 || b64.length > 4000000) throw falha('A foto está muito grande.');
+  const nome = (x.numero + ' - ' + (it.g ? it.g + ' - ' : '') + it.r).replace(/[\\/:*?"<>|]/g, '-').slice(0, 110) + ' - ' + ((it.f || []).length + 1) + '.jpg';
+  const f = pastaRondas().createFile(Utilities.newBlob(Utilities.base64Decode(b64), 'image/jpeg', nome));
+  it.f = (it.f || []).concat(f.getId());
+  gravar(t, { itens: JSON.stringify(itens), atualizadoEm: agora(), atualizadoPor: conta.nome }, x._row);
+  AUDIT_DET = 'Foto na ronda ' + x.numero + ': ' + (it.g ? it.g + ' · ' : '') + it.r;
+  return { texto: 'Foto anexada.', ronda: rondaLer(linhas(t).find(z => z.id === x.id)) };
+}
+function rondaFotoRemover(r, conta) {
+  const { t, x, itens } = rondaAchar(r.id);
+  if (x.status !== RONDA_ST.andamento) throw falha('Esta ronda já foi concluída. Para mexer nas fotos, reabra.');
+  const it = itens.find(i => (i.f || []).indexOf(String(r.fotoId || '')) >= 0);
+  if (!it) throw falha('Foto não encontrada nesta ronda.');
+  try { fotoDaPasta(r.fotoId, pastaRondas()).setTrashed(true); } catch (e) {}
+  it.f = it.f.filter(z => z !== r.fotoId);
+  gravar(t, { itens: JSON.stringify(itens), atualizadoEm: agora(), atualizadoPor: conta.nome }, x._row);
+  return { texto: 'Foto retirada.', ronda: rondaLer(linhas(t).find(z => z.id === x.id)) };
+}
+function rondaFotoVer(r) {
+  const { itens } = rondaAchar(r.id);
+  if (!itens.some(i => (i.f || []).indexOf(String(r.fotoId || '')) >= 0)) throw falha('Foto não encontrada nesta ronda.');
+  return verArquivo(r.fotoId, pastaRondas());
+}
+// pendência (P ou C) resolvida: guarda quando, quem e como; ela sai da lista de pendências
+function rondaResolver(r, conta) {
+  const { t, x, itens } = rondaAchar(r.id);
+  const it = itens.find(i => i.k === String(r.k || ''));
+  if (!it || (it.c !== 'P' && it.c !== 'C')) throw falha('Este item não é uma pendência.');
+  if (it.res) throw falha('Esta pendência já foi marcada como resolvida.');
+  const como = texto(r.obs, 300);
+  if (!como) throw falha('Diga como foi resolvida (ex.: OS-0012 concluída, reinspecionado em 24/10).');
+  it.res = agora() + ' · ' + conta.nome; it.ro = como;
+  gravar(t, { itens: JSON.stringify(itens), atualizadoEm: agora(), atualizadoPor: conta.nome }, x._row);
+  AUDIT_DET = 'Resolveu pendência da ronda ' + x.numero + ': ' + (it.g ? it.g + ' · ' : '') + it.r + ' — ' + como;
+  return { texto: 'Pendência marcada como resolvida.', ronda: rondaLer(linhas(t).find(z => z.id === x.id)) };
+}
+
 // ---------- importação de contagem de inventário ----------
 
 function importarContagem(r, conta) {
@@ -2787,7 +2959,7 @@ const TELAS_VISTAS = {
   historico: ['Histórico de movimentações', 'historico_ver'], dashboard: ['Dashboard', 'dashboard'],
   usuarios: ['Usuários e permissões', 'usuarios'], pendencias: ['Controle de pendências', 'pendencias'],
   acessos: ['Histórico de acessos', 'acessos'], cotacoes: ['Cotações', 'pendencias'],
-  exportar_mapa: ['Mapa de cotação (planilha)', 'pendencias'],
+  exportar_mapa: ['Mapa de cotação (planilha)', 'pendencias'], rondas: ['Ronda (vistorias)', ['ronda_ver', 'ronda_fazer']],
   exportar_movs: ['Movimentações (planilha CSV)', 'exportar'], exportar_consumo: ['Consumo por item (planilha CSV)', 'exportar']
 };
 function registrarVisao(conta, req) {
@@ -2795,7 +2967,7 @@ function registrarVisao(conta, req) {
   if (!t) return;
   const exp = String(req.tela).indexOf('exportar_') === 0;
   const det = t[0] + (req.detalhe ? ' · ' + texto(req.detalhe, 80) : '');
-  if (!conta.perms[t[1]]) {
+  if (![].concat(t[1]).some(k => conta.perms[k])) {
     auditar(conta, exp ? 'Exportou planilha' : 'Abriu tela', det + ' — sem permissão', 'Negado');
     alertaSeguranca('negado', conta.usuario, 'Tentou ' + (exp ? 'exportar ' : 'abrir ') + det + ' sem permissão.', '', conta.nome);
     return;
@@ -3114,6 +3286,7 @@ function limparFalhasLogin(usuario) { if (usuario) PropertiesService.getScriptPr
 const ACOES_AUDIT = {
   cotSalvar: 'Cotação', cotArquivo: 'Arquivo de cotação',
   prestSalvar: 'Prestador de serviço', prestVisita: 'Visita de prestador', prestDoc: 'Documento de prestador', prestDocRemover: 'Tirou documento de prestador', prestImportar: 'Importou planilha de prestadores',
+  rondaSalvar: 'Ronda', rondaFoto: 'Foto na ronda', rondaFotoRemover: 'Tirou foto da ronda', rondaResolver: 'Resolveu pendência da ronda',
   visao: 'Abriu tela',
   trocarSenha: 'Trocou a própria senha',
   registrar: 'Movimentação', osAbrir: 'Abriu OS', osAtualizar: 'Atualizou OS', osFoto: 'Foto na OS', osFotoRemover: 'Tirou foto da OS',
