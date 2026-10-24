@@ -92,9 +92,23 @@ const ABAS = {
       ['responsavel', 'Responsável'], ['responsavelUsuario', 'Usuário responsável'],
       ['intervalo', 'Repete a cada'], ['unidade', 'Unidade'], ['prazoDias', 'Dias para fazer'],
       ['proxima', 'Próxima data'], ['ultima', 'Última gerada'], ['criadaPor', 'Criada por'], ['criadaEm', 'Criada em'],
-      ['atualizadoEm', 'Atualizado em']
+      ['atualizadoEm', 'Atualizado em'], ['prestador', 'Prestador']
     ],
     num: ['intervalo', 'prazoDias']
+  },
+  // prestadores de serviço da manutenção (contratos, visitas e documentos); documentos e visitas em JSON
+  prest: {
+    nome: 'Prestadores',
+    criar: true,
+    cols: [
+      ['id', 'ID'], ['nome', 'Empresa'], ['servico', 'Serviço'], ['contato', 'Contato'], ['telefone', 'Telefone'], ['email', 'E-mail'],
+      ['cnpj', 'CNPJ'], ['endereco', 'Endereço'], ['contratoInicio', 'Contrato início'], ['contratoFim', 'Contrato fim'],
+      ['valorMensal', 'Valor mensal'], ['frequencia', 'Frequência das visitas'], ['ultimaVisita', 'Última visita'],
+      ['proximaVisita', 'Próxima visita'], ['observacao', 'Observação'], ['ativo', 'Ativo'], ['docs', 'Documentos'],
+      ['visitas', 'Visitas'], ['criadoEm', 'Criado em'], ['criadoPor', 'Criado por'], ['atualizadoEm', 'Atualizado em'],
+      ['atualizadoPor', 'Atualizado por']
+    ],
+    num: ['valorMensal']
   },
   pend: {
     nome: 'Pendencias',
@@ -219,7 +233,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-10-23 indicadores';
+const VERSAO = '2026-10-24 prestadores';
 
 function doGet() {
   return json({ ok: true, app: 'Pier Gestão', versao: VERSAO });
@@ -281,6 +295,7 @@ function doPost(e) {
     if (req.acao === 'usuarios') { pode('usuarios'); return json(Object.assign(base, { equipe: equipe() })); }
     if (req.acao === 'cotLista') { pode('pendencias'); return json(Object.assign(base, cotLista())); }
     if (req.acao === 'cotVerArquivo') { pode('pendencias'); const f = cotVerArquivo(req); auditar(conta, 'Abriu arquivo de cotação', f.nome); delete f.nome; return json(Object.assign(base, { arquivo: f })); }
+    if (req.acao === 'prestVerDoc') { prestExigir(conta, false); const f = prestVerDoc(req); auditar(conta, 'Abriu documento de prestador', f.nome); delete f.nome; return json(Object.assign(base, { arquivo: f })); }
     if (req.acao === 'cotIA') { pode('pendencias'); return json(Object.assign(base, cotIA(req, conta))); }
     if (req.acao === 'pendencias') { pode('pendencias'); return json(Object.assign(base, { pendencias: pendLista(), pendVersao: PEND_VERSAO })); }
     if (req.acao === 'nfVer') { algum(['historico_ver', 'registrar_entrada', 'dashboard']); const f = verArquivo(req.fotoId, pastaNF()); auditar(conta, 'Abriu nota fiscal', f.nome); delete f.nome; return json(Object.assign(base, { foto: f })); }
@@ -315,6 +330,11 @@ function doPost(e) {
         case 'pendSalvar': pode('pendencias'); msg = pendSalvar(req.pend || {}, conta); extra.pendencias = true; break;
         case 'cotSalvar': pode('pendencias'); msg = cotSalvar(req, conta); extra.cot = msg.cot; msg = msg.texto; extra.semDados = true; break;
         case 'cotArquivo': pode('pendencias'); msg = cotArquivo(req, conta); extra.cot = msg.cot; msg = msg.texto; extra.semDados = true; break;
+        case 'prestSalvar': prestExigir(conta, true); msg = prestSalvar(req.prest || {}, conta); break;
+        case 'prestVisita': prestExigir(conta, true); msg = prestVisita(req, conta); break;
+        case 'prestDoc': prestExigir(conta, true); msg = prestDoc(req, conta); break;
+        case 'prestDocRemover': prestExigir(conta, true); msg = prestDocRemover(req, conta); break;
+        case 'prestImportar': prestExigir(conta, true); msg = prestImportar(req, conta); break;
         case 'pendExcluir': pode('pendencias'); msg = pendExcluir(req.id); extra.pendencias = true; break;
         default: throw falha('Ação desconhecida.');
       }
@@ -559,6 +579,8 @@ function dadosOsDem(ms, conta, todas, limpa) {
     out.demandas = lista.map(limpa);
     if (p.dem_delegar) out.preventivas = linhas(tabela('prev')).map(limpa);
   }
+  // prestadores de serviço: para quem é da manutenção (vê OS ou demandas)
+  if (prestPode(conta, false)) { try { out.prestadores = prestLista(); } catch (e) { /* aba nova: aparece no próximo acesso */ } }
   if (out.os || out.demandas) {
     const fone = p.dem_delegar || p.os_gerenciar || p.usuarios;
     out.colaboradores = lerUsuarios().lista.filter(u => u.ativo).map(u =>
@@ -1573,6 +1595,8 @@ function descRepeticao(intervalo, unidade) {
 // cria as demandas das preventivas vencidas; uma por preventiva, mesmo que o sistema tenha ficado dias sem uso
 function gerarPreventivas(dia, soId) {
   const tp = tabela('prev');
+  let cachePrest = null;
+  const prestadores = () => cachePrest || (cachePrest = (() => { try { return linhas(tabela('prest')); } catch (e) { return []; } })());
   const prevs = linhas(tp).filter(p => (!soId || p.id === soId) && /^s/i.test(p.ativa) && /^\d{4}-\d{2}-\d{2}$/.test(p.proxima) && p.proxima <= dia);
   if (!prevs.length) return [];
   const td = tabela('dem');
@@ -1588,10 +1612,12 @@ function gerarPreventivas(dia, soId) {
     const proxima = repeticao(p.proxima, k + 1, intervalo, unidade);
     const u = usuarios.find(x => x.usuario === p.responsavelUsuario && x.ativo);
     const prazo = somarDias(data, Math.max(0, Number(p.prazoDias) || 0));
+    const pr = p.prestador ? prestadores().find(x => x.id === p.prestador) : null;
     const campos = {
       titulo: p.titulo, prioridade: OS_PRIORIDADES.indexOf(p.prioridade) >= 0 ? p.prioridade : 'Normal', prazo,
       local: p.local, categoria: p.categoria,
       descricao: (p.descricao ? p.descricao + '\n\n' : '') + 'Preventiva ' + p.numero + ', repete ' + descRepeticao(intervalo, unidade) + '. Data prevista: ' + data.split('-').reverse().join('/') + '.'
+        + (pr ? '\nPrestador: ' + pr.nome + (pr.contato ? ' (' + pr.contato + ')' : '') + (pr.telefone ? ' · ' + pr.telefone : '') + '.' : '')
     };
     n++;
     const r = demGravarNova(td, n, campos, u || null, { nome: 'Sistema', usuario: '' }, { preventiva: p.id, preventivaNumero: p.numero });
@@ -1633,6 +1659,12 @@ function salvarPreventiva(v, conta) {
     responsavel: resp ? (resp.nome || resp.usuario) : '', responsavelUsuario: resp ? resp.usuario : '',
     intervalo, unidade, prazoDias, proxima, ativa: v.ativa === false ? 'Não' : 'Sim', atualizadoEm: agora()
   };
+  // prestador de serviço que faz a preventiva (opcional; versões antigas do site não mandam e não apagam)
+  if ('prestador' in v) {
+    const pid = texto(v.prestador, 40);
+    if (pid && !linhas(tabela('prest')).some(x => x.id === pid)) throw falha('Prestador não encontrado. Atualize a página.');
+    campos.prestador = pid;
+  }
   const t = tabela('prev');
   const todas = linhas(t);
   let id = v.id, numeroPv;
@@ -1660,6 +1692,162 @@ function excluirPreventiva(id) {
   if (!p) throw falha('Preventiva não encontrada.');
   t.sh.deleteRow(p._row);
   return 'Preventiva ' + p.numero + ' excluída. As demandas que ela já criou continuam na lista.';
+}
+
+// ---------- prestadores de serviço (manutenção) ----------
+// Vê quem é da manutenção (OS ou demandas); cadastra e altera quem gerencia OS ou distribui demandas.
+const PREST_FREQ = { 'Semanal': [1, 'semanas'], 'Quinzenal': [15, 'dias'], 'Mensal': [1, 'meses'], 'Bimestral': [2, 'meses'],
+  'Trimestral': [3, 'meses'], 'Semestral': [6, 'meses'], 'Anual': [12, 'meses'], 'Sob demanda': null };
+const PREST_MAX_DOCS = 20;
+function pastaPrestadores() { return pastaDrive('PASTA_PRESTADORES', 'Prestadores de serviço - Pier Gestão'); }
+function prestPode(conta, editar) {
+  const p = (conta && conta.perms) || {};
+  if (setoresDe(conta).indexOf('Manutenção') < 0) return false;
+  if (editar) return !!(p.os_gerenciar || p.dem_delegar);
+  return !!(p.os_ver || p.os_abrir || p.os_atender || p.os_gerenciar || p.dem_ver || p.dem_executar || p.dem_delegar);
+}
+function prestExigir(conta, editar) {
+  if (!prestPode(conta, editar)) { const e = falha(editar ? 'Só quem gerencia OS ou distribui demandas cadastra prestadores.' : 'Seu perfil não tem permissão para ver os prestadores.'); e.negado = true; throw e; }
+}
+const prestJSON = (v, padrao) => { try { const x = JSON.parse(String(v || '')); return Array.isArray(x) ? x : padrao; } catch (e) { return padrao; } };
+const dataOk = s => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
+function prestLista() {
+  return linhas(tabela('prest')).map(x => {
+    const o = Object.assign({}, x); delete o._row;
+    o.docs = prestJSON(x.docs, []); o.visitas = prestJSON(x.visitas, []).slice(-30);
+    return o;
+  }).sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
+}
+function prestProxima(data, freq) {
+  const f = PREST_FREQ[freq];
+  return f && dataOk(data) ? repeticao(data, 1, f[0], f[1]) : '';
+}
+function prestSalvar(v, conta) {
+  const nome = texto(v.nome, 120);
+  if (!nome) throw falha('Informe o nome da empresa ou do prestador.');
+  const email = texto(v.email, 120);
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw falha('E-mail inválido.');
+  const cnpj = texto(v.cnpj, 20).replace(/\D/g, '');
+  if (cnpj && cnpj.length !== 14 && cnpj.length !== 11) throw falha('O CNPJ deve ter 14 números (ou CPF com 11).');
+  const ini = texto(v.contratoInicio, 10), fim = texto(v.contratoFim, 10);
+  if ((ini && !dataOk(ini)) || (fim && !dataOk(fim))) throw falha('Data do contrato inválida.');
+  if (ini && fim && fim < ini) throw falha('O fim do contrato não pode ser antes do início.');
+  const valor = v.valorMensal === '' || v.valorMensal == null ? '' : numero(v.valorMensal);
+  if (valor !== '' && !(valor >= 0)) throw falha('Valor mensal inválido.');
+  const freq = texto(v.frequencia, 20);
+  if (freq && !(freq in PREST_FREQ)) throw falha('Frequência inválida.');
+  const ult = texto(v.ultimaVisita, 10), prox = texto(v.proximaVisita, 10);
+  if ((ult && !dataOk(ult)) || (prox && !dataOk(prox))) throw falha('Data de visita inválida.');
+  if (ult && ult > hoje()) throw falha('A última visita não pode ser depois de hoje.');
+  const campos = {
+    nome, servico: texto(v.servico, 60), contato: texto(v.contato, 80), telefone: texto(v.telefone, 30), email,
+    cnpj: cnpj.length === 14 ? cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : cnpj.length === 11 ? cnpj.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4') : '',
+    endereco: texto(v.endereco, 200), contratoInicio: ini, contratoFim: fim, valorMensal: valor, frequencia: freq,
+    ultimaVisita: ult, proximaVisita: prox || (ult ? prestProxima(ult, freq) : ''), observacao: texto(v.observacao, 1000),
+    ativo: v.ativo === false ? 'Não' : 'Sim', atualizadoEm: agora(), atualizadoPor: conta.nome
+  };
+  const t = tabela('prest'), todos = linhas(t);
+  const igual = todos.find(x => x.id !== v.id && /^s/i.test(x.ativo) && String(x.nome).trim().toLowerCase() === nome.toLowerCase());
+  if (igual && campos.ativo === 'Sim') throw falha('Já existe um prestador ativo com o nome "' + igual.nome + '".');
+  if (v.id) {
+    const x = todos.find(p => p.id === v.id);
+    if (!x) throw falha('Prestador não encontrado. Atualize a página.');
+    gravar(t, campos, x._row);
+    AUDIT_DET = 'Alterou o prestador ' + nome + (campos.ativo === 'Sim' ? '' : ' (inativo)');
+    return 'Prestador ' + nome + ' salvo.';
+  }
+  gravar(t, Object.assign({ id: novoId('PR'), docs: '[]', visitas: '[]', criadoEm: agora(), criadoPor: conta.nome }, campos));
+  AUDIT_DET = 'Cadastrou o prestador ' + nome;
+  return 'Prestador ' + nome + ' cadastrado.';
+}
+function prestAchar(id) {
+  const t = tabela('prest'), x = linhas(t).find(p => p.id === texto(id, 40));
+  if (!x) throw falha('Prestador não encontrado. Atualize a página.');
+  return { t, x };
+}
+// registra uma visita feita: atualiza a última e calcula a próxima pela frequência
+function prestVisita(r, conta) {
+  const { t, x } = prestAchar(r.id);
+  const data = texto(r.data, 10) || hoje();
+  if (!dataOk(data)) throw falha('Data da visita inválida.');
+  if (data > hoje()) throw falha('A visita não pode ser depois de hoje.');
+  const visitas = prestJSON(x.visitas, []);
+  visitas.push({ data, obs: texto(r.obs, 300), por: conta.nome, em: agora() });
+  const ultima = !x.ultimaVisita || data >= x.ultimaVisita ? data : x.ultimaVisita;
+  const proxima = prestProxima(ultima, x.frequencia) || (ultima === data ? '' : x.proximaVisita);
+  gravar(t, { visitas: JSON.stringify(visitas.slice(-60)), ultimaVisita: ultima, proximaVisita: proxima, atualizadoEm: agora(), atualizadoPor: conta.nome }, x._row);
+  AUDIT_DET = 'Registrou visita de ' + x.nome + ' em ' + data.split('-').reverse().join('/');
+  return 'Visita registrada.' + (proxima ? ' Próxima prevista para ' + proxima.split('-').reverse().join('/') + '.' : '');
+}
+function prestDoc(r, conta) {
+  const { t, x } = prestAchar(r.id);
+  const docs = prestJSON(x.docs, []);
+  if (docs.length >= PREST_MAX_DOCS) throw falha('Este prestador já tem ' + PREST_MAX_DOCS + ' documentos. Tire algum antes.');
+  const tipos = { 'application/pdf': 'pdf', 'image/jpeg': 'jpg', 'image/png': 'png' };
+  const ext = tipos[r.mime];
+  if (!ext) throw falha('Envie o documento em PDF ou foto (JPG ou PNG).');
+  const b64 = String(r.b64 || '');
+  if (!b64 || b64.length > 10000000) throw falha('O arquivo está muito grande (máximo de 7 MB).');
+  const nome = texto(r.nome, 80) || 'Documento';
+  const validade = texto(r.validade, 10);
+  if (validade && !dataOk(validade)) throw falha('Validade inválida.');
+  const arq = (x.nome + ' - ' + nome).replace(/[\\/:*?"<>|]/g, '-').slice(0, 120) + '.' + ext;
+  const f = pastaPrestadores().createFile(Utilities.newBlob(Utilities.base64Decode(b64), r.mime, arq));
+  docs.push({ id: f.getId(), nome, validade, mime: r.mime, em: agora(), por: conta.nome });
+  gravar(t, { docs: JSON.stringify(docs), atualizadoEm: agora(), atualizadoPor: conta.nome }, x._row);
+  AUDIT_DET = 'Anexou "' + nome + '" ao prestador ' + x.nome;
+  return 'Documento anexado.';
+}
+function prestDocRemover(r, conta) {
+  const { t, x } = prestAchar(r.id);
+  const docs = prestJSON(x.docs, []), d = docs.find(k => k.id === String(r.docId || ''));
+  if (!d) throw falha('Documento não encontrado neste prestador.');
+  try { fotoDaPasta(d.id, pastaPrestadores()).setTrashed(true); } catch (e) {}
+  gravar(t, { docs: JSON.stringify(docs.filter(k => k.id !== d.id)), atualizadoEm: agora(), atualizadoPor: conta.nome }, x._row);
+  AUDIT_DET = 'Tirou "' + d.nome + '" do prestador ' + x.nome;
+  return 'Documento retirado.';
+}
+// importação pela planilha: cada linha cadastra um prestador novo ou atualiza o que já existe
+// (pelo ID da planilha baixada do sistema, pelo CNPJ ou pelo nome). Célula em branco mantém o que já estava.
+const PREST_CAMPOS = ['nome', 'servico', 'contato', 'telefone', 'email', 'cnpj', 'endereco', 'contratoInicio', 'contratoFim', 'valorMensal',
+  'frequencia', 'ultimaVisita', 'proximaVisita', 'observacao', 'ativo'];
+function prestImportar(r, conta) {
+  const linhas_ = Array.isArray(r.linhas) ? r.linhas : [];
+  if (!linhas_.length) throw falha('A planilha não tem nenhuma linha preenchida.');
+  if (linhas_.length > 300) throw falha('Importe no máximo 300 prestadores de cada vez.');
+  const so = s => String(s || '').replace(/\D/g, ''), nm = s => String(s || '').trim().toLowerCase();
+  let novos = 0, atualizados = 0;
+  const erros = [];
+  linhas_.forEach((l, i) => {
+    const n = Number(l._linha) || i + 2;
+    try {
+      const todos = linhas(tabela('prest'));
+      const atual = (l.id && todos.find(x => x.id === String(l.id))) || (so(l.cnpj) && todos.find(x => so(x.cnpj) === so(l.cnpj)))
+        || (l.nome && todos.find(x => nm(x.nome) === nm(l.nome))) || null;
+      const v = {};
+      if (atual) PREST_CAMPOS.forEach(k => { v[k] = atual[k]; });
+      PREST_CAMPOS.forEach(k => { if (l[k] !== undefined && l[k] !== null && String(l[k]).trim() !== '') v[k] = l[k]; });
+      if (l.ultimaVisita && !l.proximaVisita) v.proximaVisita = ''; // recalcula pela frequência
+      v.ativo = /^n/i.test(String(v.ativo || 'Sim')) ? false : true;
+      if (atual) v.id = atual.id;
+      prestSalvar(v, conta);
+      if (atual) atualizados++; else novos++;
+    } catch (e) { erros.push('linha ' + n + ': ' + String(e.message || e)); }
+  });
+  AUDIT_DET = 'Planilha de prestadores: ' + novos + ' novo(s), ' + atualizados + ' atualizado(s)' + (erros.length ? ', ' + erros.length + ' com erro' : '');
+  return (novos ? novos + ' prestador' + (novos === 1 ? '' : 'es') + ' cadastrado' + (novos === 1 ? '' : 's') + '. ' : '')
+    + (atualizados ? atualizados + ' atualizado' + (atualizados === 1 ? '' : 's') + '. ' : '')
+    + (erros.length ? erros.length + ' linha' + (erros.length === 1 ? '' : 's') + ' com erro (' + erros.slice(0, 5).join('; ') + (erros.length > 5 ? '; …' : '') + ').' : '')
+    || 'Nada foi alterado.';
+}
+// abre um documento: só os que pertencem ao prestador e estão na pasta dos prestadores
+function prestVerDoc(r) {
+  const { x } = prestAchar(r.id);
+  const d = prestJSON(x.docs, []).find(k => k.id === String(r.docId || ''));
+  if (!d) throw falha('Documento não encontrado neste prestador.');
+  const f = verArquivo(d.id, pastaPrestadores());
+  f.nome = x.nome + ' · ' + d.nome;
+  return f;
 }
 
 // ---------- importação de contagem de inventário ----------
@@ -2886,6 +3074,7 @@ function limparFalhasLogin(usuario) { if (usuario) PropertiesService.getScriptPr
 // --- histórico de auditoria (aba Auditoria) ---
 const ACOES_AUDIT = {
   cotSalvar: 'Cotação', cotArquivo: 'Arquivo de cotação',
+  prestSalvar: 'Prestador de serviço', prestVisita: 'Visita de prestador', prestDoc: 'Documento de prestador', prestDocRemover: 'Tirou documento de prestador', prestImportar: 'Importou planilha de prestadores',
   visao: 'Abriu tela',
   trocarSenha: 'Trocou a própria senha',
   registrar: 'Movimentação', osAbrir: 'Abriu OS', osAtualizar: 'Atualizou OS', osFoto: 'Foto na OS', osFotoRemover: 'Tirou foto da OS',

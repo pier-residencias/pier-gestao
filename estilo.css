@@ -898,3 +898,29 @@ td.num.atras{color:var(--crit);font-weight:700}
 .me-t.atr{border-left:4px solid var(--crit);background:var(--crit-bg)}
 .me-t small{display:block;color:var(--muted);font-size:.76rem;margin-top:2px}
 .me-col.livres p{margin:0;color:var(--muted);font-size:.88rem}
+
+/* Prestadores de serviço */
+.pr-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px}
+.pr-card{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--ok);border-radius:10px;box-shadow:0 1px 2px rgba(22,40,58,.05)}
+.pr-card.warn{border-left-color:var(--warn)}.pr-card.crit{border-left-color:var(--crit)}.pr-card.inativo{opacity:.65;border-left-color:var(--line)}
+.pr-abrir{display:grid;gap:4px;text-align:left;border:0;background:none;padding:14px 14px 10px;cursor:pointer;border-radius:10px 10px 0 0}
+.pr-abrir:hover{background:var(--bg)}
+.pr-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.pr-top b{font-size:1rem}
+.pr-serv{display:inline-block;font-size:.72rem;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--teal-bg);color:var(--teal);white-space:nowrap}
+.pr-lin{font-size:.84rem;color:var(--muted)}
+.pr-lin b{color:var(--fg)}
+.pr-lin b.atr,.os-info b.atr{color:var(--crit)}
+.pr-al{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.pr-cont{display:flex;gap:8px;padding:0 14px 12px}
+.pr-docs{list-style:none;margin:0 0 10px;padding:0;display:grid;gap:6px}
+.pr-docs li{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;font-size:.88rem}
+.pr-docs .link.danger{color:var(--crit)}
+.pr-up{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:6px}
+.pr-up .input{width:auto;flex:1 1 140px}
+.pr-up .hint{flex-basis:100%}
+.pr-h{margin:6px 0 -4px;font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.pr-visform{margin:10px 0;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+.pd-stat.warn b{color:var(--warn)}.pd-stat.alerta b{color:var(--crit)}
+.pr-cont a.btn{text-decoration:none}
+.pr-acoes{display:flex;flex-wrap:wrap;gap:8px;margin-left:auto}
