@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap"></noscript>
-<link rel="stylesheet" href="estilo.css?v=20261023ind">
+<link rel="stylesheet" href="estilo.css?v=20261024menu2">
 </head>
 <body>
 <div class="login" id="login" hidden>
@@ -233,6 +233,28 @@
     </div>
     <div id="ind-kanban" hidden></div>
     <div id="ind-agenda" hidden></div>
+  </section>
+
+  <!-- CATEGORIAS DE MATERIAIS -->
+  <section id="t-categorias" hidden>
+    <div class="sec-head"><h2 class="sec">Categorias de materiais<span class="setor-nome"></span></h2><span class="muted" id="cat-resumo"></span></div>
+    <p class="hint">Toque numa categoria para ver os materiais dela.</p>
+    <div class="cat-cards" id="cat-cards"></div>
+  </section>
+
+  <!-- EQUIPE: pessoas ativas, contato e o que cada uma tem em aberto -->
+  <section id="t-equipe" hidden>
+    <div class="sec-head"><h2 class="sec">Equipe</h2><span class="muted" id="eq-resumo"></span></div>
+    <div class="toolbar"><input class="input" id="eq-busca" type="search" placeholder="Buscar por nome ou telefone"></div>
+    <div class="tablebox"><table><thead><tr><th>Pessoa</th><th class="hide-s">Telefone</th><th class="num">OS em aberto</th><th class="num">Demandas em aberto</th><th class="num">Atrasadas</th></tr></thead><tbody id="eq-body"></tbody></table></div>
+    <p class="hint" style="margin-top:10px">Para criar logins, trocar perfis ou desativar alguém, use Administração → Usuários.</p>
+  </section>
+
+  <!-- MINHA EQUIPE: o que cada pessoa está fazendo agora -->
+  <section id="t-minhaequipe" hidden>
+    <div class="sec-head"><h2 class="sec">Minha equipe</h2><span class="muted" id="me-resumo"></span></div>
+    <p class="hint">O que cada pessoa tem em aberto agora (OS e demandas), com as atrasadas primeiro. Toque numa tarefa para abrir.</p>
+    <div class="me-quadro" id="me-quadro"></div>
   </section>
 
   <!-- REGISTRAR -->
@@ -576,6 +598,6 @@
 
 <script src="config.js"></script>
 <script src="nfe.js?v=20261015s"></script>
-<script src="app.js?v=20261023ind"></script>
+<script src="app.js?v=20261024menu2"></script>
 </body>
 </html>

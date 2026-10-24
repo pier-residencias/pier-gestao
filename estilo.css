@@ -873,3 +873,28 @@ body.ind-apres main.wrap{max-width:none;padding:18px 28px}
 body.ind-apres.com-menu{padding-left:0!important}
 body.ind-apres .ind-kpi b{font-size:2.6rem}
 body.ind-apres .ind-kpi{min-height:140px}
+
+/* Categorias de materiais, Equipe e Minha equipe */
+.cat-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.cat-card{display:grid;grid-template-columns:1fr auto;align-items:baseline;gap:2px 8px;text-align:left;padding:14px 16px;border:1px solid var(--line);border-radius:10px;background:var(--surface);cursor:pointer;box-shadow:0 1px 2px rgba(22,40,58,.05)}
+.cat-card:hover{border-color:var(--accent);box-shadow:var(--shadow)}
+.cat-card b{grid-column:1/-1;font-size:1rem}
+.cat-n{font-family:var(--f-display);font-size:1.9rem;font-weight:700;line-height:1.1}
+.cat-card small{color:var(--muted);justify-self:start;grid-column:1/-1;margin-top:-4px}
+.cat-st{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.eq-pessoa{display:flex;align-items:center;gap:10px}
+.eq-pessoa .sub{display:block}
+td.num.atras{color:var(--crit);font-weight:700}
+.me-quadro{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;align-items:start}
+.me-col{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;box-shadow:var(--shadow)}
+.me-col.sem{border-color:var(--warn);background:var(--warn-bg)}
+.me-col h4{display:flex;align-items:center;gap:10px;margin:0 0 8px}
+.me-col h4>span:nth-child(2),.me-col.livres h4>span{flex:1;min-width:0}
+.me-col h4 b{display:block;font-size:.95rem}
+.me-col h4 small{display:block;color:var(--muted);font-weight:500;font-size:.78rem}
+.me-col ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.me-t{display:block;width:100%;text-align:left;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);cursor:pointer;font-size:.88rem}
+.me-t:hover{border-color:var(--accent)}
+.me-t.atr{border-left:4px solid var(--crit);background:var(--crit-bg)}
+.me-t small{display:block;color:var(--muted);font-size:.76rem;margin-top:2px}
+.me-col.livres p{margin:0;color:var(--muted);font-size:.88rem}

@@ -35,7 +35,7 @@ const SETORES_PERM = [["Manutenção","setor_manutencao"],["Limpeza","setor_limp
 const setoresDasPerms = p => { const l = SETORES_PERM.filter(x => p && p[x[1]]).map(x => x[0]); return l.length ? l : ["Manutenção"]; };
 const doSetor = x => setorDe(x) === S.setor;
 const can = p => !!(S.perms && S.perms[p]);
-const ABAS_PERM = {painel:["painel"], demandas:["dem_ver","dem_executar","dem_delegar"], os:["os_ver","os_abrir","os_atender","os_gerenciar"], registrar:["registrar_saida","registrar_entrada","registrar_troca","registrar_emprestimo"], itens:["itens_ver"], historico:["historico_ver"], emprestimos:["devolver","registrar_emprestimo"], dashboard:["dashboard"], indicadores:["dashboard"], usuarios:["usuarios"], inicio:["pendencias","usuarios","acessos"], pendencias:["pendencias"], pdpainel:["pendencias"], cotacoes:["pendencias"], acessos:["acessos"]};
+const ABAS_PERM = {painel:["painel"], demandas:["dem_ver","dem_executar","dem_delegar"], os:["os_ver","os_abrir","os_atender","os_gerenciar"], registrar:["registrar_saida","registrar_entrada","registrar_troca","registrar_emprestimo"], itens:["itens_ver"], historico:["historico_ver"], emprestimos:["devolver","registrar_emprestimo"], dashboard:["dashboard"], indicadores:["dashboard"], categorias:["itens_ver"], equipe:["os_gerenciar","dem_delegar"], minhaequipe:["os_gerenciar","dem_delegar"], usuarios:["usuarios"], inicio:["pendencias","usuarios","acessos"], pendencias:["pendencias"], pdpainel:["pendencias"], cotacoes:["pendencias"], acessos:["acessos"]};
 // Se o navegador ainda estiver com a página antiga guardada, o menu Administração não existe nela:
 // o resto do sistema continua funcionando normalmente.
 const TEM_ADM = !!(document.getElementById("tab-adm") && document.getElementById("adm-menu") && document.getElementById("t-pendencias"));
@@ -48,10 +48,13 @@ if (!TEM_ADM || !document.getElementById("t-acessos")) delete ABAS_PERM.acessos;
 // Limpeza (só o estoque da limpeza) ou Administração (só o menu Administração).
 // "inicio" primeiro: é a tela que abre ao entrar pela Administração
 const ABAS_ADM = ["inicio","pendencias","pdpainel","cotacoes","usuarios","acessos"];
-const ABAS_LIMPEZA = ["painel","registrar","itens","historico","os"];
 const TIPOS_LIMPEZA = ["saida","entrada"];
 const modo = () => S.adm ? "Administração" : S.setor;
-const abaNoModo = t => S.adm ? ABAS_ADM.includes(t) : S.setor === "Limpeza" ? ABAS_LIMPEZA.includes(t) : !ABAS_ADM.includes(t);
+// Mesmo menu nos três setores (pedido de 24/10/2026); cada pessoa vê só o que o perfil permite.
+// O setor escolhido decide a página inicial (Home da Administração ou Painel do setor) e qual estoque e quais OS aparecem.
+// No setor Limpeza não há demandas nem empréstimos.
+const SO_ADM = ["inicio","pdpainel"], FORA_LIMPEZA = ["demandas","emprestimos","minhaequipe"];
+const abaNoModo = t => t === "painel" ? !S.adm : SO_ADM.includes(t) ? S.adm : !(!S.adm && S.setor === "Limpeza" && FORA_LIMPEZA.includes(t));
 const ehSindico = () => norm(S.perfil).includes("sindico");
 const ehGerente = () => norm(S.perfil).includes("gerente");
 // OS por ambiente: a Limpeza vê as OS da Limpeza; a Manutenção, as da Manutenção (inclui jardinagem e as antigas, sem setor)
@@ -386,25 +389,27 @@ function renderSetorSel(){
 // ---------- menu lateral ----------
 // Os itens seguem as mesmas permissões e o mesmo setor das abas (podeAba); o contador de cada item é o da aba.
 const MENU = [
-  {t:"painel", rot:"Painel", ico:'<path d="M4 11.5 12 5l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5h-5v5H5a1 1 0 0 1-1-1z"/>'},
+  // Home: na Administração abre o Início; nos outros setores, o Painel do setor. Dashboard (pendências) só na Administração.
+  {t:"painel", rot:"Home", ico:'<path d="M4 11.5 12 5l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5h-5v5H5a1 1 0 0 1-1-1z"/>'},
   {t:"inicio", rot:"Home", ico:'<path d="M4 11.5 12 5l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5h-5v5H5a1 1 0 0 1-1-1z"/>'},
   {t:"pdpainel", rot:"Dashboard", ico:'<path d="M4 20h16M6.5 16.5V11M11 16.5V6.5M15.5 16.5v-4M20 16.5V8.5"/>'},
   {g:"Estoque", ico:'<path d="M4 8.5 12 4l8 4.5v7L12 20l-8-4.5zM4 8.5l8 4.5 8-4.5M12 13v7"/>', itens:[
-    {t:"registrar", rot:"Registrar movimentação"}, {t:"itens", rot:"Itens", b:"b-itens"}, {t:"historico", rot:"Histórico"}, {t:"emprestimos", rot:"Empréstimos", b:"b-emp"}]},
-  {g:"Manutenção e serviços", ico:'<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3.6 17.4a1.9 1.9 0 0 0 2.7 2.7l5.7-5.7a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.3-.3-2.4z"/>', itens:[
-    {t:"os", rot:"Ordens de serviço (OS)", b:"b-os"}, {t:"demandas", rot:"Demandas", b:"b-dem"}, {t:"indicadores", rot:"Indicadores"}]},
-  {g:"Gestão", ico:'<path d="M5 19V11M10 19V6M15 19v-5M20 19V9"/>', itens:[{t:"dashboard", rot:"Dashboard"}]},
+    {t:"itens", rot:"Materiais", b:"b-itens"}, {t:"categorias", rot:"Categorias de materiais"}, {t:"registrar", rot:"Registrar movimentação"}, {t:"historico", rot:"Histórico"}, {t:"emprestimos", rot:"Empréstimos", b:"b-emp"}]},
+  {g:"Manutenção e rotinas", ico:'<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3.6 17.4a1.9 1.9 0 0 0 2.7 2.7l5.7-5.7a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.3-.3-2.4z"/>', itens:[
+    {t:"indicadores", rot:"Indicadores"}, {t:"os", acao:"osnova", perm:"os_abrir", rot:"Abrir OS"}, {t:"demandas", acao:"preventiva", perm:"dem_delegar", rot:"Manutenção preventiva"},
+    {t:"os", rot:"Ordens de serviço (OS)", b:"b-os"}, {t:"demandas", rot:"Demandas", b:"b-dem"}]},
   {g:"Pendências e compras", ico:'<path d="M8 5h11M8 12h11M8 19h11M4 5h.01M4 12h.01M4 19h.01"/>', itens:[
     {t:"pendencias", rot:"Controle de pendências", b:"b-adm"}, {t:"pendencias", acao:"nova", rot:"Incluir pendência"}, {t:"cotacoes", rot:"Cotações"}]},
-  {g:"Equipe", ico:'<path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 6.5M18 14.5a6 6 0 0 1 3.5 5.5"/>', itens:[
-    {t:"usuarios", rot:"Usuários e permissões"}, {t:"acessos", rot:"Histórico de acessos"}]}
+  {g:"Administração", ico:'<path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 6.5M18 14.5a6 6 0 0 1 3.5 5.5"/>', itens:[
+    {t:"usuarios", rot:"Usuários"}, {t:"equipe", rot:"Equipe"}, {t:"minhaequipe", rot:"Minha equipe"}, {t:"acessos", rot:"Histórico de acessos"}]},
+  {g:"Gestão", ico:'<path d="M5 19V11M10 19V6M15 19v-5M20 19V9"/>', itens:[{t:"dashboard", rot:"Dashboard do estoque"}]}
 ];
 const MENU_ICO = d => `<svg viewBox="0 0 24 24" aria-hidden="true" class="side-ico">${d}</svg>`;
 let menuAbertos = null;
 try { const x = JSON.parse(localStorage.getItem("menu-abertos") || "null"); if (Array.isArray(x)) menuAbertos = new Set(x); } catch(e){}
 const menuGuardar = () => { try { localStorage.setItem("menu-abertos", JSON.stringify([...menuAbertos])); } catch(e){} };
 const menuLogado = () => !!S.token && !!$("#login") && $("#login").hidden;
-const itemPode = it => (TEM_ADM || !ABAS_ADM.includes(it.t)) && podeAba(it.t) && !!$("#t-" + it.t);
+const itemPode = it => (TEM_ADM || !ABAS_ADM.includes(it.t)) && podeAba(it.t) && !!$("#t-" + it.t) && (!it.perm || can(it.perm));
 function renderMenu(){
   const side = $("#side"); if (!side) return;
   const logado = menuLogado();
@@ -472,6 +477,8 @@ if ($("#side")) {
       const t = b.dataset.mtab;
       if (S.tab !== t) setTab(t); else fecharMenu();
       if (b.dataset.macao === "nova" && t === "pendencias") pdAbrirNova();
+      if (b.dataset.macao === "osnova") novaOS();
+      if (b.dataset.macao === "preventiva") { const pv = $("#pv-box"); if (pv && !pv.hidden) setTimeout(() => pv.scrollIntoView({behavior:"smooth", block:"start"}), 60); }
     }
   });
   // contadores das abas mudam o tempo todo: o menu acompanha
@@ -1002,6 +1009,9 @@ function renderAll(){
   if (S.tab==="os") renderOS();
   if (S.tab==="demandas") renderDem();
   if (S.tab==="pendencias") renderPend();
+  if (S.tab==="categorias") renderCategorias();
+  if (S.tab==="equipe") renderEquipeDir();
+  if (S.tab==="minhaequipe") renderMinhaEquipe();
   renderAvisoDem();
   renderOsRef();
   renderPicked();
@@ -4745,6 +4755,67 @@ if ($("#t-indicadores")) {
   $("#t-indicadores").addEventListener("keydown", e => { if (e.key === "Enter" && e.target.dataset && e.target.dataset.ind) indAbrir(e.target.dataset.ind); });
   addEventListener("resize", () => { clearTimeout(IND.rz); IND.rz = setTimeout(() => { if (S.tab === "indicadores" && IND.vista === "dash" && IND.dados) indGrafTempo(indItens().filter(indPassaFiltros)); }, 150); });
 }
+
+// ---------- categorias de materiais: um cartão por categoria do estoque do setor; o clique abre Materiais filtrado ----------
+function renderCategorias(){
+  const box = $("#cat-cards"); if (!box || $("#t-categorias").hidden) return;
+  const itens = [...S.itens.values()].filter(doSetor), por = {};
+  itens.forEach(i => { const c = String(i.categoria || "").trim() || "Sem categoria"; const x = por[c] = por[c] || {n:0, repor:0, zero:0}; x.n++; const st = statusItem(i); if (st !== "ok") x.repor++; if (st === "zero") x.zero++; });
+  const cats = Object.entries(por).sort((a, b) => a[0] === "Sem categoria" ? 1 : b[0] === "Sem categoria" ? -1 : a[0].localeCompare(b[0], "pt-BR"));
+  $("#cat-resumo").textContent = `${cats.length} categoria${cats.length === 1 ? "" : "s"} · ${itens.length} materia${itens.length === 1 ? "l" : "is"} no estoque ${S.setor === "Limpeza" ? "da Limpeza" : "da Manutenção"}`;
+  box.innerHTML = cats.length ? cats.map(([c, x]) => `<button type="button" class="cat-card" data-cat="${esc(c)}"><b>${esc(c)}</b><span class="cat-n num">${x.n}</span><small>materia${x.n === 1 ? "l" : "is"}</small>
+      <span class="cat-st">${x.repor ? `<span class="pill s-baixo">${x.repor} para repor</span>` : `<span class="pill s-ok">tudo em dia</span>`}${x.zero ? `<span class="pill s-zero">${x.zero} zerado${x.zero === 1 ? "" : "s"}</span>` : ""}</span></button>`).join("")
+    : `<div class="empty">Nenhum material cadastrado neste estoque.</div>`;
+  $$("#cat-cards .cat-card").forEach(b => b.onclick = () => {
+    const c = b.dataset.cat; setTab("itens");
+    const sel = $("#i-cat"); renderItens();
+    if (c !== "Sem categoria" && [...sel.options].some(o => o.value === c)) { sel.value = c; renderItens(); }
+    else if (c === "Sem categoria") { sel.value = ""; $("#i-busca").value = ""; renderItens(); }
+  });
+}
+// ---------- equipe: quem está ativo, contato e o que cada um tem em aberto ----------
+const eqCarga = u => {
+  const meu = x => x.responsavelUsuario ? x.responsavelUsuario === u.usuario : norm(x.responsavel || "") === norm(u.nome);
+  const os = S.os.filter(o => !osEncerrada(o) && meu(o)), dem = S.dem.filter(d => !demEnc(d) && meu(d));
+  return {os, dem, atras: os.filter(osAtrasada).length + dem.filter(demAtrasada).length};
+};
+function renderEquipeDir(){
+  const box = $("#eq-body"); if (!box || $("#t-equipe").hidden) return;
+  const q = norm($("#eq-busca").value);
+  const lista = S.colab.filter(u => !q || norm([u.nome, u.usuario, u.telefone].join(" ")).includes(q)).sort((a, b) => String(a.nome).localeCompare(String(b.nome), "pt-BR"));
+  $("#eq-resumo").textContent = `${S.colab.length} pessoa${S.colab.length === 1 ? "" : "s"} ativa${S.colab.length === 1 ? "" : "s"} no sistema`;
+  box.innerHTML = lista.length ? lista.map(u => { const c = eqCarga(u), tel = String(u.telefone || "").replace(/\D/g, "");
+    return `<tr><td><span class="eq-pessoa"><span class="avatar" aria-hidden="true">${esc(iniciais(u.nome))}</span><span><b>${esc(u.nome)}</b><span class="sub mono">${esc(u.usuario)}</span></span></span></td>
+      <td class="hide-s">${tel ? `<a href="https://wa.me/${tel.length <= 11 ? "55" + tel : tel}" target="_blank" rel="noopener">${esc(u.telefone)}</a>` : '<span class="muted">—</span>'}</td>
+      <td class="num">${c.os.length}</td><td class="num">${c.dem.length}</td><td class="num ${c.atras ? "atras" : ""}">${c.atras}</td></tr>`; }).join("")
+    : `<tr><td colspan="5"><div class="empty">${q ? "Ninguém com esse nome." : "Nenhuma pessoa ativa."}</div></td></tr>`;
+}
+// ---------- minha equipe: o que cada pessoa está fazendo agora (OS e demandas em aberto) ----------
+function renderMinhaEquipe(){
+  const box = $("#me-quadro"); if (!box || $("#t-minhaequipe").hidden) return;
+  const ord = (a, b) => (b.atr - a.atr) || String(a.prazo || "9").localeCompare(String(b.prazo || "9"));
+  // cada tarefa vai para a pessoa pelo login; se a OS antiga só tiver o nome, pelo nome
+  const porNome = new Map(S.colab.map(u => [norm(u.nome), u.usuario]));
+  const dono = x => x.responsavelUsuario || porNome.get(norm(x.responsavel || "")) || (String(x.responsavel || "").trim() ? "nome:" + String(x.responsavel).trim() : "");
+  const tarefas = S.os.filter(o => !osEncerrada(o)).map(o => ({k:"os", id:o.id, num:o.numero, tit:o.titulo, prazo:o.prazo, atr:osAtrasada(o), st:o.status, local:o.local, dono:dono(o)}))
+    .concat(osAmb() === "Manutenção" ? S.dem.filter(d => !demEnc(d)).map(d => ({k:"dem", id:d.id, num:d.numero, tit:d.titulo, prazo:d.prazo, atr:demAtrasada(d), st:d.status, local:d.local, dono:dono(d)})) : []);
+  const grupos = new Map();
+  tarefas.forEach(t => { if (!grupos.has(t.dono)) grupos.set(t.dono, []); grupos.get(t.dono).push(t); });
+  grupos.forEach(l => l.sort(ord));
+  const nomeDe = k => { const u = S.colab.find(c => c.usuario === k); return u ? u.nome : k.startsWith("nome:") ? k.slice(5) : k; };
+  const pessoas = [...grupos.entries()].filter(([k]) => k).map(([k, l]) => ({nome:nomeDe(k), l})).sort((a, b) => b.l.length - a.l.length || a.nome.localeCompare(b.nome, "pt-BR"));
+  const livres = S.colab.filter(u => !grupos.has(u.usuario));
+  const sem = grupos.get("") || [];
+  const card = (nome, sub, l, extra) => `<section class="me-col ${extra || ""}"><h4><span class="avatar" aria-hidden="true">${esc(iniciais(nome))}</span><span><b>${esc(nome)}</b><small>${esc(sub)}</small></span><span class="badge ${l.some(t => t.atr) ? "alert" : ""}">${l.length}</span></h4>
+    <ul>${l.map(t => `<li><button type="button" class="me-t ${t.atr ? "atr" : ""}" data-me="${t.k}:${esc(t.id)}"><span class="mono">${esc(t.num || "")}</span> ${esc(t.tit)}<small>${esc(t.st)}${t.local ? " · " + esc(t.local) : ""} · ${t.prazo ? (t.atr ? "atrasada, prazo " : "prazo ") + fData(t.prazo) : "sem prazo"}</small></button></li>`).join("")}</ul></section>`;
+  $("#me-resumo").textContent = `${tarefas.length} OS e demanda${tarefas.length === 1 ? "" : "s"} em aberto · ${pessoas.length} pessoa${pessoas.length === 1 ? "" : "s"} com tarefas` + (livres.length ? ` · ${livres.length} sem nada em aberto` : "");
+  box.innerHTML = (sem.length ? card("Sem responsável", "esperando alguém assumir", sem, "sem") : "")
+    + pessoas.map(x => { const a = x.l.filter(t => t.atr).length; return card(x.nome, `${x.l.length} em aberto${a ? ` · ${a} atrasada${a === 1 ? "" : "s"}` : ""}`, x.l); }).join("")
+    + (livres.length ? `<section class="me-col livres"><h4><span><b>Sem nada em aberto</b><small>disponíveis para novas tarefas</small></span></h4><p>${livres.map(u => esc(u.nome)).join(" · ")}</p></section>` : "")
+    || `<div class="empty">Nenhuma OS ou demanda em aberto.</div>`;
+}
+if ($("#t-minhaequipe")) $("#me-quadro").addEventListener("click", e => { const b = e.target.closest("[data-me]"); if (!b) return; const [k, id] = b.dataset.me.split(":"); if (k === "os") abrirOS(id); else abrirDem(id); });
+if ($("#t-equipe")) $("#eq-busca").addEventListener("input", renderEquipeDir);
 
 // ---------- início ----------
 $("#m-data").value = hoje();
