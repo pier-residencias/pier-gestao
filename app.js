@@ -35,7 +35,7 @@ const SETORES_PERM = [["Manutenção","setor_manutencao"],["Limpeza","setor_limp
 const setoresDasPerms = p => { const l = SETORES_PERM.filter(x => p && p[x[1]]).map(x => x[0]); return l.length ? l : ["Manutenção"]; };
 const doSetor = x => setorDe(x) === S.setor;
 const can = p => !!(S.perms && S.perms[p]);
-const ABAS_PERM = {painel:["painel"], demandas:["dem_ver","dem_executar","dem_delegar"], os:["os_ver","os_abrir","os_atender","os_gerenciar"], registrar:["registrar_saida","registrar_entrada","registrar_troca","registrar_emprestimo"], itens:["itens_ver"], historico:["historico_ver"], emprestimos:["devolver","registrar_emprestimo"], dashboard:["dashboard"], indicadores:["dashboard"], categorias:["itens_ver"], equipe:["os_gerenciar","dem_delegar"], minhaequipe:["os_gerenciar","dem_delegar"], usuarios:["usuarios"], inicio:["pendencias","usuarios","acessos"], pendencias:["pendencias"], pdpainel:["pendencias"], cotacoes:["pendencias"], acessos:["acessos"]};
+const ABAS_PERM = {painel:["painel"], demandas:["dem_ver","dem_executar","dem_delegar"], os:["os_ver","os_abrir","os_atender","os_gerenciar"], registrar:["registrar_saida","registrar_entrada","registrar_troca","registrar_emprestimo"], itens:["itens_ver"], historico:["historico_ver"], emprestimos:["devolver","registrar_emprestimo"], dashboard:["dashboard"], indicadores:["dashboard"], categorias:["itens_ver"], prestadores:["os_ver","os_abrir","os_atender","os_gerenciar","dem_ver","dem_executar","dem_delegar"], equipe:["os_gerenciar","dem_delegar"], minhaequipe:["os_gerenciar","dem_delegar"], usuarios:["usuarios"], inicio:["pendencias","usuarios","acessos"], pendencias:["pendencias"], pdpainel:["pendencias"], cotacoes:["pendencias"], acessos:["acessos"]};
 // Se o navegador ainda estiver com a página antiga guardada, o menu Administração não existe nela:
 // o resto do sistema continua funcionando normalmente.
 const TEM_ADM = !!(document.getElementById("tab-adm") && document.getElementById("adm-menu") && document.getElementById("t-pendencias"));
@@ -53,8 +53,9 @@ const modo = () => S.adm ? "Administração" : S.setor;
 // Mesmo menu nos três setores (pedido de 24/10/2026); cada pessoa vê só o que o perfil permite.
 // O setor escolhido decide a página inicial (Home da Administração ou Painel do setor) e qual estoque e quais OS aparecem.
 // No setor Limpeza não há demandas nem empréstimos.
-const SO_ADM = ["inicio","pdpainel"], FORA_LIMPEZA = ["demandas","emprestimos","minhaequipe"];
-const abaNoModo = t => t === "painel" ? !S.adm : SO_ADM.includes(t) ? S.adm : !(!S.adm && S.setor === "Limpeza" && FORA_LIMPEZA.includes(t));
+// Prestadores de serviço: só no setor Manutenção (pedido de 24/10/2026).
+const SO_ADM = ["inicio","pdpainel"], FORA_LIMPEZA = ["demandas","emprestimos","minhaequipe"], SO_MANUT = ["prestadores"];
+const abaNoModo = t => t === "painel" ? !S.adm : SO_ADM.includes(t) ? S.adm : SO_MANUT.includes(t) ? !S.adm && S.setor !== "Limpeza" : !(!S.adm && S.setor === "Limpeza" && FORA_LIMPEZA.includes(t));
 const ehSindico = () => norm(S.perfil).includes("sindico");
 const ehGerente = () => norm(S.perfil).includes("gerente");
 // OS por ambiente: a Limpeza vê as OS da Limpeza; a Manutenção, as da Manutenção (inclui jardinagem e as antigas, sem setor)
@@ -124,6 +125,7 @@ function aplicar(d){
   S.colab = d.colaboradores || [];
   S.dem = d.demandas || [];
   S.prev = d.preventivas || [];
+  S.prest = Array.isArray(d.prestadores) ? d.prestadores : undefined; // Apps Script anterior não manda
   S.ultima = new Date();
   renderAll(); renderSugestoes();
 }
@@ -396,7 +398,7 @@ const MENU = [
   {g:"Estoque", ico:'<path d="M4 8.5 12 4l8 4.5v7L12 20l-8-4.5zM4 8.5l8 4.5 8-4.5M12 13v7"/>', itens:[
     {t:"itens", rot:"Materiais", b:"b-itens"}, {t:"categorias", rot:"Categorias de materiais"}, {t:"registrar", rot:"Registrar movimentação"}, {t:"historico", rot:"Histórico"}, {t:"emprestimos", rot:"Empréstimos", b:"b-emp"}]},
   {g:"Manutenção e rotinas", ico:'<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3.6 17.4a1.9 1.9 0 0 0 2.7 2.7l5.7-5.7a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.3-.3-2.4z"/>', itens:[
-    {t:"indicadores", rot:"Indicadores"}, {t:"os", acao:"osnova", perm:"os_abrir", rot:"Abrir OS"}, {t:"demandas", acao:"preventiva", perm:"dem_delegar", rot:"Manutenção preventiva"},
+    {t:"indicadores", rot:"Indicadores"}, {t:"os", acao:"osnova", perm:"os_abrir", rot:"Abrir OS"}, {t:"demandas", acao:"preventiva", perm:"dem_delegar", rot:"Manutenção preventiva"}, {t:"prestadores", rot:"Prestadores de serviço", b:"b-prest"},
     {t:"os", rot:"Ordens de serviço (OS)", b:"b-os"}, {t:"demandas", rot:"Demandas", b:"b-dem"}]},
   {g:"Pendências e compras", ico:'<path d="M8 5h11M8 12h11M8 19h11M4 5h.01M4 12h.01M4 19h.01"/>', itens:[
     {t:"pendencias", rot:"Controle de pendências", b:"b-adm"}, {t:"pendencias", acao:"nova", rot:"Incluir pendência"}, {t:"cotacoes", rot:"Cotações"}]},
@@ -1012,6 +1014,8 @@ function renderAll(){
   if (S.tab==="categorias") renderCategorias();
   if (S.tab==="equipe") renderEquipeDir();
   if (S.tab==="minhaequipe") renderMinhaEquipe();
+  if (S.tab==="prestadores") renderPrest();
+  renderPrestBadge();
   renderAvisoDem();
   renderOsRef();
   renderPicked();
@@ -1940,7 +1944,7 @@ function renderPrev(){
   const lista = [...S.prev].sort((a,b) => (/^s/i.test(b.ativa) - /^s/i.test(a.ativa)) || String(a.proxima).localeCompare(String(b.proxima)));
   $("#pv-body").innerHTML = lista.length ? lista.map(p => { const ativa = /^s/i.test(p.ativa); return `<tr class="click ${ativa?"":"inativo"}" data-pv="${esc(p.id)}" tabindex="0">
     <td class="mono">${esc(p.numero)}</td>
-    <td><b>${esc(p.titulo)}</b><span class="sub">${esc([p.local, p.categoria].filter(Boolean).join(" · "))}</span></td>
+    <td><b>${esc(p.titulo)}</b><span class="sub">${esc([p.local, p.categoria, ((S.prest || []).find(x => x.id === p.prestador) || {}).nome].filter(Boolean).join(" · "))}</span></td>
     <td>${esc(descRep(p.intervalo, p.unidade))}</td>
     <td class="hide-s">${esc(p.responsavel || "—")}</td>
     <td class="num" style="white-space:nowrap">${ativa ? fData(p.proxima) : '<span class="pill p-ajuste">Pausada</span>'}</td></tr>`; }).join("")
@@ -1969,6 +1973,7 @@ function abrirPrev(id){
       <div class="field"><label for="pv-r">Responsável</label><select class="input" id="pv-r">${opcoesColab(v.responsavelUsuario, "Sem responsável")}</select></div>
       <div class="field"><label for="pv-prio">Prioridade</label><select class="input" id="pv-prio">${["Urgente","Alta","Normal","Baixa"].map(x=>`<option ${x===(v.prioridade||"Normal")?"selected":""}>${x}</option>`).join("")}</select></div>
       <div class="field"><label for="pv-local">Local</label><input class="input" id="pv-local" value="${esc(v.local)}" list="dl-local" placeholder="Ex.: Casa de máquinas"></div>
+      ${Array.isArray(S.prest) ? `<div class="field"><label for="pv-prest">Prestador de serviço</label><select class="input" id="pv-prest"><option value="">Equipe própria</option>${S.prest.filter(x => prAtivo(x) || x.id === v.prestador).map(x => `<option value="${esc(x.id)}" ${x.id === v.prestador ? "selected" : ""}>${esc(x.nome)}${x.servico ? " · " + esc(x.servico) : ""}</option>`).join("")}</select></div>` : ""}
       <div class="field"><label for="pv-cat">Categoria</label><select class="input" id="pv-cat"><option value="">Selecione</option>${cats.map(c=>`<option ${c===v.categoria?"selected":""}>${esc(c)}</option>`).join("")}</select></div>
       <div class="field full"><label for="pv-desc">Como fazer</label><textarea class="input" id="pv-desc" placeholder="Passo a passo, pontos para conferir, materiais" maxlength="3000">${esc(v.descricao)}</textarea></div>
       <label class="perm full"><input type="checkbox" id="pv-ativa" ${/^s/i.test(v.ativa)?"checked":""}> Ativa: criar as demandas nas datas (desmarque para pausar)</label>
@@ -1991,6 +1996,7 @@ function abrirPrev(id){
     const [n, u] = f === "outra" ? [Math.round(pQtd($("#pv-n").value)), $("#pv-u").value] : [Number(f.split("-")[0]), f.split("-")[1]];
     const nv = {id: p ? p.id : "", titulo:$("#pv-titulo").value.trim(), intervalo:n, unidade:u, proxima:$("#pv-prox").value, prazoDias:$("#pv-dias").value.trim(),
       responsavelUsuario:$("#pv-r").value, prioridade:$("#pv-prio").value, local:$("#pv-local").value.trim(), categoria:$("#pv-cat").value, descricao:$("#pv-desc").value.trim(), ativa:$("#pv-ativa").checked};
+    if ($("#pv-prest")) nv.prestador = $("#pv-prest").value;
     if (!nv.titulo) { msg.textContent = "Descreva a tarefa em poucas palavras."; return; }
     if (!(n >= 1 && n <= 365)) { msg.textContent = "Informe de quanto em quanto tempo a tarefa se repete."; return; }
     if (!nv.proxima) { msg.textContent = "Informe a data."; return; }
@@ -4816,6 +4822,294 @@ function renderMinhaEquipe(){
 }
 if ($("#t-minhaequipe")) $("#me-quadro").addEventListener("click", e => { const b = e.target.closest("[data-me]"); if (!b) return; const [k, id] = b.dataset.me.split(":"); if (k === "os") abrirOS(id); else abrirDem(id); });
 if ($("#t-equipe")) $("#eq-busca").addEventListener("input", renderEquipeDir);
+
+// ---------- prestadores de serviço (só no setor Manutenção) ----------
+// Lista vem junto com os dados (Apps Script novo). Vê quem é da manutenção; cadastra quem gerencia OS ou distribui demandas.
+const PR_FREQ = ["Semanal","Quinzenal","Mensal","Bimestral","Trimestral","Semestral","Anual","Sob demanda"];
+const PR_DOCS = ["Contrato","ART","Certificado","Laudo","Seguro","Alvará","Proposta","Outro"];
+const PR = { q:"", serv:"", f:"ativos" };
+const prPodeEditar = () => can("os_gerenciar") || can("dem_delegar");
+const prAtivo = p => !/^n/i.test(String(p.ativo || "Sim"));
+const prDias = d => d ? Math.round((new Date(d + "T12:00") - new Date(hoje() + "T12:00")) / 864e5) : null;
+// situação de uma data de vencimento: vencido, vence em até 30 dias ou ok
+const prVenc = d => { const n = prDias(d); return n === null ? "" : n < 0 ? "vencido" : n <= 30 ? "vence" : "ok"; };
+const prVisitaAtrasada = p => prAtivo(p) && p.proximaVisita && p.proximaVisita < hoje();
+const prDocsAlerta = p => (p.docs || []).filter(d => d.validade && prVenc(d.validade) !== "ok");
+const prAlertas = p => {
+  if (!prAtivo(p)) return [];
+  const a = [];
+  const vc = prVenc(p.contratoFim);
+  if (vc === "vencido") a.push({cls:"crit", txt:`Contrato vencido em ${fData(p.contratoFim)}`});
+  else if (vc === "vence") a.push({cls:"warn", txt:`Contrato vence em ${fData(p.contratoFim)}`});
+  if (prVisitaAtrasada(p)) a.push({cls:"crit", txt:`Visita atrasada (prevista ${fData(p.proximaVisita)})`});
+  prDocsAlerta(p).forEach(d => a.push({cls: prVenc(d.validade) === "vencido" ? "crit" : "warn", txt:`${d.nome} ${prVenc(d.validade) === "vencido" ? "vencido" : "vence"} em ${fData(d.validade)}`}));
+  return a;
+};
+const prTel = t => { const n = String(t || "").replace(/\D/g, ""); return n ? (n.length <= 11 ? "55" + n : n) : ""; };
+const prContatos = p => [p.telefone ? `<a href="tel:+${prTel(p.telefone)}">${esc(p.telefone)}</a> · <a href="https://wa.me/${prTel(p.telefone)}" target="_blank" rel="noopener">WhatsApp</a>` : "", p.email ? `<a href="mailto:${esc(p.email)}">${esc(p.email)}</a>` : ""].filter(Boolean).join(" · ");
+const prPrevs = p => (S.prev || []).filter(v => v.prestador === p.id);
+function renderPrestBadge(){
+  const b = $("#b-prest"); if (!b) return;
+  const n = (S.prest || []).filter(p => prAlertas(p).length).length;
+  b.textContent = n; b.hidden = !n;
+}
+function renderPrest(){
+  const sec = $("#t-prestadores"); if (!sec || sec.hidden) return;
+  const novo = Array.isArray(S.prest);
+  $("#pr-aviso").hidden = novo;
+  $("#pr-novo").hidden = !novo || !prPodeEditar();
+  $("#pr-baixar").hidden = $("#pr-importar").hidden = $("#pr-dica-plan").hidden = !novo || !prPodeEditar();
+  if (!novo) { $("#pr-cards").innerHTML = ""; $("#pr-resumo").innerHTML = ""; return; }
+  const todos = S.prest, ativos = todos.filter(prAtivo);
+  const contr = ativos.filter(p => prVenc(p.contratoFim) && prVenc(p.contratoFim) !== "ok").length, vis = ativos.filter(prVisitaAtrasada).length, docs = ativos.filter(p => prDocsAlerta(p).length).length;
+  $("#pr-resumo").innerHTML = [["ativos", ativos.length, `prestador${ativos.length === 1 ? "" : "es"} ativo${ativos.length === 1 ? "" : "s"}`, ""], ["atencao", ativos.filter(p => prAlertas(p).length).length, "precisam de atenção", "alerta"],
+    ["contrato", contr, "contratos vencendo ou vencidos", contr ? "warn" : ""], ["visita", vis, "visitas atrasadas", vis ? "alerta" : ""], ["docs", docs, "com documento vencendo", docs ? "warn" : ""], ["inativos", todos.length - ativos.length, "inativos", ""]]
+    .map(([k, n, rot, cls]) => `<button type="button" class="pd-stat ${cls}" data-f="${k}" aria-pressed="${PR.f === k}"><b>${n}</b><span>${rot}</span></button>`).join("");
+  const servs = [...new Set(todos.map(p => p.servico).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  $("#pr-serv").innerHTML = `<option value="">Todos os serviços</option>` + servs.map(s => `<option ${s === PR.serv ? "selected" : ""}>${esc(s)}</option>`).join("");
+  const q = norm(PR.q);
+  const lista = todos.filter(p => {
+    if (PR.f === "inativos" ? prAtivo(p) : !prAtivo(p)) return false;
+    if (PR.f === "atencao" && !prAlertas(p).length) return false;
+    if (PR.f === "contrato" && !(prVenc(p.contratoFim) && prVenc(p.contratoFim) !== "ok")) return false;
+    if (PR.f === "visita" && !prVisitaAtrasada(p)) return false;
+    if (PR.f === "docs" && !prDocsAlerta(p).length) return false;
+    if (PR.serv && p.servico !== PR.serv) return false;
+    if (q && !norm([p.nome, p.servico, p.contato, p.telefone, p.email, p.cnpj].join(" ")).includes(q)) return false;
+    return true;
+  }).sort((a, b) => prAlertas(b).length - prAlertas(a).length || String(a.nome).localeCompare(String(b.nome), "pt-BR"));
+  $("#pr-cards").innerHTML = lista.length ? lista.map(p => {
+    const al = prAlertas(p), pv = prPrevs(p).length;
+    return `<article class="pr-card ${al.some(a => a.cls === "crit") ? "crit" : al.length ? "warn" : ""} ${prAtivo(p) ? "" : "inativo"}">
+      <button type="button" class="pr-abrir" data-pr="${esc(p.id)}"><span class="pr-top"><b>${esc(p.nome)}</b>${p.servico ? `<span class="pr-serv">${esc(p.servico)}</span>` : ""}</span>
+        <span class="pr-lin">${esc(p.contato || "Sem contato")}${p.frequencia ? ` · visita ${esc(p.frequencia.toLowerCase())}` : ""}</span>
+        <span class="pr-lin">${p.proximaVisita ? `Próxima visita: <b class="${prVisitaAtrasada(p) ? "atr" : ""}">${fData(p.proximaVisita)}</b>` : p.ultimaVisita ? `Última visita: ${fData(p.ultimaVisita)}` : "Nenhuma visita registrada"}</span>
+        <span class="pr-lin">${p.contratoFim ? `Contrato até ${fData(p.contratoFim)}` : "Sem data de fim de contrato"}${(p.docs || []).length ? ` · ${(p.docs || []).length} documento${p.docs.length === 1 ? "" : "s"}` : ""}${pv ? ` · ${pv} preventiva${pv === 1 ? "" : "s"}` : ""}</span>
+        ${al.length ? `<span class="pr-al">${al.map(a => `<span class="pill ${a.cls === "crit" ? "s-zero" : "s-baixo"}">${esc(a.txt)}</span>`).join("")}</span>` : ""}</button>
+      ${p.telefone ? `<span class="pr-cont"><a class="btn small" href="tel:+${prTel(p.telefone)}">Ligar</a><a class="btn small wa" href="https://wa.me/${prTel(p.telefone)}" target="_blank" rel="noopener">WhatsApp</a></span>` : ""}
+    </article>`; }).join("")
+    : `<div class="empty">${todos.length ? "Nenhum prestador com esses filtros." : "Nenhum prestador cadastrado ainda." + (prPodeEditar() ? ` <button class="link" type="button" id="pr-novo2">Cadastrar o primeiro</button>` : "")}</div>`;
+  if ($("#pr-novo2")) $("#pr-novo2").onclick = () => prForm(null);
+}
+function prDetalhe(id){
+  const p = (S.prest || []).find(x => x.id === id); if (!p) { fecharModal(); return; }
+  const ed = prPodeEditar(), al = prAlertas(p), pvs = prPrevs(p), vis = (p.visitas || []).slice().reverse().slice(0, 8);
+  $("#modal-box").classList.add("largo");
+  $("#modal-box").innerHTML = `
+    <div class="os-top"><span class="pr-serv">${esc(p.servico || "Serviço não informado")}</span>${prAtivo(p) ? "" : `<span class="pill p-ajuste">Inativo</span>`}</div>
+    <h3 class="os-tit">${esc(p.nome)}</h3>
+    ${al.length ? `<p class="pr-al">${al.map(a => `<span class="pill ${a.cls === "crit" ? "s-zero" : "s-baixo"}">${esc(a.txt)}</span>`).join("")}</p>` : ""}
+    <dl class="os-info">
+      <div><dt>Contato</dt><dd>${esc(p.contato || "—")}</dd></div>
+      <div><dt>Telefone / e-mail</dt><dd>${prContatos(p) || "—"}</dd></div>
+      <div><dt>CNPJ</dt><dd class="mono">${esc(p.cnpj || "—")}</dd></div>
+      <div><dt>Endereço</dt><dd>${esc(p.endereco || "—")}</dd></div>
+      <div><dt>Contrato</dt><dd>${p.contratoInicio || p.contratoFim ? `${fData(p.contratoInicio)} a ${fData(p.contratoFim)}` : "—"}${p.valorMensal !== "" && p.valorMensal != null ? ` · ${fBRL(p.valorMensal)}/mês` : ""}</dd></div>
+      <div><dt>Visitas</dt><dd>${esc(p.frequencia || "Frequência não informada")} · última ${fData(p.ultimaVisita)} · próxima <b class="${prVisitaAtrasada(p) ? "atr" : ""}">${fData(p.proximaVisita)}</b></dd></div>
+    </dl>
+    ${p.observacao ? `<p class="os-desc">${esc(p.observacao)}</p>` : ""}
+    <div class="os-acoes actions">${ed ? `<button class="btn primary" type="button" id="pr-visita">Registrar visita</button><button class="btn" type="button" id="pr-editar">Editar</button>` : ""}<button class="btn" type="button" id="pr-fechar">Fechar</button></div>
+    <div id="pr-sub"></div>
+    <div class="os-grid">
+      <section><h4>Documentos e certificados</h4>
+        ${(p.docs || []).length ? `<ul class="pr-docs">${p.docs.map(d => `<li><button type="button" class="link" data-doc="${esc(d.id)}" data-nome="${esc(p.nome + " - " + d.nome)}">${esc(d.nome)}</button>
+          ${d.validade ? `<span class="pill ${{vencido:"s-zero", vence:"s-baixo"}[prVenc(d.validade)] || "s-ok"}">validade ${fData(d.validade)}</span>` : `<span class="muted">sem validade</span>`}
+          ${ed ? `<button type="button" class="link danger" data-docx="${esc(d.id)}">tirar</button>` : ""}</li>`).join("")}</ul>` : `<p class="muted">Nenhum documento anexado.</p>`}
+        ${ed ? `<form class="pr-up" id="pr-up" novalidate><select class="input" id="pr-dtipo" aria-label="Tipo de documento">${PR_DOCS.map(d => `<option>${d}</option>`).join("")}</select>
+          <input class="input" type="date" id="pr-dval" aria-label="Validade (opcional)" title="Validade (opcional)"><input class="input" type="file" id="pr-darq" accept="application/pdf,image/jpeg,image/png" aria-label="Arquivo">
+          <button class="btn small" type="submit" id="pr-dok">Anexar</button><span class="hint" id="pr-dmsg">PDF ou foto, até 7 MB. A validade é opcional.</span></form>` : ""}
+      </section>
+      <section><h4>Preventivas que faz</h4>
+        ${pvs.length ? `<ul class="pr-docs">${pvs.map(v => `<li><span class="mono">${esc(v.numero)}</span> ${esc(v.titulo)} <span class="muted">· próxima ${fData(v.proxima)}</span></li>`).join("")}</ul>`
+          : `<p class="muted">Nenhuma preventiva ligada.${can("dem_delegar") ? " Escolha este prestador ao criar ou editar uma preventiva." : ""}</p>`}
+        <h4>Últimas visitas</h4>
+        ${vis.length ? `<ul class="pr-docs">${vis.map(v => `<li>${fData(v.data)} <span class="muted">· ${esc(v.por || "")}</span>${v.obs ? `<br><small>${esc(v.obs)}</small>` : ""}</li>`).join("")}</ul>` : `<p class="muted">Nenhuma visita registrada.</p>`}
+      </section>
+    </div>`;
+  $("#modal").hidden = false;
+  $("#pr-fechar").onclick = fecharModal; $("#pr-fechar").focus();
+  $$("#modal-box [data-doc]").forEach(b => b.onclick = () => prAbrirDoc(p.id, b.dataset.doc, b.dataset.nome));
+  if (!ed) return;
+  $("#pr-editar").onclick = () => prForm(p);
+  $("#pr-visita").onclick = () => {
+    $("#pr-sub").innerHTML = `<form class="form pr-visform" id="pr-vf" novalidate><div class="field"><label for="pr-vdata">Data da visita</label><input class="input" type="date" id="pr-vdata" value="${hoje()}" max="${hoje()}"></div>
+      <div class="field"><label for="pr-vobs">O que foi feito (opcional)</label><input class="input" id="pr-vobs" maxlength="300" placeholder="Ex.: revisão mensal, troca de peça"></div>
+      <div class="full actions"><button class="btn primary" type="submit" id="pr-vok">Registrar</button><button class="btn" type="button" id="pr-vno">Cancelar</button><span class="hint" id="pr-vmsg"></span></div></form>`;
+    $("#pr-vno").onclick = () => { $("#pr-sub").innerHTML = ""; };
+    $("#pr-vf").onsubmit = ev => { ev.preventDefault(); enviar($("#pr-vok"), $("#pr-vmsg"), "prestVisita", {id:p.id, data:$("#pr-vdata").value, obs:$("#pr-vobs").value.trim()}, () => prDetalhe(p.id)); };
+    $("#pr-vdata").focus();
+  };
+  $$("#modal-box [data-docx]").forEach(b => b.onclick = () => { if (b.dataset.conf) enviar(b, null, "prestDocRemover", {id:p.id, docId:b.dataset.docx}, () => prDetalhe(p.id)); else { b.dataset.conf = "1"; b.textContent = "confirmar: tirar"; } });
+  $("#pr-up").onsubmit = async ev => {
+    ev.preventDefault();
+    const f = $("#pr-darq").files[0], msg = $("#pr-dmsg");
+    if (!f) { msg.className = "hint err"; msg.textContent = "Escolha o arquivo."; return; }
+    if (f.size > 7 * 1024 * 1024) { msg.className = "hint err"; msg.textContent = "O arquivo passa de 7 MB."; return; }
+    const mime = f.type || (/\.pdf$/i.test(f.name) ? "application/pdf" : "");
+    if (!["application/pdf","image/jpeg","image/png"].includes(mime)) { msg.className = "hint err"; msg.textContent = "Envie em PDF ou foto (JPG ou PNG)."; return; }
+    const b64 = await new Promise((ok, erro) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1]); r.onerror = erro; r.readAsDataURL(f); });
+    enviar($("#pr-dok"), msg, "prestDoc", {id:p.id, nome:$("#pr-dtipo").value, validade:$("#pr-dval").value, mime, b64}, () => prDetalhe(p.id));
+  };
+}
+async function prAbrirDoc(id, docId, nome){
+  try {
+    const r = await api("prestVerDoc", {id, docId});
+    const bin = atob(r.arquivo.b64), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    const ext = {"application/pdf":".pdf","image/jpeg":".jpg","image/png":".png"}[r.arquivo.mime] || "";
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([u8], {type:r.arquivo.mime}));
+    // nome sem acentos: o Chrome troca nomes com acento por "download"
+    a.download = String(nome || "documento").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\w .()-]+/g, "-").replace(/\s+/g, " ").trim().slice(0, 100) + ext;
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+  } catch(e){ toast(e.message, true); }
+}
+function prForm(p){
+  if (!prPodeEditar()) return;
+  const v = p || {nome:"", servico:"", contato:"", telefone:"", email:"", cnpj:"", endereco:"", contratoInicio:"", contratoFim:"", valorMensal:"", frequencia:"", ultimaVisita:"", proximaVisita:"", observacao:"", ativo:"Sim"};
+  const servs = [...new Set((S.prest || []).map(x => x.servico).filter(Boolean).concat(["Elevadores","Bombas e hidráulica","Gerador","Piscina","Portões e interfones","CFTV e segurança","Incêndio e extintores","Ar-condicionado","Jardinagem","Dedetização","Limpeza de caixa d'água","Para-raios","Elétrica"]))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  $("#modal-box").classList.add("largo");
+  $("#modal-box").innerHTML = `
+    <h3>${p ? "Editar prestador" : "Novo prestador de serviço"}</h3>
+    <form class="form" id="f-pr" novalidate autocomplete="off">
+      <div class="field full"><label for="pr-nome">Empresa ou prestador <span class="req">*</span></label><input class="input" id="pr-nome" value="${esc(v.nome)}" maxlength="120" placeholder="Ex.: Elevadores Rio Ltda"></div>
+      <div class="field"><label for="pr-serv-in">Serviço</label><input class="input" id="pr-serv-in" value="${esc(v.servico)}" list="dl-prserv" maxlength="60" placeholder="Ex.: Elevadores"><datalist id="dl-prserv">${servs.map(s => `<option value="${esc(s)}">`).join("")}</datalist></div>
+      <div class="field"><label for="pr-cont">Contato (pessoa)</label><input class="input" id="pr-cont" value="${esc(v.contato)}" maxlength="80"></div>
+      <div class="field"><label for="pr-tel">Telefone / WhatsApp</label><input class="input" id="pr-tel" value="${esc(v.telefone)}" inputmode="tel" maxlength="30" placeholder="(21) 99999-9999"></div>
+      <div class="field"><label for="pr-mail">E-mail</label><input class="input" id="pr-mail" type="email" value="${esc(v.email)}" maxlength="120"></div>
+      <div class="field"><label for="pr-cnpj">CNPJ</label><input class="input" id="pr-cnpj" value="${esc(v.cnpj)}" inputmode="numeric" maxlength="20" placeholder="00.000.000/0000-00"></div>
+      <div class="field"><label for="pr-end">Endereço</label><input class="input" id="pr-end" value="${esc(v.endereco)}" maxlength="200"></div>
+      <h4 class="full pr-h">Contrato</h4>
+      <div class="field"><label for="pr-ci">Início</label><input class="input" type="date" id="pr-ci" value="${esc(v.contratoInicio)}"></div>
+      <div class="field"><label for="pr-cf">Fim (vencimento)</label><input class="input" type="date" id="pr-cf" value="${esc(v.contratoFim)}"><span class="hint">Avisa 30 dias antes de vencer.</span></div>
+      <div class="field"><label for="pr-val">Valor mensal (R$)</label><input class="input num" id="pr-val" value="${v.valorMensal === "" || v.valorMensal == null ? "" : esc(String(v.valorMensal).replace(".", ","))}" inputmode="decimal" placeholder="0,00"></div>
+      <h4 class="full pr-h">Visitas</h4>
+      <div class="field"><label for="pr-freq">Frequência</label><select class="input" id="pr-freq"><option value="">Não informada</option>${PR_FREQ.map(f => `<option ${f === v.frequencia ? "selected" : ""}>${f}</option>`).join("")}</select></div>
+      <div class="field"><label for="pr-ult">Última visita</label><input class="input" type="date" id="pr-ult" value="${esc(v.ultimaVisita)}" max="${hoje()}"></div>
+      <div class="field"><label for="pr-prox">Próxima visita</label><input class="input" type="date" id="pr-prox" value="${esc(v.proximaVisita)}"><span class="hint">Em branco: calculada pela última visita e a frequência.</span></div>
+      <div class="field full"><label for="pr-obs">Observação</label><textarea class="input" id="pr-obs" maxlength="1000" placeholder="Escopo do contrato, horários, quem acompanha a visita">${esc(v.observacao)}</textarea></div>
+      ${p ? `<label class="perm full"><input type="checkbox" id="pr-ativo" ${prAtivo(v) ? "checked" : ""}> Ativo (desmarque se o condomínio não trabalha mais com este prestador)</label>` : ""}
+      <div class="full actions"><button class="btn primary" type="submit" id="pr-ok">${p ? "Salvar" : "Cadastrar"}</button><button class="btn" type="button" id="pr-no">Cancelar</button><span class="hint" id="pr-msg"></span></div>
+    </form>`;
+  $("#modal").hidden = false; $("#pr-nome").focus();
+  $("#pr-no").onclick = () => p ? prDetalhe(p.id) : fecharModal();
+  $("#f-pr").addEventListener("submit", ev => {
+    ev.preventDefault();
+    const msg = $("#pr-msg"); msg.className = "hint err";
+    const nv = {id: p ? p.id : "", nome:$("#pr-nome").value.trim(), servico:$("#pr-serv-in").value.trim(), contato:$("#pr-cont").value.trim(), telefone:$("#pr-tel").value.trim(),
+      email:$("#pr-mail").value.trim(), cnpj:$("#pr-cnpj").value.trim(), endereco:$("#pr-end").value.trim(), contratoInicio:$("#pr-ci").value, contratoFim:$("#pr-cf").value,
+      valorMensal:$("#pr-val").value.trim(), frequencia:$("#pr-freq").value, ultimaVisita:$("#pr-ult").value, proximaVisita:$("#pr-prox").value, observacao:$("#pr-obs").value.trim(),
+      ativo: p ? $("#pr-ativo").checked : true};
+    if (!nv.nome) { msg.textContent = "Informe o nome da empresa ou do prestador."; return; }
+    if (nv.contratoInicio && nv.contratoFim && nv.contratoFim < nv.contratoInicio) { msg.textContent = "O fim do contrato não pode ser antes do início."; return; }
+    enviar($("#pr-ok"), msg, "prestSalvar", {prest:nv}, () => {
+      const salvo = (S.prest || []).find(x => p ? x.id === p.id : x.nome === nv.nome);
+      if (salvo) prDetalhe(salvo.id); else fecharModal();
+    });
+  });
+}
+// ---- planilha de prestadores: baixar no modelo e importar de volta ----
+const PR_COLS = [["nome","Empresa",34],["servico","Serviço",20],["contato","Contato",20],["telefone","Telefone",17],["email","E-mail",28],["cnpj","CNPJ",20],
+  ["endereco","Endereço",34],["contratoInicio","Contrato início",14],["contratoFim","Contrato fim",14],["valorMensal","Valor mensal",14],
+  ["frequencia","Frequência das visitas",20],["ultimaVisita","Última visita",14],["proximaVisita","Próxima visita",14],["observacao","Observação",40],["ativo","Ativo",8],["id","ID (não altere)",16]];
+const PR_DATAS = ["contratoInicio","contratoFim","ultimaVisita","proximaVisita"];
+function prBaixarPlanilha(){
+  try {
+    const X = xlsxMini(), cab = {b:true, cor:"FFFFFFFF", fill:"FF1F4E79", wrap:false};
+    PR_COLS.forEach(([, rot, w], j) => { X.cel(1, j + 1, rot, cab); X.col(j + 1, w); });
+    (S.prest || []).forEach((p, i) => PR_COLS.forEach(([k], j) => {
+      let v = p[k];
+      if (PR_DATAS.includes(k)) X.cel(i + 2, j + 1, v ? new Date(v + "T12:00") : "", {num:"dd/mm/yyyy", h:"center"});
+      else if (k === "valorMensal") X.cel(i + 2, j + 1, v === "" || v == null ? "" : Number(v), {num:'"R$" #,##0.00', h:"right"});
+      else if (k === "ativo") X.cel(i + 2, j + 1, prAtivo(p) ? "Sim" : "Não", {h:"center"});
+      else X.cel(i + 2, j + 1, v == null ? "" : String(v), k === "id" ? {cor:"FF8A97A6"} : {});
+    }));
+    const buf = X.gerar("Prestadores");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([buf], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+    a.download = "Prestadores de servico - Pier " + hoje() + ".xlsx";
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+  } catch(e){ toast(e.message || "Não foi possível gerar a planilha.", true); }
+}
+// data da planilha: número do Excel, dd/mm/aaaa ou aaaa-mm-dd
+function prData(v){
+  if (v === undefined || v === null || v === "") return "";
+  if (typeof v === "number" && v > 20000 && v < 80000) { const d = new Date(Date.UTC(1899, 11, 30) + Math.round(v) * 864e5); return d.toISOString().slice(0, 10); }
+  const s = String(v).trim(); let m;
+  if ((m = /^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/.exec(s))) { const a = m[3].length === 2 ? "20" + m[3] : m[3]; return `${a}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`; }
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  return "?" + s;
+}
+async function prImportar(file){
+  if (!file) return;
+  if (!/\.xlsx$/i.test(file.name)) { toast("Escolha uma planilha .xlsx (no Excel: Salvar como → Pasta de Trabalho do Excel).", true); return; }
+  let abas;
+  try {
+    const buf = await file.arrayBuffer();
+    try { abas = await xlsxLer(buf); }
+    catch(e){ if (!e || !e.semLeitor) throw e; await carregarXLSX(); const wb = XLSX.read(buf, {type:"array"}); abas = wb.SheetNames.map(n => ({nome:n, folha:xlsxFolhaSheetJS(wb.Sheets[n])})); }
+  } catch(e){ toast(e.message || "Não foi possível ler a planilha.", true); return; }
+  // acha a linha de títulos (com "Empresa") em qualquer aba e liga cada coluna ao campo pelo nome
+  const porRot = new Map(PR_COLS.map(([k, rot]) => [norm(rot).replace(/\s*\(.*\)$/, ""), k]));
+  [["empresa","nome"],["nome","nome"],["prestador","nome"],["servico","servico"],["tipo de servico","servico"],["telefone / whatsapp","telefone"],["whatsapp","telefone"],["email","email"],["e-mail","email"],["frequencia","frequencia"],["valor","valorMensal"],["observacoes","observacao"],["id","id"]].forEach(([a, b]) => porRot.set(a, b));
+  let F = null, rCab = -1, mapa = {};
+  for (const a of abas) {
+    const f = a.folha; if (!f) continue;
+    for (let r = f.r0; r <= Math.min(f.r1, f.r0 + 15) && rCab < 0; r++) {
+      const m = {};
+      for (let c = f.c0; c <= f.c1; c++) { const k = porRot.get(norm(String(f.val(r, c) ?? "")).replace(/\s*\(.*\)$/, "").trim()); if (k && !(k in m)) m[k] = c; }
+      if ("nome" in m) { F = f; rCab = r; mapa = m; }
+    }
+    if (F) break;
+  }
+  if (!F) { toast('Não encontrei a coluna "Empresa" na planilha. Use "Baixar planilha" para ter o modelo.', true); return; }
+  const lista = [];
+  for (let r = rCab + 1; r <= F.r1; r++) {
+    const l = {_linha: r + 1}; let tem = false;
+    for (const [k, c] of Object.entries(mapa)) {
+      let v = F.val(r, c); if (v === undefined || v === null || String(v).trim() === "") continue;
+      if (PR_DATAS.includes(k)) v = prData(v);
+      else if (k === "valorMensal") v = typeof v === "number" ? v : String(v).replace(/[R$\s]/g, "");
+      else v = String(v).trim();
+      l[k] = v; tem = true;
+    }
+    if (tem) lista.push(l);
+  }
+  if (!lista.length) { toast("A planilha não tem nenhuma linha preenchida abaixo dos títulos.", true); return; }
+  // prévia: o que vai ser criado, atualizado ou tem problema
+  const so = s => String(s || "").replace(/\D/g, ""), todos = S.prest || [];
+  const linhasPrev = lista.map(l => {
+    const atual = (l.id && todos.find(x => x.id === l.id)) || (so(l.cnpj) && todos.find(x => so(x.cnpj) === so(l.cnpj))) || (l.nome && todos.find(x => norm(x.nome) === norm(l.nome)));
+    const prob = [];
+    if (!l.nome && !atual) prob.push("sem o nome da empresa");
+    PR_DATAS.forEach(k => { if (String(l[k] || "").startsWith("?")) prob.push(`data inválida em ${PR_COLS.find(c => c[0] === k)[1]}`); });
+    if (l.frequencia && !PR_FREQ.some(f => norm(f) === norm(l.frequencia))) prob.push(`frequência "${l.frequencia}" não existe`);
+    else if (l.frequencia) l.frequencia = PR_FREQ.find(f => norm(f) === norm(l.frequencia));
+    return {l, atual, prob};
+  });
+  const validas = linhasPrev.filter(x => !x.prob.length);
+  $("#modal-box").classList.add("largo");
+  $("#modal-box").innerHTML = `<h3>Importar planilha de prestadores</h3>
+    <p class="muted">${linhasPrev.length} linha${linhasPrev.length === 1 ? "" : "s"} encontrada${linhasPrev.length === 1 ? "" : "s"}: ${validas.filter(x => !x.atual).length} nova${validas.filter(x => !x.atual).length === 1 ? "" : "s"}, ${validas.filter(x => x.atual).length} para atualizar${linhasPrev.length - validas.length ? `, <b class="atr">${linhasPrev.length - validas.length} com problema (não entram)</b>` : ""}. Células em branco mantêm o que já está cadastrado.</p>
+    <div class="tablebox" style="max-height:50vh;overflow:auto"><table><thead><tr><th>Linha</th><th>Empresa</th><th>O que acontece</th></tr></thead><tbody>
+      ${linhasPrev.map(x => `<tr><td class="num">${x.l._linha}</td><td>${esc(x.l.nome || (x.atual && x.atual.nome) || "—")}<span class="sub">${esc([x.l.servico, x.l.cnpj].filter(Boolean).join(" · "))}</span></td>
+        <td>${x.prob.length ? `<span class="pill s-zero">${esc(x.prob.join("; "))}</span>` : x.atual ? `<span class="pill st-andamento">Atualizar</span>` : `<span class="pill s-ok">Novo</span>`}</td></tr>`).join("")}
+    </tbody></table></div>
+    <div class="actions" style="margin-top:12px"><button class="btn primary" type="button" id="pr-imp-ok" ${validas.length ? "" : "disabled"}>Importar ${validas.length}</button><button class="btn" type="button" id="pr-imp-no">Cancelar</button><span class="hint" id="pr-imp-msg"></span></div>`;
+  $("#modal").hidden = false;
+  $("#pr-imp-no").onclick = fecharModal;
+  $("#pr-imp-ok").onclick = () => enviar($("#pr-imp-ok"), $("#pr-imp-msg"), "prestImportar", {linhas: validas.map(x => x.l)}, r => {
+    if (/com erro/.test(r.msg || "")) { $("#pr-imp-msg").className = "hint err"; $("#pr-imp-msg").textContent = r.msg; $("#pr-imp-ok").hidden = true; $("#pr-imp-no").textContent = "Fechar"; }
+    else fecharModal();
+  });
+}
+if ($("#t-prestadores")) {
+  $("#pr-novo").addEventListener("click", () => prForm(null));
+  $("#pr-baixar").addEventListener("click", prBaixarPlanilha);
+  $("#pr-importar").addEventListener("click", () => $("#pr-imp-arq").click());
+  $("#pr-imp-arq").addEventListener("change", e => { const f = e.target.files[0]; e.target.value = ""; prImportar(f); });
+  $("#pr-busca").addEventListener("input", e => { PR.q = e.target.value; renderPrest(); });
+  $("#pr-serv").addEventListener("change", e => { PR.serv = e.target.value; renderPrest(); });
+  $("#pr-resumo").addEventListener("click", e => { const b = e.target.closest("[data-f]"); if (!b) return; PR.f = PR.f === b.dataset.f && b.dataset.f !== "ativos" ? "ativos" : b.dataset.f; renderPrest(); });
+  $("#pr-cards").addEventListener("click", e => { const b = e.target.closest("[data-pr]"); if (b) prDetalhe(b.dataset.pr); });
+}
 
 // ---------- início ----------
 $("#m-data").value = hoje();
