@@ -127,6 +127,30 @@ const ABAS = {
       ['modelo', 'Modelo'], ['cor', 'Cor'], ['tag', 'TAG?'], ['placa', 'Placa']],
     num: []
   },
+  // central de medições: medidores, leituras do relógio e contas mensais da concessionária
+  med: {
+    nome: 'Medidores',
+    criar: true,
+    cols: [['id', 'ID'], ['tipo', 'Concessionária'], ['nome', 'Medidor'], ['numero', 'Número do medidor'], ['casas', 'Casas'], ['unidade', 'Unidade de medida'],
+      ['local', 'Local'], ['obs', 'Observação'], ['ativo', 'Ativo'], ['criadoEm', 'Criado em'], ['criadoPor', 'Criado por'], ['atualizadoEm', 'Atualizado em'], ['atualizadoPor', 'Atualizado por'],
+      ['limite', 'Limite diário'], ['proxCiclo', 'Próxima leitura da concessionária']],
+    num: ['casas', 'limite']
+  },
+  medl: {
+    nome: 'Leituras',
+    criar: true,
+    cols: [['id', 'ID'], ['medidor', 'ID do medidor'], ['data', 'Data'], ['leitura', 'Leitura'], ['virada', 'Relógio virou?'], ['obs', 'Observação'],
+      ['registradoEm', 'Registrado em'], ['registradoPor', 'Registrado por'], ['atualizadoEm', 'Corrigido em'], ['atualizadoPor', 'Corrigido por'],
+      ['ciclo', 'Leitura da concessionária?']],
+    num: ['leitura']
+  },
+  medc: {
+    nome: 'Contas de consumo',
+    criar: true,
+    cols: [['id', 'ID'], ['medidor', 'ID do medidor'], ['mes', 'Mês de referência'], ['consumo', 'Consumo da conta'], ['valor', 'Valor (R$)'], ['vencimento', 'Vencimento'],
+      ['obs', 'Observação'], ['registradoEm', 'Registrado em'], ['registradoPor', 'Registrado por'], ['atualizadoEm', 'Corrigido em'], ['atualizadoPor', 'Corrigido por']],
+    num: ['consumo', 'valor']
+  },
   // rondas (vistorias preventivas): cabeçalho em colunas; os itens da ficha e os dados extras em JSON
   ronda: {
     nome: 'Rondas',
@@ -277,7 +301,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-10-24 unidades';
+const VERSAO = '2026-10-24 medições';
 
 function doGet() {
   return json({ ok: true, app: 'Pier Gestão', versao: VERSAO });
@@ -340,6 +364,7 @@ function doPost(e) {
     if (req.acao === 'cotLista') { pode('pendencias'); return json(Object.assign(base, cotLista())); }
     if (req.acao === 'cotVerArquivo') { pode('pendencias'); const f = cotVerArquivo(req); auditar(conta, 'Abriu arquivo de cotação', f.nome); delete f.nome; return json(Object.assign(base, { arquivo: f })); }
     if (req.acao === 'unidades') { unExigir(conta, false); return json(Object.assign(base, unLista())); }
+    if (req.acao === 'medicoes') { medExigir(conta, false); return json(Object.assign(base, medLista())); }
     if (req.acao === 'rondas') { rondaExigir(conta, false); return json(Object.assign(base, rondaLista())); }
     if (req.acao === 'rondaFotoVer') { rondaExigir(conta, false); const f = rondaFotoVer(req); delete f.nome; return json(Object.assign(base, { foto: f })); }
     if (req.acao === 'prestVerDoc') { prestExigir(conta, false); const f = prestVerDoc(req); auditar(conta, 'Abriu documento de prestador', f.nome); delete f.nome; return json(Object.assign(base, { arquivo: f })); }
@@ -385,6 +410,10 @@ function doPost(e) {
         case 'unConfig': unExigir(conta, true); msg = unConfig(req, conta); extra.semDados = true; break;
         case 'unOcupadas': unExigir(conta, true); msg = unOcupadas(conta); extra.semDados = true; break;
         case 'unImportar': unExigir(conta, true); msg = unImportar(req, conta); extra.semDados = true; break;
+        case 'medMedidor': medExigir(conta, true); msg = medMedidor(req, conta); extra.med = true; extra.semDados = true; break;
+        case 'medLeituras': medExigir(conta, true); msg = medLeituras(req, conta); extra.med = true; extra.semDados = true; break;
+        case 'medContas': medExigir(conta, true); msg = medContas(req, conta); extra.med = true; extra.semDados = true; break;
+        case 'medImportar': medExigir(conta, true); msg = medImportar(req, conta); extra.med = true; extra.semDados = true; break;
         case 'rondaSalvar': rondaExigir(conta, true); msg = rondaSalvar(req, conta); extra.ronda = msg.ronda; msg = msg.texto; extra.semDados = true; break;
         case 'rondaFoto': rondaExigir(conta, true); msg = rondaFoto(req, conta); extra.ronda = msg.ronda; msg = msg.texto; extra.semDados = true; break;
         case 'rondaFotoRemover': rondaExigir(conta, true); msg = rondaFotoRemover(req, conta); extra.ronda = msg.ronda; msg = msg.texto; extra.semDados = true; break;
@@ -400,7 +429,7 @@ function doPost(e) {
     }
     if (extra.pendencias) return json(Object.assign(base, { msg, pendencias: pendLista(), pendVersao: PEND_VERSAO }));
     if (extra.equipe) return json(Object.assign(base, { msg }, extra));
-    if (extra.semDados) return json(Object.assign(base, { msg }, extra.cot ? { cot: extra.cot } : {}, extra.ronda ? { ronda: extra.ronda } : {}));
+    if (extra.semDados) return json(Object.assign(base, { msg }, extra.cot ? { cot: extra.cot } : {}, extra.ronda ? { ronda: extra.ronda } : {}, extra.med ? medLista() : {}));
     return json(Object.assign(base, { msg, dados: dados(req.meses, conta) }, extra));
   } catch (err) {
     // tentativas sem permissão ficam no histórico de auditoria
@@ -777,7 +806,9 @@ const PERMISSOES = [
   ['ronda_fazer', 'Fazer ronda', 'Preencher as fichas de ronda (vistoria), pôr fotos e marcar pendências como resolvidas (setor Administração)', 'Ronda'],
   ['ronda_ver', 'Ver rondas', 'Ver as rondas, as pendências e o fechamento semanal (setor Administração)', 'Ronda'],
   ['un_ver', 'Ver unidades e moradores', 'Ver a lista de unidades, moradores, pets e veículos (setor Administração; dados pessoais)', 'Unidades'],
-  ['un_editar', 'Editar unidades e moradores', 'Atualizar o cadastro das unidades, configurar blocos e unidades e importar a planilha (setor Administração)', 'Unidades']
+  ['un_editar', 'Editar unidades e moradores', 'Atualizar o cadastro das unidades, configurar blocos e unidades e importar a planilha (setor Administração)', 'Unidades'],
+  ['med_lancar', 'Lançar medições', 'Lançar as leituras dos medidores e as contas de água, energia e gás, cadastrar medidores e importar planilha (setor Administração)', 'Medições'],
+  ['med_ver', 'Ver relatórios de medições', 'Ver os medidores, os lançamentos e os relatórios de consumo (setor Administração)', 'Medições']
 ];
 const PADRAO_MANUTENCAO = ['painel', 'itens_ver', 'historico_ver', 'registrar_saida', 'registrar_entrada',
   'registrar_troca', 'registrar_emprestimo', 'devolver', 'itens_cadastrar', 'os_ver', 'os_abrir', 'os_atender', 'dem_ver', 'dem_executar',
@@ -2070,6 +2101,235 @@ function unImportar(r, conta) {
   return 'Cadastro importado: ' + us.length + ' unidades em ' + blocos.length + ' blocos, ' + pes.length + ' pessoas, ' + pets.length + ' pets e ' + vs.length + ' veículos.';
 }
 
+// ---------- central de medições (água, energia e gás; setor Administração) ----------
+// Medidores, leituras do relógio (o consumo é a diferença entre duas leituras; o site divide pelos dias entre elas)
+// e contas mensais da concessionária (consumo e valor em R$). Lança quem tem "Lançar medições"; vê quem tem uma das duas.
+const MED_TIPOS = ['Água', 'Energia', 'Gás'], MED_UNID = ['m³', 'kWh', 'Litros'];
+function medExigir(conta, lancar) {
+  const p = conta.perms || {};
+  if (lancar ? !p.med_lancar : !(p.med_ver || p.med_lancar)) { const e = falha(lancar ? 'Seu perfil não tem permissão para lançar medições.' : 'Seu perfil não tem permissão para ver as medições.'); e.negado = true; throw e; }
+}
+// padrão brasileiro: "1.420" = 1420 (ponto de milhar); "1.050,5" e "1050,5" = 1050,5
+const medNum = v => (v === '' || v === null || v === undefined) ? NaN : /^\d{1,3}(\.\d{3})+$/.test(String(v).trim()) ? Number(String(v).trim().replace(/\./g, '')) : numero(v);
+const medDataBR = s => String(s || '').split('-').reverse().join('/');
+const medFmt = n => (Math.round(Number(n) * 1000) / 1000).toLocaleString('pt-BR');
+function medLista() {
+  const ms = linhas(tabela('med')).map(unLimpa), ls = linhas(tabela('medl')).map(unLimpa), cs = linhas(tabela('medc')).map(unLimpa);
+  ls.sort((a, b) => String(a.data).localeCompare(String(b.data)));
+  cs.sort((a, b) => String(a.mes).localeCompare(String(b.mes)));
+  return { medidores: ms, leituras: ls, contas: cs };
+}
+// acrescenta várias linhas de uma vez no fim da aba (texto fica como texto; números como número)
+function anexarLinhas(t, objs) {
+  if (!objs.length) return;
+  const vals = objs.map(o => { const r = new Array(t.ncol).fill(''); t.def.cols.forEach(([k]) => { const v = o[k]; if (v === undefined || v === null || v === '') return; r[t.idx[k]] = t.def.num.indexOf(k) >= 0 ? Number(v) : String(v); }); return r; });
+  const fm = objs.map(() => { const r = new Array(t.ncol).fill('@'); t.def.num.forEach(k => { r[t.idx[k]] = 'General'; }); return r; });
+  const rng = t.sh.getRange(t.sh.getLastRow() + 1, 1, vals.length, t.ncol);
+  rng.setNumberFormats(fm);
+  rng.setValues(vals);
+}
+function medMedidor(r, conta) {
+  const v = r.medidor || {}, t = tabela('med'), todos = linhas(t);
+  const atual = v.id ? todos.find(x => x.id === String(v.id)) : null;
+  if (v.id && !atual) throw falha('Medidor não encontrado. Atualize a tela.');
+  if (r.op === 'excluir') {
+    if (!atual) throw falha('Medidor não encontrado. Atualize a tela.');
+    const usa = linhas(tabela('medl')).some(x => x.medidor === atual.id) || linhas(tabela('medc')).some(x => x.medidor === atual.id);
+    if (usa) throw falha('Este medidor já tem lançamentos. Em vez de excluir, marque como inativo.');
+    t.sh.deleteRow(atual._row);
+    AUDIT_DET = 'Excluiu o medidor ' + atual.nome + ' (' + atual.tipo + ' nº ' + atual.numero + ')';
+    return 'Medidor excluído.';
+  }
+  const tipo = MED_TIPOS.indexOf(v.tipo) >= 0 ? v.tipo : '';
+  if (!tipo) throw falha('Escolha o tipo de concessionária (Água, Energia ou Gás).');
+  const nome = texto(v.nome, 60);
+  if (!nome) throw falha('Dê um nome ao medidor (ex.: Guarita norte).');
+  const num = texto(v.numero, 40);
+  if (!num) throw falha('Informe o número do medidor.');
+  const casas = Number(v.casas);
+  if (!(casas === Math.floor(casas) && casas >= 3 && casas <= 12)) throw falha('O número de casas do medidor deve ficar entre 3 e 12.');
+  const unidade = MED_UNID.indexOf(v.unidade) >= 0 ? v.unidade : '';
+  if (!unidade) throw falha('Escolha a unidade de medida.');
+  if (todos.some(x => (!atual || x.id !== atual.id) && x.tipo === tipo && String(x.numero).toLowerCase() === num.toLowerCase())) throw falha('Já existe um medidor de ' + tipo + ' com o número ' + num + '.');
+  if (atual) {
+    const maxL = linhas(tabela('medl')).filter(x => x.medidor === atual.id).reduce((m, x) => Math.max(m, Number(x.leitura) || 0), 0);
+    if (maxL >= Math.pow(10, casas)) throw falha('Este medidor já tem leitura com mais de ' + casas + ' casas (' + medFmt(maxL) + '). Confira o número de casas.');
+  }
+  const temLim = String(v.limite === undefined || v.limite === null ? '' : v.limite).trim() !== '', limite = temLim ? medNum(v.limite) : '';
+  if (temLim && !(limite > 0 && isFinite(limite))) throw falha('O limite diário deve ser um número maior que zero (ou fique em branco).');
+  const prox = String(v.proxCiclo || '');
+  if (prox && !dataOk(prox)) throw falha('Data inválida na próxima leitura da concessionária.');
+  const o = { tipo, nome, numero: num, casas, unidade, local: texto(v.local, 80), obs: texto(v.obs, 300), limite: temLim ? Math.round(limite * 1000) / 1000 : '', proxCiclo: prox,
+    ativo: v.ativo === false || v.ativo === 'Não' ? 'Não' : 'Sim', atualizadoEm: agora(), atualizadoPor: conta.nome };
+  if (atual) {
+    gravar(t, o, atual._row);
+    AUDIT_DET = 'Alterou o medidor ' + nome + ' (' + tipo + ' nº ' + num + ')' + (o.ativo === 'Não' ? ' — inativo' : '');
+    return 'Medidor salvo.';
+  }
+  o.id = novoId('MD'); o.criadoEm = agora(); o.criadoPor = conta.nome;
+  gravar(t, o);
+  AUDIT_DET = 'Cadastrou o medidor ' + nome + ' (' + tipo + ' nº ' + num + ')';
+  return 'Medidor cadastrado.';
+}
+// confere uma leitura contra as outras do mesmo medidor ("outras" em ordem de data)
+function medConferirLeitura(m, outras, l, auto) {
+  const casas = Number(m.casas) || 0, lim = casas ? Math.pow(10, casas) : Infinity;
+  if (l.leitura >= lim) throw falha('A leitura ' + medFmt(l.leitura) + ' tem mais casas que o medidor ' + m.nome + ' (' + casas + ' casas).');
+  if (outras.some(x => x.data === l.data)) throw falha('O medidor ' + m.nome + ' já tem leitura em ' + medDataBR(l.data) + '. Edite a que já existe.');
+  const antes = outras.filter(x => x.data < l.data), ant = antes[antes.length - 1], prox = outras.find(x => x.data > l.data);
+  l.virada = '';
+  if (ant && l.leitura < Number(ant.leitura)) {
+    // relógio que passou do máximo e recomeçou do zero: só com a marcação (ou, na planilha, quando a queda é maior que meio relógio)
+    const virou = l.querVirada || (auto && casas && Number(ant.leitura) - l.leitura > lim / 2);
+    if (!virou) throw falha('A leitura de ' + m.nome + ' (' + medFmt(l.leitura) + ') é menor que a anterior (' + medFmt(ant.leitura) + ' em ' + medDataBR(ant.data) + '). Confira o número. Se o relógio passou do máximo e recomeçou do zero, marque "o relógio virou".');
+    l.virada = 'Sim';
+  }
+  if (prox && Number(prox.leitura) < l.leitura && prox.virada !== 'Sim') throw falha('A leitura de ' + m.nome + ' (' + medFmt(l.leitura) + ') é maior que a seguinte (' + medFmt(prox.leitura) + ' em ' + medDataBR(prox.data) + '). Confira a data e o número.');
+}
+// lança (ou corrige) leituras; várias de uma vez (a ronda dos medidores do dia). Confere todas antes de gravar.
+function medLeituras(r, conta) {
+  const t = tabela('medl'), todas = linhas(t), meds = linhas(tabela('med'));
+  if (r.op === 'excluir') {
+    const x = todas.find(z => z.id === String(r.id || ''));
+    if (!x) throw falha('Leitura não encontrada. Atualize a tela.');
+    const m = meds.find(z => z.id === x.medidor) || { nome: 'medidor' };
+    t.sh.deleteRow(x._row);
+    AUDIT_DET = 'Excluiu a leitura de ' + m.nome + ' em ' + medDataBR(x.data) + ' (' + medFmt(x.leitura) + ')';
+    return 'Leitura excluída.';
+  }
+  const lista = Array.isArray(r.leituras) ? r.leituras : [];
+  if (!lista.length) throw falha('Informe ao menos uma leitura.');
+  if (lista.length > 60) throw falha('Lance no máximo 60 leituras de cada vez.');
+  const hj = hoje(), trab = todas.slice(), novas = [], edits = [], vistos = {};
+  lista.forEach(x => {
+    const m = meds.find(z => z.id === String(x.medidor || ''));
+    if (!m) throw falha('Medidor não encontrado. Atualize a tela.');
+    const data = String(x.data || '');
+    if (!dataOk(data)) throw falha('Data inválida na leitura de ' + m.nome + '.');
+    if (data > hj) throw falha('A data da leitura de ' + m.nome + ' não pode ser no futuro.');
+    if (vistos[m.id + '|' + data]) throw falha('O medidor ' + m.nome + ' aparece duas vezes no mesmo dia.');
+    vistos[m.id + '|' + data] = true;
+    const atual = x.id ? todas.find(z => z.id === String(x.id)) : null;
+    if (x.id && !atual) throw falha('Leitura não encontrada. Atualize a tela.');
+    if (!atual && m.ativo === 'Não') throw falha('O medidor ' + m.nome + ' está inativo.');
+    const leitura = medNum(x.leitura);
+    if (!(leitura >= 0) || !isFinite(leitura)) throw falha('Leitura inválida para ' + m.nome + '.');
+    const l = { leitura: Math.round(leitura * 1000) / 1000, data, querVirada: !!x.virada };
+    const outras = trab.filter(z => z.medidor === m.id && (!atual || z.id !== atual.id)).sort((a, b) => String(a.data).localeCompare(String(b.data)));
+    medConferirLeitura(m, outras, l, false);
+    const o = { medidor: m.id, data, leitura: l.leitura, virada: l.virada, obs: texto(x.obs, 200), ciclo: x.ciclo ? 'Sim' : '' };
+    if (atual) {
+      o.id = atual.id; o.atualizadoEm = agora(); o.atualizadoPor = conta.nome;
+      edits.push({ o, row: atual._row, m });
+      trab[trab.indexOf(atual)] = Object.assign({}, atual, o);
+    } else {
+      o.id = novoId('ML'); o.registradoEm = agora(); o.registradoPor = conta.nome;
+      novas.push(o); trab.push(o);
+    }
+  });
+  edits.forEach(e => gravar(t, e.o, e.row));
+  anexarLinhas(t, novas);
+  const nomes = lista.map(x => (meds.find(z => z.id === String(x.medidor)) || {}).nome).filter(Boolean);
+  AUDIT_DET = (edits.length ? 'Corrigiu ' : 'Lançou ') + lista.length + ' leitura(s): ' + nomes.slice(0, 6).join(', ') + (nomes.length > 6 ? '…' : '');
+  return edits.length && !novas.length ? 'Leitura corrigida.' : novas.length === 1 ? 'Leitura lançada.' : novas.length + ' leituras lançadas.';
+}
+// conta mensal da concessionária: consumo e valor (R$) de um medidor num mês
+function medConta(x, meds, todas, conta) {
+  const m = meds.find(z => z.id === String(x.medidor || ''));
+  if (!m) throw falha('Medidor não encontrado.');
+  const mes = String(x.mes || '');
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mes)) throw falha('Mês de referência inválido na conta de ' + m.nome + '.');
+  if (mes > hoje().slice(0, 7)) throw falha('O mês da conta de ' + m.nome + ' não pode ser no futuro.');
+  const consumo = medNum(x.consumo), valor = medNum(x.valor);
+  const temC = String(x.consumo === undefined || x.consumo === null ? '' : x.consumo).trim() !== '', temV = String(x.valor === undefined || x.valor === null ? '' : x.valor).trim() !== '';
+  if (temC && !(consumo >= 0 && isFinite(consumo))) throw falha('Consumo inválido na conta de ' + m.nome + '.');
+  if (temV && !(valor >= 0 && isFinite(valor))) throw falha('Valor inválido na conta de ' + m.nome + '.');
+  if (!temC && !temV) throw falha('Informe o consumo ou o valor da conta de ' + m.nome + '.');
+  const venc = String(x.vencimento || '');
+  if (venc && !dataOk(venc)) throw falha('Vencimento inválido na conta de ' + m.nome + '.');
+  return { m, o: { medidor: m.id, mes, consumo: temC ? Math.round(consumo * 1000) / 1000 : '', valor: temV ? Math.round(valor * 100) / 100 : '', vencimento: venc, obs: texto(x.obs, 200) } };
+}
+function medContas(r, conta) {
+  const t = tabela('medc'), todas = linhas(t), meds = linhas(tabela('med'));
+  if (r.op === 'excluir') {
+    const x = todas.find(z => z.id === String(r.id || ''));
+    if (!x) throw falha('Conta não encontrada. Atualize a tela.');
+    const m = meds.find(z => z.id === x.medidor) || { nome: 'medidor' };
+    t.sh.deleteRow(x._row);
+    AUDIT_DET = 'Excluiu a conta de ' + m.nome + ' de ' + x.mes;
+    return 'Conta excluída.';
+  }
+  const v = r.conta || {};
+  const atual = v.id ? todas.find(z => z.id === String(v.id)) : null;
+  if (v.id && !atual) throw falha('Conta não encontrada. Atualize a tela.');
+  const { m, o } = medConta(v, meds, todas, conta);
+  if (todas.some(z => (!atual || z.id !== atual.id) && z.medidor === o.medidor && z.mes === o.mes)) throw falha('Já há conta de ' + m.nome + ' em ' + o.mes.split('-').reverse().join('/') + '. Edite a que já existe.');
+  if (atual) { o.atualizadoEm = agora(); o.atualizadoPor = conta.nome; gravar(t, o, atual._row); }
+  else { o.id = novoId('MC'); o.registradoEm = agora(); o.registradoPor = conta.nome; gravar(t, o); }
+  AUDIT_DET = (atual ? 'Corrigiu' : 'Lançou') + ' a conta de ' + m.nome + ' de ' + o.mes.split('-').reverse().join('/') + (o.valor !== '' ? ': R$ ' + Number(o.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '');
+  return atual ? 'Conta corrigida.' : 'Conta lançada.';
+}
+// planilha lida no navegador: leituras (data, medidor, leitura) e/ou contas (mês, medidor, consumo, valor).
+// Grava as linhas certas, pula as repetidas e devolve as com erro.
+function medImportar(r, conta) {
+  const ls = Array.isArray(r.leituras) ? r.leituras : [], cs = Array.isArray(r.contas) ? r.contas : [];
+  if (!ls.length && !cs.length) throw falha('A planilha não tem lançamentos.');
+  if (ls.length + cs.length > 5000) throw falha('Importe no máximo 5.000 linhas de cada vez.');
+  const meds = linhas(tabela('med')), erros = [];
+  let nL = 0, nC = 0, nA = 0, nM = 0, iguais = 0;
+  if (ls.length) {
+    const t = tabela('medl'), trab = linhas(t), hj = hoje(), novas = [];
+    ls.slice().sort((a, b) => String(a.data).localeCompare(String(b.data))).forEach(x => {
+      const n = Number(x._linha) || 0;
+      try {
+        const m = meds.find(z => z.id === String(x.medidor || ''));
+        if (!m) throw falha('medidor não encontrado');
+        const data = String(x.data || '');
+        if (!dataOk(data)) throw falha('data inválida');
+        if (data > hj) throw falha('data no futuro');
+        const leitura = medNum(x.leitura);
+        if (!(leitura >= 0) || !isFinite(leitura)) throw falha('leitura inválida');
+        const lv = Math.round(leitura * 1000) / 1000;
+        const mesmo = trab.find(z => z.medidor === m.id && z.data === data);
+        if (mesmo && Number(mesmo.leitura) === lv) {
+          // já lançada: só acrescenta a marcação da leitura da concessionária, se a planilha trouxer
+          if (x.ciclo && mesmo.ciclo !== 'Sim' && mesmo._row) { gravar(t, { ciclo: 'Sim' }, mesmo._row); mesmo.ciclo = 'Sim'; nM++; } else iguais++;
+          return;
+        }
+        const l = { leitura: lv, data, querVirada: false };
+        medConferirLeitura(m, trab.filter(z => z.medidor === m.id).sort((a, b) => String(a.data).localeCompare(String(b.data))), l, true);
+        const o = { id: novoId('ML'), medidor: m.id, data, leitura: lv, virada: l.virada, obs: texto(x.obs, 200), ciclo: x.ciclo ? 'Sim' : '', registradoEm: agora(), registradoPor: conta.nome + ' (planilha)' };
+        novas.push(o); trab.push(o); nL++;
+      } catch (e) { erros.push('linha ' + n + ': ' + String(e.message || e)); }
+    });
+    anexarLinhas(t, novas);
+  }
+  if (cs.length) {
+    const t = tabela('medc'), todas = linhas(t), novas = [];
+    cs.forEach(x => {
+      const n = Number(x._linha) || 0;
+      try {
+        const { o } = medConta(x, meds, todas, conta);
+        const atual = todas.find(z => z.medidor === o.medidor && z.mes === o.mes);
+        if (atual) {
+          if (String(atual.consumo) === String(o.consumo) && String(atual.valor) === String(o.valor)) { iguais++; return; }
+          o.atualizadoEm = agora(); o.atualizadoPor = conta.nome + ' (planilha)'; gravar(t, o, atual._row); Object.assign(atual, o); nA++;
+        } else {
+          o.id = novoId('MC'); o.registradoEm = agora(); o.registradoPor = conta.nome + ' (planilha)'; novas.push(o); todas.push(o); nC++;
+        }
+      } catch (e) { erros.push('linha ' + n + ': ' + String(e.message || e)); }
+    });
+    anexarLinhas(t, novas);
+  }
+  AUDIT_DET = 'Planilha de medições: ' + nL + ' leitura(s), ' + (nM ? nM + ' marcada(s) como leitura da concessionária, ' : '') + nC + ' conta(s) nova(s), ' + nA + ' atualizada(s)' + (iguais ? ', ' + iguais + ' repetida(s)' : '') + (erros.length ? ', ' + erros.length + ' com erro' : '');
+  return [nL ? nL + ' leitura' + (nL === 1 ? '' : 's') + ' lançada' + (nL === 1 ? '' : 's') + '.' : '',
+    nC ? nC + ' conta' + (nC === 1 ? '' : 's') + ' lançada' + (nC === 1 ? '' : 's') + '.' : '',
+    nA ? nA + ' conta' + (nA === 1 ? '' : 's') + ' atualizada' + (nA === 1 ? '' : 's') + '.' : '',
+    nM ? nM + ' leitura' + (nM === 1 ? '' : 's') + ' marcada' + (nM === 1 ? '' : 's') + ' como leitura da concessionária.' : '',
+    iguais ? iguais + ' já estava' + (iguais === 1 ? '' : 'm') + ' lançada' + (iguais === 1 ? '' : 's') + '.' : '',
+    erros.length ? erros.length + ' linha' + (erros.length === 1 ? '' : 's') + ' com erro (' + erros.slice(0, 5).join('; ') + (erros.length > 5 ? '; …' : '') + ').' : ''].filter(Boolean).join(' ') || 'Nada foi alterado.';
+}
+
 // ---------- ronda (vistorias preventivas do condomínio) ----------
 // Fichas: por bloco (níveis × categorias), diária das áreas comuns e checklist-mestre A a I (modelo do Checklist Consolidado).
 // Códigos: OK, P (pendente), C (crítico), NA (não se aplica), NV (não verificado). P, C e NV pedem observação/motivo.
@@ -3162,6 +3422,7 @@ const TELAS_VISTAS = {
   unidades: ['Lista de unidades e moradores', ['un_ver', 'un_editar']], uncadastro: ['Atualização cadastral', ['un_ver', 'un_editar']],
   unconfig: ['Configurações das unidades', 'un_editar'], unficha: ['Ficha da unidade', ['un_ver', 'un_editar']],
   exportar_unidades: ['Lista de unidades (planilha)', ['un_ver', 'un_editar']], imprimir_unidade: ['Ficha da unidade para imprimir', ['un_ver', 'un_editar']],
+  exportar_medicoes: ['Relatório de medições (planilha)', ['med_ver', 'med_lancar']], imprimir_medicoes: ['Relatório de medições (PDF)', ['med_ver', 'med_lancar']],
   exportar_movs: ['Movimentações (planilha CSV)', 'exportar'], exportar_consumo: ['Consumo por item (planilha CSV)', 'exportar']
 };
 function registrarVisao(conta, req) {
@@ -3489,6 +3750,7 @@ const ACOES_AUDIT = {
   cotSalvar: 'Cotação', cotArquivo: 'Arquivo de cotação',
   prestSalvar: 'Prestador de serviço', prestVisita: 'Visita de prestador', prestDoc: 'Documento de prestador', prestDocRemover: 'Tirou documento de prestador', prestImportar: 'Importou planilha de prestadores',
   unSalvar: 'Unidade', unConfig: 'Configuração das unidades', unOcupadas: 'Marcou unidades ocupadas', unImportar: 'Importou cadastro de moradores',
+  medMedidor: 'Medidor', medLeituras: 'Leitura de medidor', medContas: 'Conta de consumo', medImportar: 'Importou planilha de medições',
   rondaSalvar: 'Ronda', rondaFoto: 'Foto na ronda', rondaFotoRemover: 'Tirou foto da ronda', rondaResolver: 'Resolveu pendência da ronda',
   visao: 'Abriu tela',
   trocarSenha: 'Trocou a própria senha',
@@ -3625,7 +3887,7 @@ function ehGerente(conta) {
 function garantirGerente() {
   if (Object.keys(lerPerfis()).some(n => chaveNome(n).indexOf('gerente') >= 0)) return '';
   // dados pessoais dos moradores (unidades) não entram por padrão: a Administração marca se quiser
-  const perms = {}; PERMISSOES.forEach(p => { if (['usuarios', 'un_ver', 'un_editar'].indexOf(p[0]) < 0) perms[p[0]] = true; });
+  const perms = {}; PERMISSOES.forEach(p => { if (['usuarios', 'un_ver', 'un_editar', 'med_lancar', 'med_ver'].indexOf(p[0]) < 0) perms[p[0]] = true; });
   salvarPerfil({ nome: 'Gerente', perms });
   return ' Perfil Gerente criado.';
 }
