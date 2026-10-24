@@ -187,6 +187,16 @@ const ABAS = {
     num: []
   },
   // prestadores de serviço da manutenção (contratos, visitas e documentos); documentos e visitas em JSON
+  // fornecedores de materiais e serviços (Pendências e compras)
+  forn: {
+    nome: 'Fornecedores',
+    criar: true,
+    cols: [['id', 'ID'], ['nome', 'Empresa'], ['cnpj', 'CNPJ'], ['categoria', 'Categoria'], ['contato', 'Contato'], ['telefone', 'Telefone'], ['email', 'E-mail'],
+      ['endereco', 'Endereço'], ['site', 'Site'], ['pagamento', 'Condições de pagamento'], ['obs', 'Observação'], ['ativo', 'Ativo'],
+      ['criadoEm', 'Criado em'], ['criadoPor', 'Criado por'], ['atualizadoEm', 'Atualizado em'], ['atualizadoPor', 'Atualizado por'],
+      ['codigo', 'Código'], ['servicos', 'Serviços / Produtos'], ['whatsapp', 'WhatsApp'], ['instagram', 'Instagram'], ['situacao', 'Situação'], ['fonte', 'Fonte']],
+    num: []
+  },
   prest: {
     nome: 'Prestadores',
     criar: true,
@@ -323,7 +333,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-10-24 espaços 2';
+const VERSAO = '2026-10-24 fornecedores';
 
 function doGet() {
   return json({ ok: true, app: 'Pier Gestão', versao: VERSAO });
@@ -383,6 +393,7 @@ function doPost(e) {
     if (req.acao === 'dados') return json(Object.assign(base, { dados: dados(req.meses, conta) }));
     if (req.acao === 'relatorio') { pode('dashboard'); return json(Object.assign(base, { relatorio: relatorio(req.de, req.ate, conta) })); }
     if (req.acao === 'usuarios') { pode('usuarios'); return json(Object.assign(base, { equipe: equipe() })); }
+    if (req.acao === 'fornecedores') { pode('pendencias'); return json(Object.assign(base, fornLista())); }
     if (req.acao === 'cotLista') { pode('pendencias'); return json(Object.assign(base, cotLista())); }
     if (req.acao === 'cotVerArquivo') { pode('pendencias'); const f = cotVerArquivo(req); auditar(conta, 'Abriu arquivo de cotação', f.nome); delete f.nome; return json(Object.assign(base, { arquivo: f })); }
     if (req.acao === 'unidades') { unExigir(conta, false); return json(Object.assign(base, unLista())); }
@@ -423,6 +434,9 @@ function doPost(e) {
         case 'excluirPerfil': pode('usuarios'); msg = excluirPerfil(req.nome); extra.equipe = equipe(); break;
         case 'trocarSenha': msg = trocarMinhaSenha(req, conta); extra.semDados = true; break;
         case 'pendSalvar': pode('pendencias'); msg = pendSalvar(req.pend || {}, conta); extra.pendencias = true; break;
+        case 'fornSalvar': pode('pendencias'); msg = fornSalvar(req, conta); extra.forn = true; extra.semDados = true; break;
+        case 'fornImportar': pode('pendencias'); msg = fornImportar(req, conta); extra.forn = true; extra.semDados = true; break;
+        case 'fornDasCotacoes': pode('pendencias'); msg = fornDasCotacoes(conta); extra.forn = true; extra.semDados = true; break;
         case 'cotSalvar': pode('pendencias'); msg = cotSalvar(req, conta); extra.cot = msg.cot; msg = msg.texto; extra.semDados = true; break;
         case 'cotArquivo': pode('pendencias'); msg = cotArquivo(req, conta); extra.cot = msg.cot; msg = msg.texto; extra.semDados = true; break;
         case 'prestSalvar': prestExigir(conta, true); msg = prestSalvar(req.prest || {}, conta); break;
@@ -458,7 +472,7 @@ function doPost(e) {
     }
     if (extra.pendencias) return json(Object.assign(base, { msg, pendencias: pendLista(), pendVersao: PEND_VERSAO }));
     if (extra.equipe) return json(Object.assign(base, { msg }, extra));
-    if (extra.semDados) return json(Object.assign(base, { msg }, extra.cot ? { cot: extra.cot } : {}, extra.ronda ? { ronda: extra.ronda } : {}, extra.med ? medLista() : {}, extra.esp ? espLista() : {}, extra.lida ? { lida: extra.lida } : {}));
+    if (extra.semDados) return json(Object.assign(base, { msg }, extra.cot ? { cot: extra.cot } : {}, extra.ronda ? { ronda: extra.ronda } : {}, extra.med ? medLista() : {}, extra.esp ? espLista() : {}, extra.forn ? fornLista() : {}, extra.lida ? { lida: extra.lida } : {}));
     return json(Object.assign(base, { msg, dados: dados(req.meses, conta) }, extra));
   } catch (err) {
     // tentativas sem permissão ficam no histórico de auditoria
@@ -3468,6 +3482,88 @@ function cotTotais(d) {
   });
 }
 
+// ---------- fornecedores (Pendências e compras) ----------
+const fornSo = s => String(s || '').replace(/\D/g, '');
+const fornN = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\b(ltda|me|epp|eireli|s\.?a\.?|comercio|com\.?)\b/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+const fornIgual = (f, x) => (fornSo(f.cnpj).length >= 11 && fornSo(f.cnpj) === fornSo(x.cnpj)) || (!!fornN(f.nome) && fornN(f.nome) === fornN(x.nome || x.empresa));
+// cadastro + histórico nas cotações (participações, vitórias e valor ganho)
+function fornLista() {
+  const fs = linhas(tabela('forn')).map(unLimpa);
+  const cots = SpreadsheetApp.getActive().getSheetByName(ABAS.cot.nome) ? linhas(tabela('cot')).map(cotLer) : [];
+  fs.forEach(f => {
+    const part = cots.filter(c => (c.dados.fornecedores || []).some(x => fornIgual(f, x)));
+    const ganhou = part.filter(c => c.vencedor && fornIgual(f, { nome: c.vencedor }));
+    f.cotacoes = part.length; f.vitorias = ganhou.length;
+    f.valorGanho = ganhou.reduce((a, c) => a + (Number(c.valorVencedor) || 0), 0);
+    const ult = part.sort((a, b) => String(b.criadaEm).localeCompare(String(a.criadaEm)))[0];
+    f.ultimaCot = ult ? { numero: ult.numero, data: String(ult.criadaEm).slice(0, 10), finalidade: String(ult.finalidade || '').slice(0, 80) } : null;
+  });
+  return { fornecedores: fs.sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR')) };
+}
+function fornSalvar(r, conta) {
+  const t = tabela('forn'), fs = linhas(t), v = r.fornecedor || {};
+  const ja = v.id ? fs.find(x => x.id === String(v.id)) : null;
+  if (v.id && !ja) throw falha('Fornecedor não encontrado. Atualize a tela.');
+  if (r.op === 'excluir') { if (!ja) throw falha('Fornecedor não encontrado.'); t.sh.deleteRow(ja._row); AUDIT_DET = 'Excluiu o fornecedor ' + ja.nome; return 'Fornecedor excluído.'; }
+  const nome = texto(v.nome, 100);
+  if (!nome) throw falha('Informe o nome da empresa.');
+  const cnpj = texto(v.cnpj, 20), d = fornSo(cnpj);
+  if (cnpj && d.length !== 14 && d.length !== 11) throw falha('CNPJ (ou CPF) inválido: confira os números.');
+  const email = texto(v.email, 100);
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw falha('E-mail inválido.');
+  const dup = fs.find(x => x !== ja && fornIgual(x, { nome, cnpj }));
+  if (dup) throw falha('Já existe o fornecedor ' + dup.nome + (dup.cnpj ? ' (CNPJ ' + dup.cnpj + ')' : '') + '.');
+  const codigo = texto(v.codigo, 20).toUpperCase();
+  if (codigo && fs.some(x => x !== ja && String(x.codigo).toUpperCase() === codigo)) throw falha('O código ' + codigo + ' já é de outro fornecedor.');
+  const o = { nome, cnpj, categoria: texto(v.categoria, 60), contato: texto(v.contato, 80), telefone: texto(v.telefone, 40), email, endereco: texto(v.endereco, 200),
+    site: texto(v.site, 120), pagamento: texto(v.pagamento, 160), obs: texto(v.obs, 500), ativo: v.ativo === false || v.ativo === 'Não' ? 'Não' : 'Sim', atualizadoEm: agora(), atualizadoPor: conta.nome,
+    codigo: codigo || (ja && ja.codigo) || fornProxCodigo(fs), servicos: texto(v.servicos, 500), whatsapp: texto(v.whatsapp, 40), instagram: texto(v.instagram, 80),
+    situacao: texto(v.situacao, 40), fonte: texto(v.fonte, 120) };
+  if (r.soValidar) return o;
+  if (ja) { gravar(t, o, ja._row); AUDIT_DET = 'Alterou o fornecedor ' + nome; return 'Fornecedor salvo.'; }
+  Object.assign(o, { id: novoId('FO'), criadoEm: agora(), criadoPor: conta.nome }); gravar(t, o);
+  AUDIT_DET = 'Cadastrou o fornecedor ' + nome; return 'Fornecedor cadastrado.';
+}
+// próximo código FOR-001, FOR-002…
+function fornProxCodigo(fs) {
+  const n = fs.reduce((m, x) => { const k = /^FOR-(\d+)$/i.exec(String(x.codigo || '')); return k ? Math.max(m, Number(k[1])) : m; }, 0);
+  return 'FOR-' + ('00' + (n + 1)).slice(-3);
+}
+// planilha de fornecedores (lida no navegador): atualiza pelo código, CNPJ ou nome; cria os que faltam
+function fornImportar(r, conta) {
+  const lista = Array.isArray(r.lista) ? r.lista.slice(0, 500) : [];
+  if (!lista.length) throw falha('A planilha não tem fornecedores.');
+  let novos = 0, atual = 0; const erros = [];
+  lista.forEach(v => {
+    try {
+      const fs = linhas(tabela('forn'));
+      const ja = (v.codigo && fs.find(x => String(x.codigo).toUpperCase() === String(v.codigo).trim().toUpperCase())) || fs.find(x => fornIgual(x, { nome: v.nome, cnpj: v.cnpj })) || null;
+      const base = {};
+      if (ja) ['nome', 'cnpj', 'categoria', 'contato', 'telefone', 'email', 'endereco', 'site', 'pagamento', 'obs', 'ativo', 'codigo', 'servicos', 'whatsapp', 'instagram', 'situacao', 'fonte'].forEach(k => { base[k] = ja[k]; });
+      Object.keys(v).forEach(k => { if (k !== '_linha' && v[k] !== undefined && v[k] !== null && String(v[k]).trim() !== '') base[k] = v[k]; });
+      if (ja) base.id = ja.id;
+      fornSalvar({ fornecedor: base }, conta);
+      if (ja) atual++; else novos++;
+    } catch (e) { erros.push('linha ' + (v._linha || '?') + ': ' + String(e.message || e)); }
+  });
+  AUDIT_DET = 'Planilha de fornecedores: ' + novos + ' novo(s), ' + atual + ' atualizado(s)' + (erros.length ? ', ' + erros.length + ' com erro' : '');
+  return [novos ? novos + ' fornecedor' + (novos === 1 ? '' : 'es') + ' cadastrado' + (novos === 1 ? '' : 's') + '.' : '', atual ? atual + ' atualizado' + (atual === 1 ? '' : 's') + '.' : '',
+    erros.length ? erros.length + ' linha' + (erros.length === 1 ? '' : 's') + ' com erro (' + erros.slice(0, 4).join('; ') + ').' : ''].filter(Boolean).join(' ') || 'Nada foi alterado.';
+}
+// traz para o cadastro os fornecedores que já aparecem nas cotações (sem duplicar)
+function fornDasCotacoes(conta) {
+  const t = tabela('forn'), fs = linhas(t), novos = [];
+  const cots = SpreadsheetApp.getActive().getSheetByName(ABAS.cot.nome) ? linhas(tabela('cot')).map(cotLer) : [];
+  cots.forEach(c => (c.dados.fornecedores || []).forEach(x => {
+    const nome = texto(x.empresa, 100); if (!nome) return;
+    if (fs.concat(novos).some(f => fornIgual(f, { nome, cnpj: x.cnpj }))) return;
+    novos.push({ id: novoId('FO'), codigo: fornProxCodigo(fs.concat(novos)), nome, cnpj: texto(x.cnpj, 20), categoria: '', contato: texto(x.contato, 80), telefone: texto(x.telefone, 40), email: texto(x.email, 100),
+      endereco: '', site: '', pagamento: texto(x.pagamento, 160), obs: 'Trazido da cotação ' + c.numero, ativo: 'Sim', criadoEm: agora(), criadoPor: conta.nome });
+  }));
+  if (novos.length) anexarLinhas(t, novos);
+  AUDIT_DET = 'Trouxe ' + novos.length + ' fornecedor(es) das cotações';
+  return novos.length ? novos.length + ' fornecedor' + (novos.length === 1 ? '' : 'es') + ' trazido' + (novos.length === 1 ? '' : 's') + ' das cotações.' : 'Todos os fornecedores das cotações já estão cadastrados.';
+}
 function cotLer(c) {
   let dados = {};
   try { dados = JSON.parse(c.dados || '{}'); } catch (e) { dados = {}; }
@@ -3966,6 +4062,7 @@ const ACOES_AUDIT = {
   cotSalvar: 'Cotação', cotArquivo: 'Arquivo de cotação',
   prestSalvar: 'Prestador de serviço', prestVisita: 'Visita de prestador', prestDoc: 'Documento de prestador', prestDocRemover: 'Tirou documento de prestador', prestImportar: 'Importou planilha de prestadores',
   unSalvar: 'Unidade', unConfig: 'Configuração das unidades', unOcupadas: 'Marcou unidades ocupadas', unImportar: 'Importou cadastro de moradores',
+  fornSalvar: 'Fornecedor', fornImportar: 'Importou planilha de fornecedores', fornDasCotacoes: 'Trouxe fornecedores das cotações',
   espReserva: 'Reserva de espaço', espEspaco: 'Espaço', espVistoria: 'Vistoria de espaço', espColar: 'Reserva colada do e-mail', espImportar: 'Importou PDF de reservas', espEmails: 'Leu e-mails de reserva',
   medMedidor: 'Medidor', medLeituras: 'Leitura de medidor', medContas: 'Conta de consumo', medImportar: 'Importou planilha de medições',
   rondaSalvar: 'Ronda', rondaFoto: 'Foto na ronda', rondaFotoRemover: 'Tirou foto da ronda', rondaResolver: 'Resolveu pendência da ronda',

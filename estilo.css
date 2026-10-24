@@ -1167,3 +1167,4 @@ tr.md-ciclo td:first-child{box-shadow:inset 4px 0 0 #92d050}
 .es-seg input:focus-visible+span{outline:2px solid var(--accent)}
 .es-regras{white-space:pre-line;max-height:7.5em;overflow:hidden}
 @media (max-width:520px){.es-it{grid-template-columns:1fr}}
+tr.md-inat td{opacity:.6}
