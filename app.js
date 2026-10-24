@@ -6451,20 +6451,28 @@ function renderMedLanc(){
   $("#ml-per").value = MD.fPer;
   if (!meds.length) { box.innerHTML = `<div class="empty">Nenhum medidor cadastrado. Cadastre em <b>Meus medidores</b> antes de lançar.</div>`; $("#ml-conta").textContent = ""; return; }
   const desde = MD.fPer === "todos" ? "" : mdSomaDia(hoje(), -(Number(MD.fPer) - 1));
-  const acoes = (tipo, id) => mdLancar() ? `<td class="md-ac"><button type="button" class="link" data-ml-ed="${tipo}:${esc(id)}">Corrigir</button><button type="button" class="link danger" data-ml-del="${tipo}:${esc(id)}">Excluir</button></td>` : "";
-  const thA = mdLancar() ? `<th aria-label="Ações"></th>` : "";
+  const acoes = (tipo, id) => mdLancar() ? `<td class="md-ac"><button type="button" class="md-ib" data-ml-ed="${tipo}:${esc(id)}" title="Corrigir" aria-label="Corrigir"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></svg></button><button type="button" class="md-ib del" data-ml-del="${tipo}:${esc(id)}" title="Excluir" aria-label="Excluir"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13M10 11v6M14 11v6"/></svg></button></td>` : "";
+  const thA = mdLancar() ? `<th>Ações</th>` : "";
   if (MD.vista === "dia") {
     const info = new Map(); meds.forEach(m => mdInt(m).out.forEach(iv => info.set(iv.leitura.id, iv)));
     const l = MD.d.leituras.filter(x => (!MD.fMed || x.medidor === MD.fMed) && (!desde || x.data >= desde)).sort((a, b) => b.data.localeCompare(a.data) || String(b.registradoEm || "").localeCompare(String(a.registradoEm || "")));
     $("#ml-conta").textContent = `${l.length} lançamento${l.length === 1 ? "" : "s"}`;
-    box.innerHTML = `<div class="tablebox"><table><thead><tr><th>Data</th><th>Medidor</th><th class="num">Leitura</th><th>Consumo</th><th class="hide-s">Acumulado</th><th class="hide-m">Observação / lançado por</th>${thA}</tr></thead><tbody>
-      ${l.length ? l.map(x => { const m = mdMed(x.medidor) || {nome:"medidor excluído", tipo:"", unidade:""}, iv = info.get(x.id), lim = mdLim(m);
-        const am = m.id ? mdSomaFaixa(m, x.data.slice(0, 8) + "01", x.data) : {n:0}, ac = m.id && mdTemCiclo(m) ? mdAcumCiclo(m, x.data) : null, acima = iv && lim && iv.consumo / iv.dias > lim;
-        return `<tr class="${x.ciclo === "Sim" ? "md-ciclo" : ""}"><td class="md-nw">${fData(x.data)}${x.ciclo === "Sim" ? `<span class="pill md-pc">leitura da concessionária</span>` : ""}</td><td><span class="md-mn">${mdIco(m.tipo, "mini")}<span>${esc(m.nome)}<span class="sub">${esc(m.tipo)} · nº ${esc(m.numero || "")}</span></span></span></td><td class="num mono">${fNum(x.leitura)}</td>
-          <td>${iv ? `<b>${mdF(iv.consumo, 2)} ${esc(m.unidade)}</b>${iv.dias > 1 ? `<span class="sub">em ${iv.dias} dias · ${mdF(iv.consumo / iv.dias, 2)}/dia</span>` : ""}${x.virada === "Sim" ? ` <span class="pill p-ajuste">relógio virou</span>` : ""}${acima ? `<span class="sub md-exc">acima do limite de ${mdF(lim)} ${esc(m.unidade)}/dia (+${mdF(iv.consumo / iv.dias - lim, 2)})</span>` : ""}` : `<span class="muted">primeira leitura</span>`}</td>
-          <td class="hide-s md-acum">${am.n ? `mês: <b>${mdF(am.s, 2)}</b>` : "—"}${ac && ac.n ? `<span class="sub">ciclo: <b>${mdF(ac.s, 2)}</b> desde ${fData(ac.ini).slice(0, 5)}</span>` : ""}</td>
-          <td class="hide-m">${x.obs ? esc(x.obs) : ""}<span class="sub">${esc(x.registradoPor || "")}${x.atualizadoEm ? ` · corrigida ${fDataHora(x.atualizadoEm)}` : ""}</span></td>${acoes("l", x.id)}</tr>`; }).join("")
-        : `<tr><td colspan="7"><div class="empty">Nenhuma leitura neste período.${mdLancar() ? ` Use <b>+ Novo lançamento</b>.` : ""}</div></td></tr>`}</tbody></table></div>`;
+    // leitura anterior de cada leitura (mesmo medidor)
+    const ant = new Map(); meds.forEach(m => { const ls = mdInt(m).ls; for (let i = 1; i < ls.length; i++) ant.set(ls[i].id, ls[i - 1]); });
+    const st = (cls, txt, tit) => `<span class="md-st ${cls}"${tit ? ` title="${esc(tit)}"` : ""}>${txt}</span>`;
+    box.innerHTML = `<div class="tablebox md-hist"><table><thead><tr><th>Data</th><th>Medidor</th><th class="hide-s">Tipo</th><th class="num">Leitura atual</th><th class="num hide-s">Leitura anterior</th><th class="num">Consumo</th><th>Status</th>${thA}</tr></thead><tbody>
+      ${l.length ? l.map(x => { const m = mdMed(x.medidor) || {nome:"medidor excluído", tipo:"", unidade:""}, iv = info.get(x.id), a = ant.get(x.id), lim = mdLim(m);
+        const dia = iv ? iv.consumo / iv.dias : 0, med = iv && m.id ? mdMediaDia(m, iv.de) : 0;
+        const status = !iv ? st("cinza", "1ª leitura") : x.virada === "Sim" ? st("ambar", "Relógio virou")
+          : lim && dia > lim ? st("verm", `Acima do limite`, `Limite de ${mdF(lim)} ${m.unidade}/dia (+${mdF(dia - lim, 2)})`)
+          : med > 0 && dia > med * 2.5 ? st("ambar", "Acima da média", `Média de ${mdF(med, 2)} ${m.unidade}/dia`) : st("ok", "✓ Normal");
+        return `<tr class="${x.ciclo === "Sim" ? "md-ciclo" : ""}"><td class="md-nw"><b>${fData(x.data)}</b></td>
+          <td class="md-nw">${esc(m.nome)}${x.obs ? `<span class="sub" title="${esc(x.obs)}">${esc(x.obs.length > 40 ? x.obs.slice(0, 38) + "…" : x.obs)}</span>` : ""}</td>
+          <td class="hide-s"><span class="md-tipo ${(MD_INFO[m.tipo] || {}).cor || ""}">${esc(m.tipo || "—")}</span></td>
+          <td class="num"><b>${mdF(x.leitura, 2)}</b></td><td class="num hide-s muted">${a ? mdF(a.leitura, 2) : "—"}</td>
+          <td class="num md-nw"><b>${iv ? `${mdF(iv.consumo, 2)} ${esc(m.unidade)}` : "—"}</b>${iv && iv.dias > 1 ? `<span class="sub">em ${iv.dias} dias</span>` : ""}</td>
+          <td>${status}${x.ciclo === "Sim" ? st("conc", "Concessionária", "Dia da leitura da concessionária (fecha o ciclo)") : ""}</td>${acoes("l", x.id)}</tr>`; }).join("")
+        : `<tr><td colspan="8"><div class="empty">Nenhuma leitura neste período.${mdLancar() ? ` Use <b>+ Novo lançamento</b>.` : ""}</div></td></tr>`}</tbody></table></div>`;
   } else {
     const l = MD.d.contas.filter(x => (!MD.fMed || x.medidor === MD.fMed) && (!desde || x.mes >= desde.slice(0, 7))).sort((a, b) => b.mes.localeCompare(a.mes));
     $("#ml-conta").textContent = `${l.length} lançamento${l.length === 1 ? "" : "s"}`;
@@ -6589,7 +6597,7 @@ function mdNovaConta(o){
 }
 function mdExcluir(btn){
   const [tipo, id] = btn.dataset.mlDel.split(":");
-  if (!btn.dataset.conf) { btn.dataset.conf = "1"; btn.textContent = "excluir?"; setTimeout(() => { if (btn.isConnected) { delete btn.dataset.conf; btn.textContent = "Excluir"; } }, 4000); return; }
+  if (!btn.dataset.conf) { const orig = btn.innerHTML; btn.dataset.conf = "1"; btn.textContent = "excluir?"; btn.classList.add("conf"); setTimeout(() => { if (btn.isConnected && btn.dataset.conf) { delete btn.dataset.conf; btn.innerHTML = orig; btn.classList.remove("conf"); } }, 4000); return; }
   enviar(btn, null, tipo === "l" ? "medLeituras" : "medContas", {op:"excluir", id}, r => { mdAplicar(r); renderMedTudo(); });
 }
 
@@ -6605,7 +6613,7 @@ function renderMedidores(){
   box.innerHTML = `<div class="md-grid">${meds.map(m => {
     const it = mdInt(m), ult = it.ls[it.ls.length - 1], dias = ult ? mdDiasEntre(ult.data, h) : null, f30 = mdSomaFaixa(m, mdSomaDia(h, -29), h);
     const usa = it.ls.length || MD.d.contas.some(c => c.medidor === m.id), inat = m.ativo === "Não";
-    return `<article class="panel md-card ${inat ? "inativo" : ""}"><div class="md-card-h">${mdIco(m.tipo)}<div><h3>${esc(m.nome)}</h3><span class="muted">${esc(m.tipo)}${m.local ? " · " + esc(m.local) : ""}</span></div>${inat ? `<span class="pill p-ajuste">Inativo</span>` : ""}</div>
+    return `<article class="panel md-card ${inat ? "inativo" : ""}"><div class="md-card-h">${mdIco(m.tipo)}<div><h3>${esc(m.nome)}</h3><span class="muted">${esc(m.tipo)}${m.local ? " · " + esc(m.local) : ""}</span></div>${inat ? `<span class="pill p-ajuste">Inativo</span>` : `<span class="md-st conc">Área comum</span>`}</div>
       <dl class="md-dl"><div><dt>Número</dt><dd class="mono">${esc(m.numero)}</dd></div><div><dt>Casas</dt><dd>${esc(m.casas)}</dd></div><div><dt>Unidade</dt><dd>${esc(m.unidade)}</dd></div>
         <div><dt>Última leitura</dt><dd>${ult ? `<b class="mono">${fNum(ult.leitura)}</b> em ${fData(ult.data)}${!inat && dias > 7 ? ` <span class="pill s-baixo">há ${dias} dias</span>` : ""}` : "nenhuma"}</dd></div>
         <div><dt>Consumo em 30 dias</dt><dd>${f30.n ? `<b>${mdF(f30.s, 2)} ${esc(m.unidade)}</b><span class="sub">${mdF(f30.s / f30.n, 2)}/dia</span>` : "—"}</dd></div>
