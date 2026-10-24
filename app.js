@@ -3693,7 +3693,11 @@ $("#pd-mail").addEventListener("click", () => {
 // Cada cotação: fornecedores (colunas), itens com o preço de cada fornecedor, frete, desconto, referência de mercado,
 // recomendação e aprovação do gerente e do síndico. O mapa sai no modelo do Pier (.xlsx) e para impressão.
 const CT = { lista:null, pendOpcoes:[], ia:false, versao:0, edit:null, sujo:false, q:"", st:"", carregando:false, erro:"" };
-const CT_ST = ["Em cotação","Aguardando gerente","Aguardando síndico","Aprovada","Cancelada"];
+const CT_ST = ["Em cotação","Aguardando aprovação","Aprovada","Cancelada"];
+// "Aguardando gerente/síndico": cotações enviadas antes da aprovação ao mesmo tempo; contam como "Aguardando aprovação"
+const ctAguarda = c => String(c.status || "").startsWith("Aguardando");
+const ctStGrupo = c => ctAguarda(c) ? "Aguardando aprovação" : c.status;
+const ctPossoAprovar = c => ctAguarda(c) && ((ehSindico() && !c.aprovSindico) || (ehGerente() && !c.aprovGerente));
 const CT_CAMPOS = [
   ["empresa","Empresa"],["cnpj","CNPJ"],["telefone","Telefone"],["email","E-mail"],["contato","Contato"],
   ["modelo","Marca / modelo ofertado"],["atende","Atende à especificação?","sel",["","Sim","Parcial","Não"]],
@@ -3763,9 +3767,9 @@ function renderCot(){
   const fs = $("#ct-fs"); if (!fs.options.length) fs.innerHTML = `<option value="">Todas as situações</option>` + CT_ST.map(s => `<option>${esc(s)}</option>`).join("");
   fs.value = CT.st;
   const q = norm(CT.q);
-  const vis = CT.lista.filter(c => (!CT.st || c.status === CT.st) && (!q || norm([c.numero, c.finalidade, c.pendNumero, c.vencedor, c.dados.fornecedores.map(f => f.empresa).join(" ")].join(" ")).includes(q)));
-  const aguardam = CT.lista.filter(c => (c.status === "Aguardando gerente" && (ehGerente() || ehSindico())) || (c.status === "Aguardando síndico" && ehSindico())).length;
-  $("#ct-resumo").innerHTML = CT_ST.map(s => { const n = CT.lista.filter(c => c.status === s).length; return `<button type="button" class="pd-stat ${s.startsWith("Aguardando") && n ? "aprov" : ""}" data-ctst="${esc(s)}" aria-pressed="${CT.st === s}"><b>${n}</b><span>${esc(s.toLowerCase())}</span></button>`; }).join("")
+  const vis = CT.lista.filter(c => (!CT.st || ctStGrupo(c) === CT.st) && (!q || norm([c.numero, c.finalidade, c.pendNumero, c.vencedor, c.dados.fornecedores.map(f => f.empresa).join(" ")].join(" ")).includes(q)));
+  const aguardam = CT.lista.filter(ctPossoAprovar).length;
+  $("#ct-resumo").innerHTML = CT_ST.map(s => { const n = CT.lista.filter(c => ctStGrupo(c) === s).length; return `<button type="button" class="pd-stat ${s.startsWith("Aguardando") && n ? "aprov" : ""}" data-ctst="${esc(s)}" aria-pressed="${CT.st === s}"><b>${n}</b><span>${esc(s.toLowerCase())}</span></button>`; }).join("")
     + (aguardam ? `<span class="hint">${aguardam} aguardando a sua aprovação</span>` : "");
   corpo.innerHTML = vis.length ? vis.map(c => `<tr class="click" data-ct="${esc(c.id)}" tabindex="0">
       <td class="mono">${esc(c.numero)}</td>
@@ -3866,13 +3870,15 @@ function renderCotEditor(){
 }
 function ctAprovHtml(c){
   const linha = (rot, v, falta) => `<li><span>${rot}</span> <b>${v ? esc(pdMarca(v)) : falta}</b></li>`;
-  let h = `<ul class="pd-aprov-info">${linha("Gerente:", c.aprovGerente, c.status === "Aguardando gerente" ? "aguardando" : "—")}${linha("Síndico:", c.aprovSindico, c.status === "Aguardando síndico" ? "aguardando" : "—")}</ul><div class="actions" style="margin-top:10px">`;
+  const ag = ctAguarda(c);
+  let h = `<ul class="pd-aprov-info">${linha("Gerente:", c.aprovGerente, ag ? "aguardando" : "—")}${linha("Síndico:", c.aprovSindico, ag ? "aguardando" : "—")}</ul>${ag ? `<p class="hint">Enviada ao gerente e ao síndico ao mesmo tempo. Cada um aprova com o próprio login, em qualquer ordem; fica aprovada quando os dois aprovarem.</p>` : ""}<div class="actions" style="margin-top:10px">`;
   if (c.status === "Em cotação") h += `<button type="button" class="btn primary" data-op="enviar">Enviar para aprovação</button><button type="button" class="btn" data-op="cancelar">Cancelar cotação</button>`;
-  if (c.status === "Aguardando gerente" && (ehGerente() || ehSindico())) h += `<button type="button" class="btn primary" data-op="aprovar">${ehGerente() ? "Aprovar (gerente)" : "Aprovar em nome do gerente"}</button>`;
-  if (c.status === "Aguardando síndico" && ehSindico()) h += `<button type="button" class="btn primary" data-op="aprovar">Aprovar (síndico)</button>`;
+  if (ag && ehSindico() && !c.aprovSindico) h += `<button type="button" class="btn primary" data-op="aprovar">Aprovar (síndico)</button>`;
+  else if (ag && ehGerente() && !c.aprovGerente) h += `<button type="button" class="btn primary" data-op="aprovar">Aprovar (gerente)</button>`;
+  else if (ag && (ehSindico() || ehGerente())) h += `<span class="hint">Você já aprovou. Falta a aprovação do ${c.aprovGerente ? "síndico" : "gerente"}.</span>`;
   if (c.status.startsWith("Aguardando") && (ehGerente() || ehSindico())) h += `<input class="input" id="ct-motivo" placeholder="Motivo da devolução (opcional)" style="max-width:280px"><button type="button" class="btn" data-op="recusar">Devolver para ajustes</button>`;
   if (c.status === "Cancelada") h += `<button type="button" class="btn" data-op="reabrir">Reabrir</button>`;
-  if (c.status === "Aprovada") h += `<span class="hint">Aprovada. O mapa final é salvo no Drive na aprovação do síndico.</span>`;
+  if (c.status === "Aprovada") h += `<span class="hint">Aprovada pelo gerente e pelo síndico. O mapa final é salvo no Drive na última aprovação.</span>`;
   return h + `<span class="hint" id="ct-op-msg"></span></div>`;
 }
 function ctRecalcular(){
