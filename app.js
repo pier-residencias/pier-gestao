@@ -708,7 +708,7 @@ $("#i-body").addEventListener("click", e => { const b = e.target.closest("[data-
 $("#i-novo").addEventListener("click", () => abrirItem(null));
 
 // ---------- janelas ----------
-function fecharModal(){ $("#modal").hidden = true; $("#modal-box").innerHTML = ""; $("#modal-box").onclick = null; $("#modal-box").classList.remove("largo"); }
+function fecharModal(){ $("#modal").hidden = true; $("#modal-box").innerHTML = ""; $("#modal-box").onclick = null; $("#modal-box").classList.remove("largo", "ao"); }
 $("#modal").addEventListener("click", e => { if (e.target.id==="modal") fecharModal(); });
 document.addEventListener("keydown", e => { if (e.key==="Escape" && !$("#modal").hidden) fecharModal(); });
 async function enviar(btn, msgEl, acao, extra, aoConcluir){
@@ -1421,37 +1421,49 @@ document.addEventListener("click", e => {
   if (e.target.id === "p-os-nova") novaOS();
 });
 
+// tipo da OS: as antigas (sem tipo) contam como corretivas
+const osTipo = o => o.tipo === "Preventiva" ? "Preventiva" : "Corretiva";
+const OS_TIPOS_F = [["Corretiva","Corretivas","verm",'<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3.6 17.4a1.9 1.9 0 0 0 2.7 2.7l5.7-5.7a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.3-.3-2.4z"/>'],
+  ["Preventiva","Preventivas","azul",'<path d="M4 6h16v14H4zM4 10h16M8 3v4M16 3v4M9 15l2 2 4-4"/>'],
+  ["agendada","Agendadas","roxo",'<path d="M12 7v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/>'],
+  ["equip","Com equipamento","cinza",'<path d="M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-2.9-1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 3 14H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.2-2.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 10 3V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A1.7 1.7 0 0 0 21 10h.1a2 2 0 1 1 0 4H21a1.7 1.7 0 0 0-1.6 1z"/>']];
+const osPassaTipo = (o, t) => !t ? true : t === "equip" ? !!String(o.equipamento || "").trim() : t === "agendada" ? !!o.agendadaPara && !osEncerrada(o) : osTipo(o) === t;
 function renderOS(){
-  const q = norm($("#o-busca").value), cat = $("#o-cat").value, f = S.oFiltro;
+  const q = norm($("#o-busca").value), cat = $("#o-cat").value, prio = $("#o-prio").value, resp = $("#o-resp").value, f = S.oFiltro, tp = S.oTipo || "";
   const cats = [...new Set(S.os.map(o => o.categoria).filter(Boolean))].sort((x,y)=>x.localeCompare(y,"pt-BR"));
-  const sel = $("#o-cat"), cur = sel.value;
-  sel.innerHTML = `<option value="">Todas as categorias</option>` + cats.map(c => `<option ${c===cur?"selected":""}>${esc(c)}</option>`).join("");
+  $("#o-cat").innerHTML = `<option value="">Todos</option>` + cats.map(c => `<option ${c===cat?"selected":""}>${esc(c)}</option>`).join("");
+  const resps = [...new Set(S.os.map(o => o.responsavel).filter(Boolean))].sort((x,y)=>x.localeCompare(y,"pt-BR"));
+  $("#o-resp").innerHTML = `<option value="">Todos</option><option value="-" ${resp==="-"?"selected":""}>Sem responsável</option>` + resps.map(c => `<option ${c===resp?"selected":""}>${esc(c)}</option>`).join("");
+  const nf = [cat, prio, resp].filter(Boolean).length; $("#o-fn").textContent = nf; $("#o-fn").hidden = !nf;
   if ($("#dl-equip")) $("#dl-equip").innerHTML = [...new Set(S.os.map(o => String(o.equipamento||"").trim()).filter(Boolean))].sort((x,y)=>x.localeCompare(y,"pt-BR")).map(v=>`<option value="${esc(v)}">`).join("");
   $("#dl-local").innerHTML = [...new Set(S.os.map(o=>o.local).concat(S.movs.map(m=>m.destino)).filter(Boolean).map(s=>String(s).trim()))].sort().slice(0,300).map(v=>`<option value="${esc(v)}">`).join("");
   $$("#o-filtros .chip").forEach(c => { if (c.dataset.f==="minhas") c.hidden = !can("os_atender") && !can("os_gerenciar"); });
-  const list = S.os.filter(o => {
-    if (f==="aberto" && osEncerrada(o)) return false;
-    if (f==="minhas" && (osEncerrada(o) || o.responsavelUsuario !== S.usuario)) return false;
-    if (f==="atrasadas" && !osAtrasada(o)) return false;
-    if (f==="concluidas" && o.status!=="Concluída") return false;
-    if (f==="canceladas" && o.status!=="Cancelada") return false;
-    if (cat && o.categoria!==cat) return false;
-    if (q && !norm([o.numero,o.titulo,o.local,o.categoria,o.responsavel,o.solicitante,o.abertaPor,o.descricao,o.equipamento].join(" ")).includes(q)) return false;
-    return true;
-  }).sort((x,y) => osEncerrada(x)||osEncerrada(y) ? String(y.concluidaEm||y.abertaEm).localeCompare(String(x.concluidaEm||x.abertaEm)) : ordemOS(x,y));
-  const vazio = {aberto:"Nenhuma OS em aberto.", minhas:"Nenhuma OS em aberto com você.", atrasadas:"Nenhuma OS atrasada.", concluidas:"Nenhuma OS concluída nos últimos 90 dias.", canceladas:"Nenhuma OS cancelada nos últimos 90 dias.", todas:"Nenhuma OS registrada ainda."}[f];
-  $("#o-body").innerHTML = list.length ? list.map(o => `<tr class="click" data-os="${esc(o.id)}" tabindex="0">
-    <td class="mono" style="white-space:nowrap">${esc(o.numero)}</td>
-    <td><b>${esc(o.titulo)}</b><span class="sub">${esc([o.categoria, o.solicitante ? "pedido por "+o.solicitante : ""].filter(Boolean).join(" · "))}</span></td>
-    <td class="hide-s">${esc(o.local)}</td>
-    <td>${prioPill(o.prioridade)}</td>
-    <td>${statusPill(o)}</td>
-    <td class="hide-s num" style="white-space:nowrap">${osEncerrada(o) ? '<span class="muted">'+fData(o.concluidaEm)+'</span>' : fData(o.prazo)}</td>
-    <td class="hide-m">${esc(o.responsavel || "—")}</td></tr>`).join("")
-    : `<tr><td colspan="7"><div class="empty">${q||cat ? "Nenhuma OS com esses filtros." : vazio}${f==="aberto" && can("os_abrir") ? ` <button class="link" type="button" id="p-os-nova">Abrir uma OS</button>` : ""}</div></td></tr>`;
+  const passaSt = o => !(f==="aberto" && osEncerrada(o)) && !(f==="minhas" && (osEncerrada(o) || o.responsavelUsuario !== S.usuario)) && !(f==="atrasadas" && !osAtrasada(o))
+    && !(f==="concluidas" && o.status!=="Concluída") && !(f==="canceladas" && o.status!=="Cancelada");
+  const passaF = o => (!cat || o.categoria===cat) && (!prio || o.prioridade===prio) && (!resp || (resp==="-" ? !o.responsavel : o.responsavel===resp))
+    && (!q || norm([o.numero,o.titulo,o.local,o.categoria,o.atividade,o.responsavel,o.solicitante,o.abertaPor,o.descricao,o.equipamento,o.unidadeSolic].join(" ")).includes(q));
+  const base = S.os.filter(o => passaSt(o) && passaF(o));
+  $("#o-tipos").innerHTML = OS_TIPOS_F.map(([k, rot, cor, ico]) => `<button type="button" class="os-tp ${cor} ${tp===k?"on":""}" data-tp="${k}" aria-pressed="${tp===k}"><svg viewBox="0 0 24 24" aria-hidden="true">${ico}</svg>${rot} <span class="os-tp-n">${base.filter(o => osPassaTipo(o, k)).length}</span></button>`).join("");
+  const list = base.filter(o => osPassaTipo(o, tp))
+    .sort((x,y) => osEncerrada(x)||osEncerrada(y) ? String(y.concluidaEm||y.abertaEm).localeCompare(String(x.concluidaEm||x.abertaEm)) : ordemOS(x,y));
+  const vazio = {aberto:"Não há OS em aberto.", minhas:"Nenhuma OS em aberto com você.", atrasadas:"Nenhuma OS atrasada.", concluidas:"Nenhuma OS concluída nos últimos 90 dias.", canceladas:"Nenhuma OS cancelada nos últimos 90 dias.", todas:"Nenhuma OS registrada ainda."}[f];
+  const tpIco = o => { const t = OS_TIPOS_F.find(x => x[0] === osTipo(o)); return `<span class="os-card-ico ${t[2]}" title="${esc(osTipo(o))}"><svg viewBox="0 0 24 24" aria-hidden="true">${t[3]}</svg></span>`; };
+  $("#o-body").innerHTML = list.length ? list.map(o => `<article class="os-card click ${osAtrasada(o)?"os-atr":""}" data-os="${esc(o.id)}" tabindex="0">
+      ${tpIco(o)}
+      <div class="os-card-c">
+        <div class="os-card-t"><span class="mono muted">${esc(o.numero)}</span>${statusPill(o)}${prioPill(o.prioridade)}${o.agendadaPara && !osEncerrada(o) ? `<span class="pill os-ag">Agendada ${fData(o.agendadaPara).slice(0,5)}${o.periodo && o.periodo !== "Dia todo" ? " · " + esc(o.periodo.toLowerCase()) : ""}</span>` : ""}</div>
+        <b class="os-card-tit">${esc(o.titulo)}</b>
+        <div class="os-card-m"><span>📍 ${esc(o.local || "—")}</span>${o.equipamento ? `<span>⚙ ${esc(o.equipamento)}</span>` : ""}${o.categoria ? `<span>${esc(o.categoria)}${o.atividade ? " › " + esc(o.atividade) : ""}</span>` : ""}${o.solicitante ? `<span>pedido por ${esc(o.solicitante)}</span>` : ""}</div>
+      </div>
+      <div class="os-card-r"><span class="${osAtrasada(o)?"atras":""}">${osEncerrada(o) ? `${o.status === "Cancelada" ? "Cancelada" : "Concluída"} ${fData(o.concluidaEm)}` : `Prazo ${fData(o.prazo)}${osAtrasada(o) ? " · atrasada" : ""}`}</span><span class="muted">${esc(o.responsavel || "Sem responsável")}</span></div>
+    </article>`).join("")
+    : `<div class="os-vazio"><span class="os-vazio-i" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 13h4l2 3h4l2-3h4M5 13l2-7h10l2 7v6H5z"/></svg></span><b>Nenhuma OS encontrada</b><span class="muted">${q || cat || prio || resp || tp ? "Nenhuma OS com esses filtros." : vazio}</span>${f==="aberto" && can("os_abrir") ? `<button class="btn primary" type="button" id="p-os-nova">+ Abrir OS</button>` : ""}</div>`;
 }
 $("#o-busca").addEventListener("input", renderOS);
-$("#o-cat").addEventListener("change", renderOS);
+["#o-cat","#o-prio","#o-resp"].forEach(id => $(id).addEventListener("change", renderOS));
+$("#o-filtrar").addEventListener("click", () => { const p = $("#o-fpainel"); p.hidden = !p.hidden; $("#o-filtrar").setAttribute("aria-expanded", String(!p.hidden)); });
+$("#o-limpar").addEventListener("click", () => { $("#o-cat").value = ""; $("#o-prio").value = ""; $("#o-resp").value = ""; S.oTipo = ""; renderOS(); });
+$("#o-tipos").addEventListener("click", e => { const b = e.target.closest("[data-tp]"); if (b) { S.oTipo = S.oTipo === b.dataset.tp ? "" : b.dataset.tp; renderOS(); } });
 $$("#o-filtros .chip").forEach(c => c.addEventListener("click", () => { S.oFiltro = c.dataset.f; syncChips("#o-filtros","f",S.oFiltro); renderOS(); }));
 $("#o-nova").addEventListener("click", () => novaOS());
 $("#o-body").addEventListener("keydown", e => { if (e.key==="Enter" && e.target.dataset.os) abrirOS(e.target.dataset.os); });
@@ -1482,27 +1494,104 @@ function ligarPrazo(prio="#os-prio", prazo="#os-prazo"){
   $(prio).addEventListener("change", () => { if (!mexeu) $(prazo).value = prazoPara($(prio).value); });
 }
 
+// grupos de atividades e as atividades de cada um (tela "Abrir OS")
+const OS_ATIVIDADES = {
+  "Elétrica":["Troca de lâmpada ou reator","Tomada ou interruptor","Disjuntor ou quadro elétrico","Fiação","Outra"],
+  "Hidráulica":["Vazamento","Entupimento","Registro ou válvula","Bomba","Caixa d'água","Outra"],
+  "Iluminação":["Lâmpada queimada","Luminária danificada","Sensor de presença","Iluminação externa","Outra"],
+  "Pintura":["Retoque","Pintura completa","Demarcação de piso","Outra"],
+  "Alvenaria e acabamento":["Reboco ou trinca","Revestimento ou azulejo","Piso","Forro","Impermeabilização","Outra"],
+  "Serralheria":["Portão ou grade","Corrimão","Solda","Fechadura","Outra"],
+  "Marcenaria":["Porta","Móvel","Dobradiça ou fechadura","Outra"],
+  "Piscina":["Tratamento da água","Bomba ou filtro","Limpeza","Revestimento","Outra"],
+  "Jardinagem":["Poda","Corte de grama","Irrigação","Plantio","Outra"],
+  "Portões e acessos":["Portão automático","Interfone","Controle de acesso ou tag","Cancela","Outra"],
+  "Equipamentos":["Elevador","Gerador","Ar-condicionado","Academia","Câmeras (CFTV)","Outra"],
+  "Limpeza":["Limpeza pesada","Remoção de entulho","Dedetização","Outra"],
+  "Outros":["Outra"]
+};
+const osTog = (id, rot, liga) => `<label class="ao-tog"><input type="checkbox" id="${id}" ${liga ? "checked" : ""}><span class="ao-sw" aria-hidden="true"></span><span>${rot}</span></label>`;
 function novaOS(){
   if (!can("os_abrir")) return;
+  const ger = can("os_gerenciar"), fotos = [];
+  const grupos = Object.keys(OS_ATIVIDADES);
+  $("#modal-box").classList.add("largo", "ao");
   $("#modal-box").innerHTML = `
-    <h3>Abrir ordem de serviço</h3>
-    <form class="form" id="f-os" novalidate autocomplete="off">
-      ${camposOS({}, can("os_gerenciar"))}
-      <div class="field full"><label for="os-fotos">Fotos do problema (antes)</label><input class="input" type="file" id="os-fotos" accept="image/*" multiple><span class="hint">Até 8 fotos. Elas são reduzidas antes do envio.</span></div>
-      <div class="full actions"><button class="btn primary" type="submit" id="os-ok">Abrir OS</button><button class="btn" type="button" id="os-no">Cancelar</button><span class="hint" id="os-msg"></span></div>
+    <div class="ao-cab"><h3><span class="ao-mais" aria-hidden="true">+</span> Abrir ordem de serviço</h3><span class="muted">Crie uma nova OS preventiva ou corretiva</span></div>
+    <form id="f-os" novalidate autocomplete="off">
+      <section class="ao-sec"><h4><span class="ao-i" aria-hidden="true">i</span> Informações básicas</h4>
+        ${osTog("ao-outra", "Essa OS foi solicitada por outra pessoa")}
+        <div class="field ao-solic" hidden><label for="os-solic">Quem pediu</label><input class="input" id="os-solic" maxlength="120" placeholder="Ex.: Portaria, Síndico, morador do 302"></div>
+        <div class="form">
+          <div class="field"><label for="ao-tipo">Tipo de OS <span class="req">*</span></label><select class="input" id="ao-tipo"><option>Corretiva</option><option>Preventiva</option></select></div>
+          <div class="field"><label for="os-prio">Prioridade <span class="req">*</span></label><select class="input" id="os-prio">${["Urgente","Alta","Normal","Baixa"].map(p => `<option ${p === "Normal" ? "selected" : ""}>${p}</option>`).join("")}</select></div>
+          <div class="field"><label for="os-equip">Equipamentos (tag)</label><input class="input" id="os-equip" list="dl-equip" maxlength="80" placeholder="Pesquisar equipamento…"></div>
+          <div class="field"><label for="os-local">Local <span class="req">*</span></label><input class="input" id="os-local" list="dl-local" maxlength="120" placeholder="Ex.: Bloco B, Piscina, Portaria"><span class="hint">Escolha da lista ou digite o local.</span></div>
+          <div class="field"><label for="os-cat">Grupo de atividades <span class="req">*</span></label><select class="input" id="os-cat"><option value="">Selecione o grupo de atividades</option>${grupos.map(g => `<option>${esc(g)}</option>`).join("")}</select></div>
+          <div class="field"><label for="ao-ativ">Atividade <span class="req">*</span></label><select class="input" id="ao-ativ" disabled><option value="">Selecione primeiro o grupo de atividades</option></select><input class="input ao-outra-ativ" id="ao-ativ-txt" maxlength="80" placeholder="Qual atividade?" hidden></div>
+          <div class="field full"><label for="os-titulo">Título <span class="req">*</span></label><input class="input" id="os-titulo" maxlength="120" placeholder="Ex.: Vazamento no 5º andar"></div>
+          <div class="field full"><label for="os-desc">Descrição <span class="req">*</span></label><textarea class="input" id="os-desc" rows="4" maxlength="3000" placeholder="Descreva detalhadamente o problema ou a manutenção necessária…"></textarea></div>
+        </div>
+      </section>
+      <section class="ao-sec"><h4><span class="ao-cam" aria-hidden="true">📷</span> Fotos do problema <span class="req">*</span></h4>
+        <p class="hint">Selecione várias fotos de uma vez. A prévia aparece abaixo. A primeira é a foto <b>Antes</b> (fica na comparação com o serviço pronto); as outras entram no histórico da abertura. Até 8 fotos.</p>
+        <label class="ao-drop" id="ao-drop"><input type="file" id="os-fotos" accept="image/*" multiple hidden><span class="ao-drop-i" aria-hidden="true">🖼</span><b>Clique para selecionar uma ou mais fotos</b><span class="hint">Seleção múltipla. A primeira vira a foto Antes.</span></label>
+        <div class="ao-prev" id="ao-prev"></div>
+      </section>
+      <details class="ao-sec ao-mais-d" open><summary><span class="ao-cfg" aria-hidden="true">☰</span> <b>Mais detalhes</b> <span class="muted">Agenda, prazo e atribuição</span></summary>
+        ${osTog("ao-ag", "Agendar esta OS")}
+        <p class="hint">Escolha o dia e o período. O atendimento fica marcado para essa data.</p>
+        <div class="form ao-agenda" hidden><div class="field"><label for="ao-dia">Dia</label><input class="input" type="date" id="ao-dia" min="${hoje()}"></div>
+          <div class="field"><label for="ao-per">Período</label><select class="input" id="ao-per"><option>Manhã</option><option>Tarde</option><option selected>Dia todo</option></select></div></div>
+        <div class="form"><div class="field"><label for="os-prazo">Prazo</label><input class="input" type="date" id="os-prazo" value="${prazoPara("Normal")}"><span class="hint">Calculado pela prioridade; pode mudar.</span></div></div>
+        <h4 class="ao-sub">Atribuição e solicitante</h4>
+        <div class="form">
+          ${ger ? `<div class="field"><label for="os-resp">Atribuir a <span class="muted">(opcional)</span></label><select class="input" id="os-resp"><option value="">Selecione um técnico…</option>${S.colab.map(c => `<option value="${esc(c.usuario)}">${esc(c.nome)}</option>`).join("")}</select><span class="hint">Se atribuída, a OS já vai para o técnico.</span></div>` : ""}
+          <div class="field"><label for="ao-un">Solicitação de unidade? <span class="muted">(opcional)</span></label><select class="input" id="ao-un"><option>Não</option><option>Sim</option></select></div>
+          <div class="field ao-unid" hidden><label for="ao-un-txt">Unidade</label><input class="input" id="ao-un-txt" maxlength="60" placeholder="Ex.: Bloco 2 · 302"></div>
+        </div>
+      </details>
+      <div class="ao-acoes"><span class="hint" id="os-msg"></span><button class="btn" type="button" id="os-limpar">Limpar</button><button class="btn" type="button" id="os-no">Cancelar</button><button class="btn primary" type="submit" id="os-ok">Abrir ordem de serviço</button></div>
     </form>`;
-  $("#modal").hidden = false; $("#os-titulo").focus();
+  $("#modal").hidden = false; $("#ao-tipo").focus();
   $("#os-no").onclick = fecharModal;
   ligarPrazo();
+  const vis = (sel, on) => { $(sel).hidden = !on; };
+  $("#ao-outra").onchange = ev => { vis(".ao-solic", ev.target.checked); if (ev.target.checked) $("#os-solic").focus(); };
+  $("#ao-ag").onchange = ev => { vis(".ao-agenda", ev.target.checked); if (ev.target.checked && !$("#ao-dia").value) $("#ao-dia").value = hoje(); };
+  $("#ao-un").onchange = ev => vis(".ao-unid", ev.target.value === "Sim");
+  $("#os-cat").onchange = () => { const g = $("#os-cat").value, a = $("#ao-ativ"); a.disabled = !g;
+    a.innerHTML = g ? `<option value="">Selecione a atividade</option>` + OS_ATIVIDADES[g].map(x => `<option>${esc(x)}</option>`).join("") : `<option value="">Selecione primeiro o grupo de atividades</option>`; vis("#ao-ativ-txt", false); };
+  $("#ao-ativ").onchange = () => { const o = $("#ao-ativ").value === "Outra"; vis("#ao-ativ-txt", o); if (o) $("#ao-ativ-txt").focus(); };
+  const prever = () => {
+    $("#ao-prev").innerHTML = fotos.map((f, i) => `<figure class="ao-ft"><img alt="Foto ${i + 1}" src="${URL.createObjectURL(f)}"><figcaption>${i === 0 ? "<b>Antes</b>" : "Foto " + (i + 1)}</figcaption><button type="button" class="ao-ft-x" data-ftx="${i}" aria-label="Tirar a foto ${i + 1}">×</button>${i ? `<button type="button" class="ao-ft-a" data-fta="${i}">Usar como Antes</button>` : ""}</figure>`).join("");
+  };
+  $("#os-fotos").onchange = ev => { const n = [...ev.target.files].filter(f => /^image\//.test(f.type)), cabe = 8 - fotos.length; ev.target.value = ""; if (n.length > cabe) toast("No máximo 8 fotos por OS.", true); fotos.push(...n.slice(0, cabe)); prever(); };
+  $("#ao-prev").onclick = ev => { const x = ev.target.closest("[data-ftx]"), a = ev.target.closest("[data-fta]");
+    if (x) { fotos.splice(+x.dataset.ftx, 1); prever(); } else if (a) { const [f] = fotos.splice(+a.dataset.fta, 1); fotos.unshift(f); prever(); } };
+  $("#os-limpar").onclick = () => { fecharModal(); novaOS(); };
   $("#f-os").addEventListener("submit", async ev => {
     ev.preventDefault();
-    const msg = $("#os-msg"), v = lerCamposOS(msg); if (!v) return;
-    if ($("#os-resp") && $("#os-resp").value) v.responsavelUsuario = $("#os-resp").value;
+    const msg = $("#os-msg"), erro = t => { msg.className = "hint err"; msg.textContent = t; };
+    const ativ = $("#ao-ativ").value === "Outra" ? $("#ao-ativ-txt").value.trim() : $("#ao-ativ").value;
+    const v = {titulo:$("#os-titulo").value.trim(), local:$("#os-local").value.trim(), categoria:$("#os-cat").value, prioridade:$("#os-prio").value, prazo:$("#os-prazo").value,
+      descricao:$("#os-desc").value.trim(), solicitante:$("#ao-outra").checked ? $("#os-solic").value.trim() : "", equipamento:$("#os-equip").value.trim(),
+      tipo:$("#ao-tipo").value, atividade:ativ, agendadaPara:$("#ao-ag").checked ? $("#ao-dia").value : "", periodo:$("#ao-per").value, unidadeSolic:$("#ao-un").value === "Sim" ? $("#ao-un-txt").value.trim() : ""};
+    if (!v.local) return erro("Informe o local.");
+    if (!v.categoria) return erro("Escolha o grupo de atividades.");
+    if (!v.atividade) return erro("Escolha a atividade.");
+    if (!v.titulo) return erro("Dê um título à OS.");
+    if (!v.descricao) return erro("Descreva o problema.");
+    if (!fotos.length) return erro("Coloque ao menos uma foto do problema.");
+    if ($("#ao-ag").checked && !v.agendadaPara) return erro("Escolha o dia do agendamento.");
+    if ($("#ao-outra").checked && !v.solicitante) return erro("Informe quem pediu a OS.");
+    if ($("#ao-un").value === "Sim" && !v.unidadeSolic) return erro("Informe a unidade que pediu.");
+    if (v.unidadeSolic && !v.solicitante) v.solicitante = "Unidade " + v.unidadeSolic;
+    if (ger && $("#os-resp").value) v.responsavelUsuario = $("#os-resp").value;
     v.setor = osAmb();
-    const arquivos = [...$("#os-fotos").files].slice(0, 8);
     const r = await enviar($("#os-ok"), msg, "osAbrir", {os:v});
     if (!r) return;
-    if (arquivos.length) { $("#os-ok").disabled = true; await enviarFotos(r.osId, "antes", arquivos, msg); }
+    $("#os-ok").disabled = true; await enviarFotos(r.osId, "antes", fotos, msg);
     fecharModal(); setTab("os"); abrirOS(r.osId);
   });
 }
@@ -1566,6 +1655,8 @@ function abrirOS(id){
       <div><dt>Local</dt><dd>${esc(o.local||"—")}</dd></div>
       <div><dt>Categoria</dt><dd>${esc(o.categoria||"—")}</dd></div>
       ${o.equipamento ? `<div><dt>Equipamento</dt><dd>${esc(o.equipamento)}</dd></div>` : ""}
+      ${o.tipo ? `<div><dt>Tipo</dt><dd>${esc(o.tipo)}</dd></div>` : ""}${o.atividade ? `<div><dt>Atividade</dt><dd>${esc(o.atividade)}</dd></div>` : ""}
+      ${o.agendadaPara ? `<div><dt>Agendada</dt><dd>${fData(o.agendadaPara)} · ${esc(String(o.periodo || "").toLowerCase())}</dd></div>` : ""}${o.unidadeSolic ? `<div><dt>Unidade</dt><dd>${esc(o.unidadeSolic)}</dd></div>` : ""}
       <div><dt>Responsável</dt><dd>${esc(o.responsavel||"Sem responsável")}</dd></div>
       <div><dt>Prazo</dt><dd class="${osAtrasada(o)?"atras":""}">${fData(o.prazo)}${osAtrasada(o)?" · atrasada":""}</dd></div>
       <div><dt>Aberta</dt><dd>${fDataHora(o.abertaEm)} por ${esc(o.abertaPor||"—")}</dd></div>
