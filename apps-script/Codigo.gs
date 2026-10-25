@@ -65,7 +65,8 @@ const ABAS = {
       ['solucao', 'O que foi feito'], ['motivoCancelamento', 'Motivo do cancelamento'],
       ['fotosAntes', 'Fotos antes'], ['fotosDepois', 'Fotos depois'], ['andamento', 'Andamento'],
       ['atualizadoEm', 'Atualizado em'],
-      ['setor', 'Setor'], ['pendencia', 'Pendência de origem'], ['equipamento', 'Equipamento']
+      ['setor', 'Setor'], ['pendencia', 'Pendência de origem'], ['equipamento', 'Equipamento'],
+      ['tipo', 'Tipo de OS'], ['atividade', 'Atividade'], ['agendadaPara', 'Agendada para'], ['periodo', 'Período agendado'], ['unidadeSolic', 'Unidade solicitante']
     ],
     num: []
   },
@@ -333,7 +334,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-10-24 fornecedores';
+const VERSAO = '2026-10-25 abrir OS';
 
 function doGet() {
   return json({ ok: true, app: 'Pier Gestão', versao: VERSAO });
@@ -1355,6 +1356,16 @@ function osCampos(v) {
   };
   // equipamento é opcional; só muda quando vem no pedido (versões antigas do site não mandam e não apagam)
   if ('equipamento' in v) c.equipamento = texto(v.equipamento, 80);
+  // campos da tela nova de abertura (opcionais; quem não manda não apaga)
+  if ('tipo' in v) c.tipo = ['Corretiva', 'Preventiva'].indexOf(v.tipo) >= 0 ? v.tipo : 'Corretiva';
+  if ('atividade' in v) c.atividade = texto(v.atividade, 80);
+  if ('agendadaPara' in v) {
+    const ag = String(v.agendadaPara || '');
+    if (ag && !/^\d{4}-\d{2}-\d{2}$/.test(ag)) throw falha('Data do agendamento inválida.');
+    c.agendadaPara = ag; c.periodo = ag ? (['Manhã', 'Tarde', 'Dia todo'].indexOf(v.periodo) >= 0 ? v.periodo : 'Dia todo') : '';
+    if (ag && c.prazo < ag) c.prazo = ag; // o prazo nunca fica antes do dia agendado
+  }
+  if ('unidadeSolic' in v) c.unidadeSolic = texto(v.unidadeSolic, 60);
   return c;
 }
 
@@ -1372,7 +1383,7 @@ function osAbrir(v, conta, origem) {
   const max = linhas(t).reduce((m, o) => { const x = /(\d+)\s*$/.exec(o.numero || ''); return x ? Math.max(m, Number(x[1])) : m; }, 0);
   const numero = 'OS-' + ('000' + (max + 1)).slice(-4);
   const id = novoId('O');
-  let and = osAndamento('', conta.nome, 'Abriu a OS');
+  let and = osAndamento('', conta.nome, 'Abriu a OS' + (campos.agendadaPara ? ' (agendada para ' + campos.agendadaPara.split('-').reverse().join('/') + ', ' + String(campos.periodo).toLowerCase() + ')' : ''));
   if (resp) and = osAndamento(and, conta.nome, 'Atribuiu a ' + (resp.nome || resp.usuario));
   gravar(t, Object.assign({
     id, numero, status: OS_STATUS.aberta, abertaEm: agora(), abertaPor: conta.nome, abertaPorUsuario: conta.usuario,

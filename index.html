@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap"></noscript>
-<link rel="stylesheet" href="estilo.css?v=20261024forn">
+<link rel="stylesheet" href="estilo.css?v=20261025os">
 </head>
 <body>
 <div class="login" id="login" hidden>
@@ -164,12 +164,20 @@
 
   <!-- ORDENS DE SERVIÇO -->
   <section id="t-os" hidden>
-    <div class="sec-head"><h2 class="sec">Ordens de serviço</h2><button class="btn primary" id="o-nova" hidden>Abrir OS</button></div>
-    <div class="toolbar">
-      <input class="input" id="o-busca" placeholder="Buscar por número, serviço, local, equipamento ou pessoa" type="search">
-      <select class="input" id="o-cat" aria-label="Categoria"><option value="">Todas as categorias</option></select>
+    <div class="un-head"><div><h2 class="sec">Ordens de serviço</h2><p class="muted">Acompanhe as OS abertas, em andamento, agendadas e concluídas.</p></div>
+      <div class="un-ferr"><button class="btn primary" id="o-nova" hidden>+ Abrir OS</button></div></div>
+    <div class="panel os-busca">
+      <div class="os-busca-l"><input class="input" id="o-busca" placeholder="Número, serviço, equipamento ou local…" type="search" aria-label="Pesquisar OS">
+        <button class="btn" type="button" id="o-filtrar" aria-expanded="false" aria-controls="o-fpainel">Filtros <span class="badge" id="o-fn" hidden></span></button></div>
+      <div class="os-tipos" id="o-tipos" role="group" aria-label="Tipo de OS"></div>
+      <div class="os-fpainel" id="o-fpainel" hidden>
+        <label class="md-lbl">Grupo de atividades <select class="input" id="o-cat"><option value="">Todos</option></select></label>
+        <label class="md-lbl">Prioridade <select class="input" id="o-prio"><option value="">Todas</option><option>Urgente</option><option>Alta</option><option>Normal</option><option>Baixa</option></select></label>
+        <label class="md-lbl">Responsável <select class="input" id="o-resp"><option value="">Todos</option></select></label>
+        <button class="link" type="button" id="o-limpar">Limpar filtros</button>
+      </div>
     </div>
-    <div class="chips" id="o-filtros" style="margin-bottom:12px">
+    <div class="chips os-st" id="o-filtros">
       <button class="chip" data-f="aberto" aria-pressed="true">Em aberto</button>
       <button class="chip" data-f="minhas" aria-pressed="false">Comigo</button>
       <button class="chip" data-f="atrasadas" aria-pressed="false">Atrasadas</button>
@@ -177,10 +185,7 @@
       <button class="chip" data-f="canceladas" aria-pressed="false">Canceladas</button>
       <button class="chip" data-f="todas" aria-pressed="false">Todas</button>
     </div>
-    <div class="tablebox"><table>
-      <thead><tr><th>OS</th><th>Serviço</th><th class="hide-s">Local</th><th>Prioridade</th><th>Situação</th><th class="hide-s">Prazo</th><th class="hide-m">Responsável</th></tr></thead>
-      <tbody id="o-body"></tbody>
-    </table></div>
+    <div id="o-body" class="os-lista"></div>
     <p class="hint" style="margin-top:10px">A lista mostra as OS em aberto e as encerradas nos últimos 90 dias. As mais antigas ficam na aba OS da planilha e entram no dashboard pelo período.</p>
     <datalist id="dl-local"></datalist>
     <datalist id="dl-equip"></datalist>
@@ -707,7 +712,7 @@
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="config.js"></script>
-<script src="nfe.js?v=20261024forn"></script>
-<script src="app.js?v=20261024forn"></script>
+<script src="nfe.js?v=20261025os"></script>
+<script src="app.js?v=20261025os"></script>
 </body>
 </html>
