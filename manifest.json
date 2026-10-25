@@ -1,0 +1,27 @@
+{
+  "background_color": "#ffffff",
+  "display": "standalone",
+  "name": "Pier Gestão",
+  "orientation": "any",
+  "scope": "/pier-gestao/",
+  "short_name": "Pier Gestão",
+  "start_url": "/pier-gestao/",
+  "theme_color": "#17324d",
+  "icons": [
+    {
+      "src": "./pier-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./pier-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "id": "/pier-gestao/",
+  "description": "Sistema de gestão administrativa, manutenção e estoque do Condomínio Residencial Pier.",
+  "lang": "pt-BR"
+}
