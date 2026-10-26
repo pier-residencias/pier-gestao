@@ -334,14 +334,16 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-10-25 abrir OS';
+const VERSAO = '2026-10-26 entrada rápida';
 
 function doGet() {
+  TABS = {};
   return json({ ok: true, app: 'Pier Gestão', versao: VERSAO });
 }
 
 function doPost(e) {
   AUDIT_DET = '';
+  TABS = {};
   let req;
   try { req = JSON.parse(e.postData.contents); }
   catch (err) { return json({ ok: false, erro: 'Pedido inválido.' }); }
@@ -671,16 +673,25 @@ function dados(meses, conta) {
     const vazio = { itens: [], emprestimos: [], movs: [], setores: [], locais: {} };
     return Object.assign(vazio, dadosOsDem(ms, conta, [], limpa));
   }
-  const todas = linhas(tabela('movs'));
+  // movimentações: só as dos meses pedidos e as ligadas às OS que vão na resposta (não o histórico inteiro)
+  let lidas = null;
+  const lerMovs = osLista => {
+    const nums = {};
+    (osLista || []).forEach(o => { if (o.numero) nums[String(o.numero)] = 1; });
+    lidas = linhasOnde(tabela('movs'), ['data', 'os'], m => ms.indexOf(String(m.data).slice(0, 7)) >= 0 || (m.os && nums[m.os] === 1));
+    return lidas;
+  };
   const V = visaoSetores(conta);
+  const extra = dadosOsDem(ms, conta, lerMovs, limpa);
+  if (!lidas) lerMovs([]);
   const out = {
     itens: V.itens.map(limpa),
     emprestimos: linhas(tabela('emp')).filter(V.ve).map(e => V.marca(limpa(e))),
-    movs: todas.filter(m => ms.indexOf(String(m.data).slice(0, 7)) >= 0 && V.ve(m)).map(m => V.marca(limpa(m))),
+    movs: lidas.filter(m => ms.indexOf(String(m.data).slice(0, 7)) >= 0 && V.ve(m)).map(m => V.marca(limpa(m))),
     setores: V.setores,
     locais: V.setores.reduce((m, st) => { m[st] = lerLocais(st); return m; }, {})
   };
-  return Object.assign(out, dadosOsDem(ms, conta, todas, limpa));
+  return Object.assign(out, extra);
 }
 function dadosOsDem(ms, conta, todas, limpa) {
   const out = {};
@@ -694,7 +705,7 @@ function dadosOsDem(ms, conta, todas, limpa) {
       ms.indexOf(String(o.abertaEm).slice(0, 7)) >= 0)
       .filter(o => setoresDe(conta).indexOf(osSetor(o)) >= 0)
       .map(o => Object.assign(o, { setor: osSetor(o) }));
-    out.os = comMateriais(lista.map(limpa), todas);
+    out.os = comMateriais(lista.map(limpa), typeof todas === 'function' ? todas(lista) : todas);
   }
   if (p.dem_ver || p.dem_executar || p.dem_delegar) {
     const corte = Utilities.formatDate(new Date(Date.now() - 90 * 864e5), Session.getScriptTimeZone(), 'yyyy-MM-dd');
@@ -746,6 +757,7 @@ function comMateriais(lista, movs) {
 }
 
 function tabela(chave) {
+  if (TABS[chave]) return TABS[chave];
   const def = ABAS[chave];
   const ss = SpreadsheetApp.getActive();
   let sh = ss.getSheetByName(def.nome);
@@ -772,7 +784,15 @@ function tabela(chave) {
     if (i < 0) throw falha('A coluna "' + label + '" não foi encontrada na aba ' + def.nome + '.');
     idx[k] = i;
   });
-  return { sh, def, idx, ncol };
+  return (TABS[chave] = { sh, def, idx, ncol });
+}
+
+function objLinha(t, r, row) {
+  const o = { _row: row };
+  t.def.cols.forEach(([k]) => { o[k] = celula(r[t.idx[k]], t.def.num.indexOf(k) >= 0); });
+  if (!o.id) return null;
+  if (t.def === ABAS.movs) o.tipo = TIPO_POR_NOME[o.tipo] || String(o.tipo).toLowerCase();
+  return o;
 }
 
 function linhas(t) {
@@ -780,12 +800,34 @@ function linhas(t) {
   if (n < 1) return [];
   const vals = t.sh.getRange(2, 1, n, t.ncol).getValues();
   const out = [];
-  vals.forEach((r, i) => {
-    const o = { _row: i + 2 };
-    t.def.cols.forEach(([k]) => { o[k] = celula(r[t.idx[k]], t.def.num.indexOf(k) >= 0); });
-    if (!o.id) return;
-    if (t.def === ABAS.movs) o.tipo = TIPO_POR_NOME[o.tipo] || String(o.tipo).toLowerCase();
-    out.push(o);
+  vals.forEach((r, i) => { const o = objLinha(t, r, i + 2); if (o) out.push(o); });
+  return out;
+}
+
+// Lê só as linhas que interessam: primeiro as colunas-chave (estreitas), depois só os trechos escolhidos.
+// Evita ler o histórico inteiro (todas as colunas) em cada entrada.
+function linhasOnde(t, cols, manter) {
+  const n = t.sh.getLastRow() - 1;
+  if (n < 1) return [];
+  const chaves = cols.map(k => t.sh.getRange(2, t.idx[k] + 1, n, 1).getValues());
+  const quero = [];
+  for (let i = 0; i < n; i++) {
+    const o = {};
+    cols.forEach((k, j) => { o[k] = celula(chaves[j][i][0], false); });
+    if (manter(o)) quero.push(i);
+  }
+  if (!quero.length) return [];
+  let blocos = [];
+  quero.forEach(i => { const b = blocos[blocos.length - 1]; if (b && i - b[1] <= 30) b[1] = i; else blocos.push([i, i]); });
+  if (blocos.length > 12) blocos = [[quero[0], quero[quero.length - 1]]];
+  const sel = {}; quero.forEach(i => { sel[i] = 1; });
+  const out = [];
+  blocos.forEach(([a, z]) => {
+    t.sh.getRange(a + 2, 1, z - a + 1, t.ncol).getValues().forEach((r, k) => {
+      if (!sel[a + k]) return;
+      const o = objLinha(t, r, a + k + 2);
+      if (o) out.push(o);
+    });
   });
   return out;
 }
@@ -3936,6 +3978,8 @@ const SEG = {
 const PERMS_ESTOQUE = ['painel', 'itens_ver', 'historico_ver', 'dashboard', 'registrar_saida', 'registrar_entrada', 'registrar_troca',
   'registrar_emprestimo', 'devolver', 'itens_cadastrar', 'itens_editar', 'historico_estornar', 'exportar'];
 var AUDIT_DET = '';
+// cabeçalhos já conferidos nesta execução (cada aba é conferida uma vez por pedido)
+var TABS = {};
 
 // Segredo guardado nas propriedades do script (fora da planilha): sem ele, quem copiar a aba Usuarios não consegue testar senhas.
 function segredoSenhas() {
