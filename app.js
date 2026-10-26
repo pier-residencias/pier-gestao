@@ -179,6 +179,42 @@ function sair(msg){
 }
 $("#l-esqueci").addEventListener("click", () => {
   const box = $("#l-esqueci-box"); box.hidden = !box.hidden; $("#l-esqueci").setAttribute("aria-expanded", box.hidden ? "false" : "true");
+  if (!box.hidden && !$("#l-usuario").value.trim()) $("#l-usuario").focus();
+});
+// esqueci a senha: código pelo e-mail cadastrado; a própria pessoa cria a nova senha e já entra
+function redefMsg(t, err){ const m = $("#r-msg"); m.textContent = t || ""; m.className = "hint" + (err ? " err" : ""); }
+async function redefChamar(btn, acao, extra, ok){
+  btn.disabled = true;
+  try { ok(await api(acao, extra)); } catch(e){ redefMsg(e.message, true); } finally { btn.disabled = false; }
+}
+$("#r-enviar").addEventListener("click", () => {
+  const usuario = $("#l-usuario").value.trim().toLowerCase();
+  if (!usuario) { redefMsg("Digite o seu usuário no campo Usuário, acima.", true); $("#l-usuario").focus(); return; }
+  redefMsg("Enviando…");
+  redefChamar($("#r-enviar"), "esqueciSenha", {usuario, registro:{aparelho:aparelho()}}, r => {
+    redefMsg(r.msg); $("#r-passo2").hidden = false; $("#r-enviar").textContent = "Reenviar código"; $("#r-codigo").focus();
+  });
+});
+$("#r-ok").addEventListener("click", () => {
+  const usuario = $("#l-usuario").value.trim().toLowerCase(), codigo = $("#r-codigo").value.replace(/\D/g, ""), nova = $("#r-nova").value.trim();
+  if (!usuario) { redefMsg("Digite o seu usuário no campo Usuário, acima.", true); $("#l-usuario").focus(); return; }
+  if (codigo.length !== 6) { redefMsg("Digite o código de 6 números que chegou no seu e-mail.", true); $("#r-codigo").focus(); return; }
+  if (nova.length < 6) { redefMsg("A nova senha precisa ter pelo menos 6 caracteres.", true); $("#r-nova").focus(); return; }
+  if (nova !== $("#r-conf").value.trim()) { redefMsg("As duas senhas não são iguais.", true); $("#r-conf").focus(); return; }
+  redefMsg("Salvando…");
+  redefChamar($("#r-ok"), "redefinirSenha", {usuario, codigo, nova, registro:{aparelho:aparelho()}}, () => {
+    $("#l-senha").value = nova;
+    ["#r-codigo", "#r-nova", "#r-conf"].forEach(s => { $(s).value = ""; });
+    $("#r-passo2").hidden = true; $("#r-enviar").textContent = "Enviar código por e-mail"; redefMsg("");
+    $("#l-esqueci-box").hidden = true; $("#l-esqueci").setAttribute("aria-expanded", "false");
+    $("#l-entrar").click();
+  });
+});
+// Enter dentro do quadro "Esqueci minha senha" não envia o formulário de entrada
+$("#l-esqueci-box").addEventListener("keydown", e => {
+  if (e.key !== "Enter") return;
+  e.preventDefault();
+  ($("#r-passo2").hidden ? $("#r-enviar") : $("#r-ok")).click();
 });
 // trocar a própria senha (convite depois da senha provisória, ou pelo botão "Trocar senha" no topo)
 function abrirMinhaSenha(o){
@@ -1316,7 +1352,7 @@ const gerarSenha = () => { try { const a = new Uint32Array(1); crypto.getRandomV
 function abrirUsuario(usuario){
   const E = S.eq; if (!E) return;
   const u = usuario ? E.usuarios.find(x => x.usuario===usuario) : null;
-  const v = u ? Object.assign({senha:""}, u) : {usuario:"", nome:"", senha:gerarSenha(), perfil:(E.perfis.find(p => !p.fixo)||E.perfis[0]).nome, ativo:true, telefone:""};
+  const v = u ? Object.assign({senha:""}, u) : {usuario:"", nome:"", senha:gerarSenha(), perfil:(E.perfis.find(p => !p.fixo)||E.perfis[0]).nome, ativo:true, telefone:"", email:""};
   const eu = u && u.usuario === S.usuario;
   $("#modal-box").innerHTML = `
     <h3>${u ? "Editar colaborador" : "Novo colaborador"}</h3>
@@ -1325,6 +1361,7 @@ function abrirUsuario(usuario){
       <div class="field"><label for="u-usuario">Usuário (para entrar) <span class="req">*</span></label><input class="input mono" id="u-usuario" value="${esc(v.usuario)}" autocapitalize="none" spellcheck="false" placeholder="Ex.: joao"></div>
       <div class="field"><label for="u-senha">${u ? "Nova senha" : 'Senha <span class="req">*</span>'}</label><div class="actions" style="flex-wrap:nowrap"><input class="input mono" id="u-senha" value="${esc(v.senha)}" autocomplete="new-password" placeholder="${u ? "Em branco: mantém a atual" : ""}"><button class="btn small" type="button" id="u-gerar">Gerar</button></div><span class="hint">${u ? "Só preencha para trocar. A senha atual não aparece: fica guardada como código." : "Mínimo de 6 caracteres. Anote antes de salvar: depois ela não aparece mais."}</span></div>
       <div class="field"><label for="u-perfil">Perfil</label><select class="input" id="u-perfil">${E.perfis.map(p => `<option ${p.nome===v.perfil?"selected":""}>${esc(p.nome)}</option>`).join("")}</select></div>
+      <div class="field"><label for="u-email">E-mail</label><input class="input" id="u-email" type="email" autocapitalize="none" spellcheck="false" value="${esc(v.email || "")}" placeholder="Para redefinir a senha"></div>
       <div class="field"><label for="u-tel">WhatsApp (com DDD)</label><input class="input num" id="u-tel" inputmode="tel" value="${esc(v.telefone ? fTel(v.telefone) : "")}" placeholder="(21) 99999-9999"></div>
       <div class="field"><label for="u-ativo">Situação</label><select class="input" id="u-ativo" ${eu?"disabled":""}><option value="1" ${v.ativo?"selected":""}>Ativo: pode entrar</option><option value="0" ${v.ativo?"":"selected"}>Bloqueado: não entra mais</option></select></div>
       ${u ? `<div class="field full u-acesso"><span class="lbl-campo">Acesso</span><div class="actions">
@@ -1332,7 +1369,7 @@ function abrirUsuario(usuario){
         ${u.bloqueado ? `<button class="btn small" type="button" id="u-liberar">Liberar o login</button>` : ""}
         ${u.sessoes && !eu ? `<button class="btn small" type="button" id="u-encerrar">Encerrar acessos abertos</button>` : ""}
       </div><span class="hint">Trocar a senha ou bloquear o login também encerra os acessos abertos.</span></div>` : ""}
-      <p class="hint full">A senha definida aqui é <b>provisória</b>: ao entrar com ela, a pessoa é convidada a criar a própria senha${u && u.provisoria ? " (esta pessoa ainda não criou a dela)" : ""}. Passe o usuário e a senha para o colaborador. O nome aparece no histórico em cada lançamento que ele fizer. O WhatsApp serve para avisar quando uma demanda for delegada a ele.</p>
+      <p class="hint full">A senha definida aqui é <b>provisória</b>: ao entrar com ela, a pessoa é convidada a criar a própria senha${u && u.provisoria ? " (esta pessoa ainda não criou a dela)" : ""}. Passe o usuário e a senha para o colaborador. O nome aparece no histórico em cada lançamento que ele fizer. O WhatsApp serve para avisar quando uma demanda for delegada a ele. O e-mail permite que a própria pessoa redefina a senha em "Esqueci minha senha".</p>
       <div class="full actions"><button class="btn primary" type="submit" id="u-ok">${u ? "Salvar" : "Criar login"}</button><button class="btn" type="button" id="u-no">Cancelar</button><span class="hint" id="u-msg"></span></div>
     </form>`;
   $("#modal").hidden = false; $("#u-nome").focus();
@@ -1349,12 +1386,13 @@ function abrirUsuario(usuario){
   $("#f-u").addEventListener("submit", async ev => {
     ev.preventDefault();
     const msg = $("#u-msg"); msg.className = "hint err";
-    const nu = {nome:$("#u-nome").value.trim(), usuario:$("#u-usuario").value.trim().toLowerCase(), senha:$("#u-senha").value.trim(), perfil:$("#u-perfil").value, ativo:$("#u-ativo").value==="1", telefone:$("#u-tel").value.replace(/\D/g,"")};
+    const nu = {nome:$("#u-nome").value.trim(), usuario:$("#u-usuario").value.trim().toLowerCase(), senha:$("#u-senha").value.trim(), perfil:$("#u-perfil").value, ativo:$("#u-ativo").value==="1", telefone:$("#u-tel").value.replace(/\D/g,""), email:$("#u-email").value.trim().toLowerCase()};
     if (!nu.nome) { msg.textContent = "Informe o nome do colaborador."; return; }
     if (!/^[a-z0-9._@-]{2,40}$/.test(nu.usuario)) { msg.textContent = "Usuário: só letras minúsculas, números, ponto ou traço, sem espaços."; return; }
     if (!u && !nu.senha) { msg.textContent = "Defina a senha do novo login."; return; }
     if (nu.senha && nu.senha.length < 6) { msg.textContent = "A senha precisa ter pelo menos 6 caracteres."; return; }
     if (nu.telefone && nu.telefone.length < 10) { msg.textContent = "WhatsApp incompleto: informe o DDD e o número."; return; }
+    if (nu.email && !/^[^\s@,;]+@[^\s@,;]+\.[a-z]{2,}$/i.test(nu.email)) { msg.textContent = "E-mail inválido."; return; }
     await enviar($("#u-ok"), msg, "salvarUsuario", {original: u ? u.usuario : "", u: nu}, r => {
       S.eq = r.equipe; fecharModal(); renderEquipe();
       if (eu) { S.usuario = nu.usuario; guardar(); api("entrar").then(renderMe).catch(()=>{}); }
