@@ -334,7 +334,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-10-26 entrada rápida';
+const VERSAO = '2026-10-26 redefinir senha';
 
 function doGet() {
   TABS = {};
@@ -350,6 +350,9 @@ function doPost(e) {
   let conta = null;
   try {
     let token = '';
+    // esqueci a senha: código por e-mail para a própria pessoa (sem sessão)
+    if (req.acao === 'esqueciSenha') return json({ ok: true, msg: pedirCodigoSenha(req.usuario, (req.registro || {}).aparelho) });
+    if (req.acao === 'redefinirSenha') return json({ ok: true, msg: redefinirComCodigo(req) });
     if (req.acao === 'entrar' && req.senha !== undefined) {
       // entrada com usuário e senha: confere bloqueio por tentativas, a senha (com hash) e abre uma sessão
       const usuarioDig = String(req.usuario || '').trim().toLowerCase();
@@ -961,6 +964,87 @@ function trocarMinhaSenha(r, conta) {
   alertaSeguranca('senha', usuario, 'Trocou a própria senha.' + (encerradas ? ' ' + encerradas + ' outro(s) aparelho(s) desconectado(s).' : ''), '', conta.nome);
   return 'Senha trocada. A partir de agora, use a sua nova senha.' + (encerradas ? ' Os outros aparelhos conectados vão pedir a senha de novo.' : '');
 }
+// --- esqueci a senha: código de 6 dígitos enviado para o e-mail cadastrado da própria pessoa ---
+// A senha atual continua valendo até a pessoa usar o código. O código vale 15 min e aceita 5 tentativas.
+const REDEF = { validadeMin: 15, tentativas: 5, intervaloSeg: 60, porDia: 5 };
+function emailValido(e) { return /^[^\s@,;]+@[^\s@,;]+\.[a-z]{2,}$/i.test(String(e || '')); }
+function chaveRedef(u) { return 'REDEF_' + String(u || '').slice(0, 40); }
+function lerRedef(u) { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(chaveRedef(u)) || 'null'); } catch (e) { return null; } }
+function mascararEmail(e) { const [a, d] = String(e).split('@'); return a.slice(0, 2) + '***@' + d; }
+function pedirCodigoSenha(usuarioDig, aparelho) {
+  const u = String(usuarioDig || '').trim().toLowerCase();
+  if (!/^[a-z0-9._@-]{2,40}$/.test(u)) throw falha('Informe o seu usuário.');
+  // a resposta é a mesma exista ou não o usuário: ninguém descobre quais logins existem
+  const resposta = 'Se esse usuário tiver e-mail cadastrado, enviamos um código para ele. Confira a caixa de entrada (e o spam). Se não chegar em alguns minutos, fale com a Administração.';
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw falha('Sistema ocupado. Tente de novo em instantes.');
+  try {
+    const us = lerUsuarios().lista.find(x => x.usuario === u);
+    if (!us || !us.ativo || !emailValido(us.email)) { Utilities.sleep(400); return resposta; }
+    const t = Date.now(), x = lerRedef(u) || {};
+    const envios = (x.envios || []).filter(z => t - z < 864e5);
+    if (envios.length && t - envios[envios.length - 1] < REDEF.intervaloSeg * 1000) throw falha('Aguarde 1 minuto antes de pedir outro código.');
+    if (envios.length >= REDEF.porDia) throw falha('Muitos pedidos de código hoje. Fale com a Administração.');
+    const codigo = String(100000 + parseInt(Utilities.getUuid().replace(/-/g, '').slice(0, 12), 16) % 900000);
+    envios.push(t);
+    PropertiesService.getScriptProperties().setProperty(chaveRedef(u), JSON.stringify({ h: hashSenha(codigo), ate: t + REDEF.validadeMin * 60e3, n: 0, envios }));
+    const corpo = [
+      'Olá, ' + (us.nome || us.usuario) + '.',
+      '',
+      'Recebemos um pedido para redefinir a sua senha do Pier Gestão (usuário: ' + us.usuario + ').',
+      '',
+      'Código: ' + codigo,
+      '',
+      'Na tela de entrada, em "Esqueci minha senha", digite este código e crie a sua nova senha.',
+      'O código vale por ' + REDEF.validadeMin + ' minutos.',
+      '',
+      'Se não foi você, ignore este e-mail: a sua senha atual continua valendo.',
+      'Mensagem automática do Pier Gestão. Não responda este e-mail.'
+    ].join('\n');
+    try { MailApp.sendEmail({ to: us.email, subject: 'Pier Gestão – código para redefinir a sua senha', body: corpo, name: 'Pier Gestão' }); }
+    catch (e) { throw falha('Não foi possível enviar o e-mail agora. Tente mais tarde ou fale com a Administração.'); }
+    auditar({ usuario: u, nome: us.nome, perfil: us.perfil }, 'Pediu código para redefinir a senha', 'Enviado para ' + mascararEmail(us.email) + (aparelho ? ' · ' + texto(aparelho, 60) : ''), 'OK');
+    return resposta;
+  } finally { lock.releaseLock(); }
+}
+function redefinirComCodigo(r) {
+  const u = String(r.usuario || '').trim().toLowerCase();
+  const codigo = String(r.codigo || '').replace(/\D/g, ''), nova = String(r.nova || '').trim();
+  if (!u) throw falha('Informe o seu usuário.');
+  if (codigo.length !== 6) throw falha('Digite o código de 6 números que chegou no seu e-mail.');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw falha('Sistema ocupado. Tente de novo em instantes.');
+  try {
+    const props = PropertiesService.getScriptProperties(), x = lerRedef(u), t = Date.now();
+    const invalido = 'Código inválido ou vencido. Peça um código novo.';
+    if (!x || !x.h || !(x.ate > t)) { Utilities.sleep(700); throw falha(invalido); }
+    if (!conferirSenha(codigo, x.h)) {
+      Utilities.sleep(700);
+      x.n = (x.n || 0) + 1;
+      if (x.n >= REDEF.tentativas) { delete x.h; delete x.ate; }
+      props.setProperty(chaveRedef(u), JSON.stringify(x));
+      throw falha(x.h ? 'Código errado. Confira o número no e-mail.' : 'Código errado muitas vezes. Peça um código novo.');
+    }
+    const U = lerUsuarios();
+    const us = U.lista.find(z => z.usuario === u);
+    if (!us || !us.ativo) throw falha(invalido);
+    if (nova.length < SEG.senhaMin) throw falha('A nova senha precisa ter pelo menos ' + SEG.senhaMin + ' caracteres.');
+    if (nova.toLowerCase() === u) throw falha('A senha não pode ser igual ao usuário.');
+    if (/^(.)\1+$/.test(nova)) throw falha('Escolha uma senha menos óbvia (não use o mesmo caractere repetido).');
+    garantirColunaProvisoria();
+    const U2 = lerUsuarios();
+    U2.sh.getRange(us.row, U2.c['Senha'] + 1).setNumberFormat('@').setValue(hashSenha(nova));
+    U2.sh.getRange(us.row, U2.c['Senha provisória'] + 1).setNumberFormat('@').setValue('');
+    // o código só vale uma vez; o login volta a entrar (se estava bloqueado) e os acessos abertos são encerrados
+    props.setProperty(chaveRedef(u), JSON.stringify({ envios: x.envios || [] }));
+    limparFalhasLogin(u);
+    const encerradas = encerrarSessoesDe(u, '');
+    auditar({ usuario: u, nome: us.nome, perfil: us.perfil }, 'Redefiniu a senha pelo e-mail', encerradas ? encerradas + ' acesso(s) aberto(s) encerrado(s)' : '', 'OK');
+    alertaSeguranca('senha', u, 'Redefiniu a senha com o código enviado por e-mail.', texto((r.registro || {}).aparelho, 60), us.nome);
+    return 'Senha redefinida. Entre agora com a sua nova senha.';
+  } finally { lock.releaseLock(); }
+}
+
 function contaDe(us) {
   const perms = lerPerfis()[us.perfil] || {};
   return { usuario: us.usuario, nome: us.nome || us.usuario, perfil: us.perfil, perms };
@@ -976,6 +1060,7 @@ function lerUsuarios() {
     if (c[label] < 0) throw falha('A coluna "' + label + '" não foi encontrada na aba Usuarios.');
   });
   c['Telefone'] = head.indexOf('Telefone');
+  c['E-mail'] = head.indexOf('E-mail');
   c['Senha provisória'] = head.indexOf('Senha provisória');
   const lista = [];
   for (let i = 1; i < vals.length; i++) {
@@ -986,6 +1071,7 @@ function lerUsuarios() {
       row: i + 1, usuario, nome: texto(r[c['Nome']], 60), senha: String(r[c['Senha']]).trim(),
       perfil: String(r[c['Perfil']]).trim(), ativo: String(r[c['Ativo']]).trim().toLowerCase().indexOf('n') !== 0,
       telefone: c['Telefone'] >= 0 ? String(r[c['Telefone']]).replace(/\D/g, '') : '',
+      email: c['E-mail'] >= 0 ? String(r[c['E-mail']]).trim().toLowerCase() : '',
       provisoria: c['Senha provisória'] >= 0 && String(r[c['Senha provisória']]).trim().toLowerCase().indexOf('s') === 0
     });
   }
@@ -1016,7 +1102,7 @@ function equipe() {
   return {
     usuarios: (function () {
       const ses = contarSessoes();
-      return lerUsuarios().lista.map(u => ({ usuario: u.usuario, nome: u.nome, perfil: u.perfil, ativo: u.ativo, telefone: u.telefone, provisoria: u.provisoria,
+      return lerUsuarios().lista.map(u => ({ usuario: u.usuario, nome: u.nome, perfil: u.perfil, ativo: u.ativo, telefone: u.telefone, email: u.email, provisoria: u.provisoria,
         sessoes: ses[u.usuario] || 0, bloqueado: !!loginBloqueado(u.usuario) }));
     })(),
     perfis: Object.keys(perfis).map(n => ({ nome: n, perms: perfis[n], fixo: n === PERFIL_TOTAL })),
@@ -1040,9 +1126,15 @@ function salvarUsuario(r, conta) {
   const ativo = v.ativo !== false;
   const telefone = String(v.telefone || '').replace(/\D/g, '').slice(0, 15);
   if (telefone && telefone.length < 10) throw falha('Telefone incompleto: informe o DDD e o número.');
+  const email = String(v.email || '').trim().toLowerCase().slice(0, 120);
+  if (email && !emailValido(email)) throw falha('E-mail inválido.');
   let U = lerUsuarios();
   if (U.c['Telefone'] < 0) {
     U.sh.getRange(1, U.ncol + 1).setValue('Telefone').setFontWeight('bold').setBackground('#1F2A37').setFontColor('#FFFFFF');
+    U = lerUsuarios();
+  }
+  if (U.c['E-mail'] < 0) {
+    U.sh.getRange(1, U.ncol + 1).setValue('E-mail').setFontWeight('bold').setBackground('#1F2A37').setFontColor('#FFFFFF');
     U = lerUsuarios();
   }
   if (garantirColunaProvisoria()) U = lerUsuarios();
@@ -1065,6 +1157,7 @@ function salvarUsuario(r, conta) {
     linha[U.c['Senha provisória']] = original && original === conta.usuario ? '' : 'Sim';
   }
   linha[U.c['Perfil']] = perfil; linha[U.c['Ativo']] = ativo ? 'Sim' : 'Não'; linha[U.c['Telefone']] = telefone;
+  if (v.email !== undefined) linha[U.c['E-mail']] = email;
   let row;
   if (original) {
     const atual = U.lista.find(x => x.usuario === original);

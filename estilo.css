@@ -658,6 +658,8 @@ div.ac-pessoa{cursor:default}
 /* login: esqueci minha senha; topo: trocar senha */
 .l-esqueci{margin-top:12px;display:grid;gap:6px}
 .l-esqueci .link{justify-self:start;font-size:.9rem}
+.l-redef,.l-redef-passo{display:grid;gap:10px}
+.l-redef[hidden],.l-redef-passo[hidden]{display:none}
 .me-linha .sair+.sair{margin-left:8px}
 .ac-modo{flex-wrap:wrap}
 
