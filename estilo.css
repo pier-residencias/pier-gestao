@@ -694,6 +694,15 @@ div.ac-pessoa{cursor:default}
 .ct-st[data-st="Aguardando gerente"],.ct-st[data-st="Aguardando síndico"]{background:var(--warn-bg);color:var(--warn)}
 .ct-st[data-st="Aprovada"]{background:var(--ok-bg);color:var(--ok)}
 .ct-st[data-st="Cancelada"]{text-decoration:line-through}
+/* conversa da cotação */
+.ct-msgs{list-style:none;margin:0 0 12px;padding:0;display:flex;flex-direction:column;gap:8px;max-height:420px;overflow-y:auto}
+.ct-msg{max-width:min(560px,88%);align-self:flex-start;background:var(--surface-2);border-radius:10px 10px 10px 2px;padding:8px 12px;display:grid;gap:3px}
+.ct-msg.sind{border-left:3px solid var(--warn)}
+.ct-msg.eu{align-self:flex-end;background:var(--info-bg);border-radius:10px 10px 2px 10px}
+.ct-msg-h{font-size:.76rem;color:var(--muted)}.ct-msg-h b{color:var(--fg)}
+.ct-msg-t{white-space:pre-wrap;overflow-wrap:anywhere}
+.ct-msg-novo{display:grid;gap:8px}
+.ct-conv-r{display:block;margin-top:2px}.ct-conv-r .pill{margin-left:4px}
 .ct-anx{display:grid;gap:4px;justify-items:start}
 .ct-anx .link{font-size:.8rem;text-align:left}
 .ct-up{cursor:pointer}

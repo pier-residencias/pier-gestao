@@ -256,7 +256,7 @@ const ABAS = {
       ['vencedor', 'Fornecedor recomendado'], ['valorVencedor', 'Valor recomendado (R$)'], ['dados', 'Dados (não editar)'],
       ['criadaEm', 'Criada em'], ['criadaPor', 'Criada por'], ['atualizadoEm', 'Atualizado em'], ['atualizadoPor', 'Atualizado por'],
       ['aprovGerente', 'Aprovada pelo gerente'], ['aprovSindico', 'Aprovada pelo síndico'], ['recusa', 'Última recusa'],
-      ['mapaId', 'ID do mapa'], ['mapaEm', 'Mapa salvo em']
+      ['mapaId', 'ID do mapa'], ['mapaEm', 'Mapa salvo em'], ['conversa', 'Conversa (não editar)']
     ],
     num: []
   },
@@ -351,7 +351,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-10-27 medição individual';
+const VERSAO = '2026-10-27 conversa da cotação';
 
 function doGet() {
   TABS = {};
@@ -3842,7 +3842,46 @@ function cotLer(c) {
   return { id: c.id, numero: c.numero, status: c.status, finalidade: c.finalidade, data: c.data, solicitante: c.solicitante,
     pendencia: c.pendencia, pendNumero: c.pendNumero, vencedor: c.vencedor, valorVencedor: c.valorVencedor, dados,
     criadaEm: c.criadaEm, criadaPor: c.criadaPor, atualizadoEm: c.atualizadoEm, atualizadoPor: c.atualizadoPor,
-    aprovGerente: c.aprovGerente, aprovSindico: c.aprovSindico, recusa: c.recusa, mapaId: c.mapaId, mapaEm: c.mapaEm };
+    aprovGerente: c.aprovGerente, aprovSindico: c.aprovSindico, recusa: c.recusa, mapaId: c.mapaId, mapaEm: c.mapaEm, conversa: cotConversa(c) };
+}
+// conversa da cotação (síndico, gerente e administração): lista de mensagens guardada em JSON na própria linha
+function cotConversa(c) {
+  let l = [];
+  try { l = JSON.parse(c.conversa || '[]'); } catch (e) { l = []; }
+  return Array.isArray(l) ? l.filter(m => m && m.txt).map(m => ({ em: String(m.em || ''), por: String(m.por || ''), usuario: String(m.usuario || ''), papel: String(m.papel || ''), txt: String(m.txt) })) : [];
+}
+const cotPapel = conta => ehSindico(conta) ? 'Síndico' : ehGerente(conta) ? 'Gerente' : (conta.perfil || 'Administração');
+// nova mensagem: quem é do síndico/gerente avisa a administração (e quem criou a cotação); a administração avisa o síndico e o gerente
+function cotAvisarMensagem(c, txt, conta) {
+  try {
+    const dest = [], add = e => { e = String(e || '').toLowerCase(); if (e && dest.indexOf(e) < 0) dest.push(e); };
+    const us = lerUsuarios().lista, eu = us.find(u => u.usuario === conta.usuario), meu = eu && eu.email ? eu.email.toLowerCase() : '';
+    if (ehSindico(conta) || ehGerente(conta)) {
+      emailsDoSetor('Administração').forEach(add);
+      const criador = us.find(u => u.ativo && u.nome === c.criadaPor && emailValido(u.email));
+      if (criador) add(criador.email);
+      if (!ehSindico(conta)) emailsDoSetor('Síndico').forEach(add);
+      if (!ehGerente(conta)) emailsDoSetor('Gerente').forEach(add);
+    } else { emailsDoSetor('Síndico').forEach(add); emailsDoSetor('Gerente').forEach(add); }
+    const para = dest.filter(e => e !== meu);
+    if (!para.length) return '';
+    const corpo = [
+      conta.nome + ' (' + cotPapel(conta) + ') escreveu na cotação ' + c.numero + ':',
+      '',
+      txt,
+      '',
+      'Finalidade: ' + c.finalidade,
+      'Situação: ' + c.status,
+      '',
+      'Para responder: Pier Gestão → setor Administração → Pendências e compras → Cotações → ' + c.numero + ' → Conversa.',
+      'Mensagem automática do Pier Gestão. Não responda este e-mail.'
+    ].join('\n');
+    MailApp.sendEmail({ to: para.join(','), subject: 'Pier Gestão – cotação ' + c.numero + ': mensagem de ' + conta.nome, body: corpo, name: 'Pier Gestão' });
+    return ' Aviso enviado por e-mail.';
+  } catch (e) {
+    Logger.log('Aviso da mensagem da cotação não enviado: ' + e.message);
+    return '';
+  }
 }
 
 function cotLista() {
@@ -3905,6 +3944,20 @@ function cotSalvar(r, conta) {
       const motivo = cotTxt(r.motivo, 300);
       Object.assign(obj, { status: COT_STATUS.cotacao, aprovGerente: '', aprovSindico: '', recusa: agora() + ' · ' + conta.nome + (motivo ? ': ' + motivo : '') });
       return fim(atual.numero + ' devolvida para ajustes.');
+    }
+    if (op === 'mensagem') {
+      if (atual.status === COT_STATUS.cancelada) throw falha('Esta cotação está cancelada. Reabra para conversar sobre ela.');
+      const txt = cotTxt(r.texto, 1000);
+      if (!txt) throw falha('Escreva a mensagem.');
+      const conv = cotConversa(atual);
+      conv.push({ em: agora(), por: conta.nome, usuario: conta.usuario || '', papel: cotPapel(conta), txt });
+      let json = JSON.stringify(conv.slice(-200));
+      while (json.length > 40000) { conv.shift(); json = JSON.stringify(conv); }
+      obj.conversa = json;
+      AUDIT_DET = 'Mensagem na cotação ' + atual.numero + ': ' + txt.slice(0, 200);
+      const r0 = fim('Mensagem enviada.');
+      r0.texto += cotAvisarMensagem(atual, txt, conta);
+      return r0;
     }
     if (op === 'cancelar') {
       if (atual.status === COT_STATUS.aprovada) throw falha('Uma cotação aprovada não pode ser cancelada.');
