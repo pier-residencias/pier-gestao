@@ -134,8 +134,8 @@ const ABAS = {
     criar: true,
     cols: [['id', 'ID'], ['tipo', 'Concessionária'], ['nome', 'Medidor'], ['numero', 'Número do medidor'], ['casas', 'Casas'], ['unidade', 'Unidade de medida'],
       ['local', 'Local'], ['obs', 'Observação'], ['ativo', 'Ativo'], ['criadoEm', 'Criado em'], ['criadoPor', 'Criado por'], ['atualizadoEm', 'Atualizado em'], ['atualizadoPor', 'Atualizado por'],
-      ['limite', 'Limite diário'], ['proxCiclo', 'Próxima leitura da concessionária']],
-    num: ['casas', 'limite']
+      ['limite', 'Limite diário'], ['proxCiclo', 'Próxima leitura da concessionária'], ['fator', 'Constante do medidor']],
+    num: ['casas', 'limite', 'fator']
   },
   medl: {
     nome: 'Leituras',
@@ -334,7 +334,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-10-27 pendência cancelada';
+const VERSAO = '2026-10-27 constante do medidor';
 
 function doGet() {
   TABS = {};
@@ -2349,11 +2349,15 @@ function medMedidor(r, conta) {
   if (temLim && !(limite > 0 && isFinite(limite))) throw falha('O limite diário deve ser um número maior que zero (ou fique em branco).');
   const prox = String(v.proxCiclo || '');
   if (prox && !dataOk(prox)) throw falha('Data inválida na próxima leitura da concessionária.');
-  const o = { tipo, nome, numero: num, casas, unidade, local: texto(v.local, 80), obs: texto(v.obs, 300), limite: temLim ? Math.round(limite * 1000) / 1000 : '', proxCiclo: prox,
+  // constante (multiplicador) do relógio: consumo = diferença das leituras × constante (ex.: energia com "Const. medidor 80")
+  const temF = String(v.fator === undefined || v.fator === null ? '' : v.fator).trim() !== '', fator = temF ? medNum(v.fator) : 1;
+  if (!(fator > 0 && fator <= 100000 && isFinite(fator))) throw falha('A constante do medidor deve ser um número maior que zero (deixe 1 se a conta não mostrar).');
+  const o = { tipo, nome, numero: num, casas, unidade, local: texto(v.local, 80), obs: texto(v.obs, 300), limite: temLim ? Math.round(limite * 1000) / 1000 : '', proxCiclo: prox, fator: fator === 1 ? '' : Math.round(fator * 100000) / 100000,
     ativo: v.ativo === false || v.ativo === 'Não' ? 'Não' : 'Sim', atualizadoEm: agora(), atualizadoPor: conta.nome };
   if (atual) {
     gravar(t, o, atual._row);
-    AUDIT_DET = 'Alterou o medidor ' + nome + ' (' + tipo + ' nº ' + num + ')' + (o.ativo === 'Não' ? ' — inativo' : '');
+    AUDIT_DET = 'Alterou o medidor ' + nome + ' (' + tipo + ' nº ' + num + ')' + (o.ativo === 'Não' ? ' — inativo' : '')
+      + (String(atual.fator || '') !== String(o.fator) ? ' — constante ' + medFmt(Number(atual.fator) || 1) + ' → ' + medFmt(fator) : '');
     return 'Medidor salvo.';
   }
   o.id = novoId('MD'); o.criadoEm = agora(); o.criadoPor = conta.nome;
