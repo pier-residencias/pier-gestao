@@ -6518,6 +6518,8 @@ const mdSomaDia = (d, n) => { const x = new Date(d + "T12:00:00"); x.setDate(x.g
 const mdOrdem = l => l.slice().sort((a, b) => MD_TIPOS.indexOf(a.tipo) - MD_TIPOS.indexOf(b.tipo) || String(a.nome).localeCompare(String(b.nome), "pt-BR"));
 const mdRotMes = ym => { const [a, m] = String(ym).split("-"); return (PP_MESES[+m - 1] || m) + "/" + a; };
 const mdNoves = m => "9".repeat(Number(m.casas) || 5);
+// constante (multiplicador) do relógio: consumo = diferença das leituras × constante (1 quando não tem)
+const mdFat = m => (Number(m && m.fator) > 0 ? Number(m.fator) : 1);
 function mdLimpar(){ MD.d = null; MD.erro = ""; MD.cache = new Map(); MD.rSel = {}; }
 function mdAplicar(r){
   if (!r || !Array.isArray(r.medidores)) return false;
@@ -6548,6 +6550,7 @@ function mdInt(m){
   for (let i = 1; i < ls.length; i++) {
     const a = ls[i - 1], b = ls[i]; let c = b.leitura - a.leitura;
     if (b.virada === "Sim" || c < 0) c += lim;
+    c *= mdFat(m);
     out.push({de:a.data, ate:b.data, dias:Math.max(1, mdDiasEntre(a.data, b.data)), consumo:Math.round(c * 1000) / 1000, leitura:b});
   }
   const r = {ls, out}; MD.cache.set(k, r); return r;
@@ -6673,6 +6676,7 @@ function mdNovaLeitura(o){
         const dias = Math.max(1, mdDiasEntre(a.data, data));
         if (c < 0) { txt = "Menor que a leitura anterior. Confira o número ou marque se o relógio virou."; cls = "err"; }
         else {
+          c *= mdFat(m);
           txt = `Consumo: <b>${mdF(c, 2)} ${esc(m.unidade)}</b>${dias > 1 ? ` em ${dias} dias (${mdF(c / dias, 2)}/dia)` : ""}`;
           const med = mdMediaDia(m, a.data), lim = mdLim(m);
           if (lim && c / dias > lim) { txt += ` · <span class="md-alto">acima do limite de ${mdF(lim)} ${esc(m.unidade)}/dia (+${mdF(c / dias - lim, 2)})</span>`; cls = "alto"; }
@@ -6765,7 +6769,7 @@ function renderMedidores(){
     const it = mdInt(m), ult = it.ls[it.ls.length - 1], dias = ult ? mdDiasEntre(ult.data, h) : null, f30 = mdSomaFaixa(m, mdSomaDia(h, -29), h);
     const usa = it.ls.length || MD.d.contas.some(c => c.medidor === m.id), inat = m.ativo === "Não";
     return `<article class="panel md-card ${inat ? "inativo" : ""}"><div class="md-card-h">${mdIco(m.tipo)}<div><h3>${esc(m.nome)}</h3><span class="muted">${esc(m.tipo)}${m.local ? " · " + esc(m.local) : ""}</span></div>${inat ? `<span class="pill p-ajuste">Inativo</span>` : `<span class="md-st conc">Área comum</span>`}</div>
-      <dl class="md-dl"><div><dt>Número</dt><dd class="mono">${esc(m.numero)}</dd></div><div><dt>Casas</dt><dd>${esc(m.casas)}</dd></div><div><dt>Unidade</dt><dd>${esc(m.unidade)}</dd></div>
+      <dl class="md-dl"><div><dt>Número</dt><dd class="mono">${esc(m.numero)}</dd></div><div><dt>Casas</dt><dd>${esc(m.casas)}</dd></div><div><dt>Unidade</dt><dd>${esc(m.unidade)}</dd></div>${mdFat(m) !== 1 ? `<div><dt>Constante</dt><dd>× ${mdF(mdFat(m))}<span class="sub">consumo = diferença × ${mdF(mdFat(m))}</span></dd></div>` : ""}
         <div><dt>Última leitura</dt><dd>${ult ? `<b class="mono">${fNum(ult.leitura)}</b> em ${fData(ult.data)}${!inat && dias > 7 ? ` <span class="pill s-baixo">há ${dias} dias</span>` : ""}` : "nenhuma"}</dd></div>
         <div><dt>Consumo em 30 dias</dt><dd>${f30.n ? `<b>${mdF(f30.s, 2)} ${esc(m.unidade)}</b><span class="sub">${mdF(f30.s / f30.n, 2)}/dia</span>` : "—"}</dd></div>
         ${mdLim(m) ? `<div><dt>Limite diário</dt><dd>${mdF(mdLim(m))} ${esc(m.unidade)}/dia${(() => { const n = mdDiasAcima(m, mdSomaDia(h, -29), h); return n ? ` <span class="pill s-baixo">${n} dia${n === 1 ? "" : "s"} acima em 30 dias</span>` : ""; })()}</dd></div>` : ""}
@@ -6775,7 +6779,7 @@ function renderMedidores(){
 }
 function mdEditarMedidor(id){
   const m = id ? mdMed(id) : null;
-  const v = m || {tipo:"", nome:"", numero:"", casas:5, unidade:"", limite:"", proxCiclo:"", local:"", obs:"", ativo:"Sim"};
+  const v = m || {tipo:"", nome:"", numero:"", casas:5, unidade:"", limite:"", proxCiclo:"", local:"", obs:"", ativo:"Sim", fator:""};
   $("#modal-box").innerHTML = `<h3>${m ? "Editar medidor" : "Novo medidor"}</h3>
     <form class="form" id="mdm-f" novalidate autocomplete="off">
       <div class="field full"><label for="mdm-tipo">Tipo de concessionária <span class="req">*</span></label><select class="input" id="mdm-tipo"><option value="">Selecione…</option>${MD_TIPOS.map(t => `<option ${t === v.tipo ? "selected" : ""}>${t}</option>`).join("")}</select></div>
@@ -6783,6 +6787,7 @@ function mdEditarMedidor(id){
       <div class="field full"><label for="mdm-num">Número do medidor <span class="req">*</span></label><input class="input mono" id="mdm-num" maxlength="40" value="${esc(v.numero)}" placeholder="Ex.: 123456789"><span class="hint">Número de série / registro do medidor (está na conta e no próprio relógio).</span></div>
       <div class="field"><label for="mdm-casas">Número de casas do medidor <span class="req">*</span></label><input class="input num" id="mdm-casas" type="number" min="3" max="12" step="1" value="${esc(v.casas)}"><span class="hint" id="mdm-casas-h"></span></div>
       <div class="field"><label for="mdm-un">Unidade de medida <span class="req">*</span></label><select class="input" id="mdm-un"><option value="">Selecione…</option>${[["m³","m³ (metro cúbico)"],["kWh","kWh (quilowatt-hora)"],["Litros","Litros"]].map(([k, r]) => `<option value="${k}" ${k === v.unidade ? "selected" : ""}>${r}</option>`).join("")}</select></div>
+      <div class="field"><label for="mdm-fat">Constante do medidor</label><input class="input num" id="mdm-fat" inputmode="decimal" value="${esc(String(mdFat(v)).replace(".", ","))}" placeholder="1"><span class="hint">Multiplicador do relógio. Na conta de luz aparece como "Const. medidor" (ex.: 80). Deixe 1 se a conta não mostrar.</span></div>
       <div class="field"><label for="mdm-lim">Limite diário (opcional)</label><input class="input num" id="mdm-lim" inputmode="decimal" value="${v.limite !== "" && v.limite !== undefined ? esc(String(v.limite).replace(".", ",")) : ""}" placeholder="Ex.: 70"><span class="hint">Consumo máximo esperado por dia. Os dias acima ficam destacados.</span></div>
       <div class="field"><label for="mdm-prox">Próxima leitura da concessionária</label><input class="input" type="date" id="mdm-prox" value="${esc(v.proxCiclo || "")}"><span class="hint">Data prevista da leitura da concessionária (ex.: Iguá), se souber.</span></div>
       <div class="field full"><label for="mdm-local">Local</label><input class="input" id="mdm-local" maxlength="80" value="${esc(v.local || "")}" placeholder="Ex.: caixa ao lado da portaria"></div>
@@ -6801,7 +6806,9 @@ function mdEditarMedidor(id){
     const msg = $("#mdm-msg"), erro = t => { msg.className = "hint err"; msg.textContent = t; };
     const lt = $("#mdm-lim").value.trim(), lim = lt ? mdNum(lt) : "";
     if (lt && !(lim > 0)) return erro("O limite diário deve ser um número maior que zero (ou deixe em branco).");
-    const o = {tipo:$("#mdm-tipo").value, nome:$("#mdm-nome").value.trim(), numero:$("#mdm-num").value.trim(), casas:Number($("#mdm-casas").value), unidade:$("#mdm-un").value, limite:lim, proxCiclo:$("#mdm-prox").value, local:$("#mdm-local").value, obs:$("#mdm-obs").value, ativo:m ? $("#mdm-ativo").checked : true};
+    const ft = $("#mdm-fat").value.trim(), fat = ft ? mdNum(ft) : 1;
+    if (!(fat > 0)) return erro("A constante do medidor deve ser um número maior que zero (deixe 1 se a conta não mostrar).");
+    const o = {tipo:$("#mdm-tipo").value, nome:$("#mdm-nome").value.trim(), numero:$("#mdm-num").value.trim(), casas:Number($("#mdm-casas").value), unidade:$("#mdm-un").value, limite:lim, proxCiclo:$("#mdm-prox").value, local:$("#mdm-local").value, obs:$("#mdm-obs").value, ativo:m ? $("#mdm-ativo").checked : true, fator:fat};
     if (!o.tipo) return erro("Escolha o tipo de concessionária.");
     if (!o.nome) return erro("Dê um nome ao medidor.");
     if (!o.numero) return erro("Informe o número do medidor.");
