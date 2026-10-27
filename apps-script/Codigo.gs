@@ -334,7 +334,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-10-27 avisos do síndico';
+const VERSAO = '2026-10-27 pendência cancelada';
 
 function doGet() {
   TABS = {};
@@ -3093,12 +3093,12 @@ const PEND_SECOES = [
   'Outras demandas da administração'
 ];
 const PEND_CRITICIDADE = ['Baixa', 'Média', 'Alta'];
-const PEND_STATUS = ['Pendente', 'A cotar', 'Em andamento', 'Aguardando entrega', 'Aguardando síndico', 'Concluído'];
+const PEND_STATUS = ['Pendente', 'A cotar', 'Em andamento', 'Aguardando entrega', 'Aguardando síndico', 'Concluído', 'Cancelado'];
 // 2: prazo inicial (só o síndico altera depois de definido), atualização de prazo, data de conclusão obrigatória,
 //    aprovação do gerente e do síndico na inclusão e na conclusão, aviso por e-mail ao incluir
 // 3: criar OS para a equipe (Manutenção, inclusive jardinagem, ou Limpeza) a partir da pendência
 const PEND_VERSAO = 3;
-const pendAguardando = p => !!p && (p.aprovacao === 'Aguardando gerente' || p.aprovacao === 'Aguardando síndico');
+const pendAguardando = p => !!p && p.status !== 'Cancelado' && (p.aprovacao === 'Aguardando gerente' || p.aprovacao === 'Aguardando síndico');
 const pendConclPendente = p => !!p && !!String(p.conclPedida || '').trim() && p.status !== 'Concluído';
 const pendRotuloSecao = s => String(s || '').indexOf('Cotações e compras') === 0 ? 'Cotações e compras' : String(s || '');
 
@@ -3327,6 +3327,13 @@ function pendSalvar(v, conta) {
   }
   if ('titulo' in v) { obj.titulo = texto(v.titulo, 300); if (!obj.titulo) throw falha('Descreva a pendência.'); }
   if ('status' in v) { if (PEND_STATUS.indexOf(v.status) < 0) throw falha('Situação inválida.'); obj.status = v.status; }
+  // cancelar (ou tirar do cancelado) só o gerente, o síndico ou a Administração; cancelada sai dos pedidos de conclusão
+  const stAntigo = atual ? atual.status : '';
+  if ('status' in obj && (obj.status === 'Cancelado') !== (stAntigo === 'Cancelado')) {
+    if (!atual) throw falha('Inclua a pendência primeiro. Depois ela pode ser cancelada.');
+    if (!gerente && !sindico && conta.perfil !== PERFIL_TOTAL) { const e = falha('Só o gerente, o síndico ou a Administração podem ' + (obj.status === 'Cancelado' ? 'cancelar uma pendência.' : 'reabrir uma pendência cancelada.')); e.negado = true; throw e; }
+    if (obj.status === 'Cancelado') Object.assign(obj, { conclPedida: '', conclData: '', conclGerente: '', conclSindico: '' });
+  }
   if ('responsavel' in v) obj.responsavel = texto(v.responsavel, 60);
   if ('criticidade' in v) { if (v.criticidade && PEND_CRITICIDADE.indexOf(v.criticidade) < 0) throw falha('Criticidade inválida.'); obj.criticidade = v.criticidade || ''; }
   // prazo de pendência pontual: depois de definido fica bloqueado (correção só direto na planilha).
@@ -3496,6 +3503,7 @@ function pendCriarOS(p, os, conta) {
 }
 
 function pendAprovar(t, atual, v, conta, obj) {
+  if (atual.status === 'Cancelado') throw falha('Esta pendência está cancelada. Reabra antes de aprovar.');
   const sindico = ehSindico(conta), gerente = ehGerente(conta);
   const marca = emNome => agora() + ' · ' + conta.nome + (emNome ? ' (em nome do gerente)' : '');
   const dm = d => String(d).split('-').reverse().slice(0, 2).join('/');
@@ -3732,7 +3740,7 @@ function cotLer(c) {
 function cotLista() {
   const lista = linhas(tabela('cot')).map(cotLer).sort((a, b) => String(b.criadaEm).localeCompare(String(a.criadaEm)) || String(b.numero).localeCompare(String(a.numero)));
   const pend = SpreadsheetApp.getActive().getSheetByName(ABAS.pend.nome) ? linhas(tabela('pend'))
-    .filter(p => p.status !== 'Concluído' && p.tipo !== 'Constante')
+    .filter(p => p.status !== 'Concluído' && p.status !== 'Cancelado' && p.tipo !== 'Constante')
     .map(p => ({ id: p.id, numero: p.numero, titulo: p.titulo, secao: pendRotuloSecao(p.secao) })) : [];
   return { cotacoes: lista, pendOpcoes: pend, cotVersao: COT_VERSAO, ia: cotIADisponivel() };
 }
