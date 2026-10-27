@@ -334,7 +334,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-10-26 redefinir senha';
+const VERSAO = '2026-10-27 avisos do síndico';
 
 function doGet() {
   TABS = {};
@@ -3402,7 +3402,14 @@ function pendSalvar(v, conta) {
     const aviso = respNovo && respNovo !== String(atual.responsavel || '').trim() && (sindico || conta.perfil === PERFIL_TOTAL)
       ? pendAvisarResponsavel(Object.assign({}, atual, obj), conta) : '';
     const r = pendMsgAtualizacao(v, obj, atual, constFinal, pedidoConclusao, prazoPeloSindico);
-    return r + aviso;
+    const depois = Object.assign({}, atual, obj);
+    let avS = '';
+    if (pedidoConclusao) avS = pendAvisarSindico(depois, 'Foi pedida a conclusão da pendência (em ' + String(obj.conclData).split('-').reverse().join('/') + '); ela aguarda a sua aprovação e a do gerente', [], conta);
+    else if (!(aviso && chaveNome(respNovo) === 'sindico') && (pendAcompanhadaPeloSindico(atual) || pendAcompanhadaPeloSindico(depois))) {
+      const mud = pendMudancas(atual, obj);
+      if (mud.length) avS = pendAvisarSindico(depois, 'A pendência que você acompanha foi alterada', mud, conta);
+    }
+    return r + aviso + avS;
   }
 
   if (!obj.titulo) throw falha('Descreva a pendência.');
@@ -3504,7 +3511,8 @@ function pendAprovar(t, atual, v, conta, obj) {
       if (!gerente && !sindico) throw falha('Só o gerente (ou o síndico, em nome dele) aprova esta etapa.');
       Object.assign(obj, { aprovacao: 'Aguardando síndico', aprovGerente: marca(!gerente) });
       gravar(t, obj, atual._row);
-      return 'Aprovada pelo gerente' + (gerente ? '' : ' (em nome dele)') + '. Falta a aprovação do síndico.';
+      return 'Aprovada pelo gerente' + (gerente ? '' : ' (em nome dele)') + '. Falta a aprovação do síndico.'
+        + pendAvisarSindico(Object.assign({}, atual, obj), 'A pendência foi aprovada pelo gerente e aguarda a sua aprovação (inclusão)', [], conta);
     }
     if (atual.aprovacao === 'Aguardando síndico') {
       if (!sindico) throw falha('Só o síndico aprova esta etapa.');
@@ -3530,7 +3538,8 @@ function pendAprovar(t, atual, v, conta, obj) {
       return 'Conclusão aprovada pelo ' + quem + '. Pendência concluída em ' + dm(dia) + '.';
     }
     gravar(t, obj, atual._row);
-    return 'Conclusão aprovada pelo ' + quem + '. Falta a aprovação do ' + (quem === 'síndico' ? 'gerente' : 'síndico') + '.';
+    return 'Conclusão aprovada pelo ' + quem + '. Falta a aprovação do ' + (quem === 'síndico' ? 'gerente' : 'síndico') + '.'
+      + (quem === 'gerente' ? pendAvisarSindico(Object.assign({}, atual, obj), 'A conclusão da pendência foi aprovada pelo gerente e aguarda a sua aprovação', [], conta) : '');
   }
   throw falha('Aprovação inválida.');
 }
@@ -3980,7 +3989,7 @@ function pendAvisarResponsavel(p, conta) {
   try {
     const resp = String(p.responsavel || '').trim();
     const dest = emailsDoSetor(resp);
-    if (!dest.length) return ' Nenhum e-mail cadastrado na aba Emails para ' + resp + '.';
+    if (!dest.length) return ' Nenhum e-mail cadastrado para ' + resp + ' (aba Emails ou Usuários).';
     const dt = d => d ? String(d).slice(0, 10).split('-').reverse().join('/') : '';
     const corpo = [
       'O setor ' + resp + ' foi definido como responsável por uma pendência do Controle de pendências do Pier Gestão.',
@@ -4006,10 +4015,72 @@ function pendAvisarResponsavel(p, conta) {
 }
 
 // e-mails de um setor na aba Emails ("Gerência" usa a linha "Gerente" se não tiver linha própria)
+// mais os e-mails cadastrados em Usuários de quem está ativo e tem esse perfil (ex.: perfil Síndico recebe os avisos do Síndico)
 function emailsDoSetor(resp) {
   const mapa = lerEmails(), k = chaveNome(resp), dest = [];
-  (mapa[k] || (k === 'gerencia' ? mapa.gerente : null) || []).forEach(e => { if (dest.indexOf(e.toLowerCase()) < 0) dest.push(e.toLowerCase()); });
+  const add = e => { e = String(e || '').trim().toLowerCase(); if (e && dest.indexOf(e) < 0) dest.push(e); };
+  (mapa[k] || (k === 'gerencia' ? mapa.gerente : null) || []).forEach(add);
+  if (k) {
+    let us = [];
+    try { us = lerUsuarios().lista; } catch (e) { us = []; }
+    us.forEach(u => {
+      const pk = chaveNome(u.perfil);
+      if (u.ativo && emailValido(u.email) && (pk === k || (k === 'gerencia' && pk === 'gerente'))) add(u.email);
+    });
+  }
   return dest;
+}
+
+// --- avisos ao síndico: pendência aguardando a aprovação dele e alterações nas pendências que ele acompanha ---
+// (as que ele incluiu ou que estão com o Síndico como responsável). Quem fez a mudança sendo o próprio síndico, não sai e-mail.
+// Uma falha no e-mail nunca desfaz a gravação.
+function pendAcompanhadaPeloSindico(p) { return p.origem === 'Síndico' || chaveNome(p.responsavel) === 'sindico'; }
+function pendAvisarSindico(p, motivo, mudancas, conta) {
+  try {
+    if (ehSindico(conta)) return '';
+    const dest = emailsDoSetor('Síndico');
+    if (!dest.length) return '';
+    const dt = d => d ? String(d).slice(0, 10).split('-').reverse().join('/') : '';
+    const corpo = [
+      motivo + '.',
+      '',
+      'Seção: ' + pendRotuloSecao(p.secao),
+      'Nº: ' + (p.numero || '—'),
+      'Pendência: ' + p.titulo,
+      (mudancas || []).length ? '' : '',
+      (mudancas || []).length ? 'O que mudou:' : '',
+      (mudancas || []).map(m => ' • ' + m).join('\n'),
+      (mudancas || []).length ? '' : '',
+      'Situação: ' + (p.status || 'Pendente'),
+      'Responsável: ' + (String(p.responsavel || '').trim() || 'não definido'),
+      p.prazo ? (p.tipo === 'Constante' ? 'Próxima execução: ' : 'Prazo inicial: ') + dt(p.prazo) : '',
+      p.prazoAtualizado ? 'Atualização de prazo: ' + dt(p.prazoAtualizado) : '',
+      'Feito por: ' + conta.nome + ' em ' + dt(agora()) + ' ' + String(agora()).slice(11, 16),
+      '',
+      'Veja no Pier Gestão: Administração → Pendências e compras.',
+      'Mensagem automática do Pier Gestão. Não responda este e-mail.'
+    ].filter(l => l !== null && l !== undefined).filter((l, i, a) => l !== '' || (i > 0 && a[i - 1] !== '')).join('\n');
+    MailApp.sendEmail({ to: dest.join(','), subject: 'Pier Gestão – pendência' + (p.numero ? ' nº ' + p.numero : '') + ': ' + motivo.replace(/^A pendência /, '').slice(0, 60) + ' – ' + String(p.titulo).slice(0, 60), body: corpo, name: 'Pier Gestão' });
+    return ' Síndico avisado por e-mail.';
+  } catch (e) {
+    Logger.log('Aviso ao síndico não enviado: ' + e.message);
+    return '';
+  }
+}
+// o que mudou numa alteração (só os campos que o síndico acompanha)
+function pendMudancas(antes, obj) {
+  const dt = d => d ? String(d).slice(0, 10).split('-').reverse().join('/') : '(sem data)';
+  const campos = [['titulo', 'Descrição'], ['status', 'Situação'], ['responsavel', 'Responsável'], ['criticidade', 'Criticidade'],
+    ['prazo', 'Prazo', dt], ['prazoAtualizado', 'Atualização de prazo', dt], ['obs', 'Detalhes']];
+  const out = [];
+  campos.forEach(([k, rot, f]) => {
+    if (!(k in obj)) return;
+    const a = String(antes[k] == null ? '' : antes[k]).trim(), b = String(obj[k] == null ? '' : obj[k]).trim();
+    if (a === b) return;
+    const fx = f || (x => x || '(vazio)');
+    out.push(k === 'obs' ? rot + ': ' + (b ? b.slice(0, 400) : '(apagados)') : rot + ': ' + fx(a) + ' → ' + fx(b));
+  });
+  return out;
 }
 
 // pendência nova: o aviso vai SÓ para o setor responsável escolhido; sem responsável, não sai e-mail.
@@ -4019,7 +4090,7 @@ function pendAvisarCriacao(p, conta, pai) {
     const resp = String(p.responsavel || '').trim();
     if (!resp) return '';
     const dest = emailsDoSetor(resp);
-    if (!dest.length) return ' Nenhum e-mail cadastrado na aba Emails para ' + resp + '.';
+    if (!dest.length) return ' Nenhum e-mail cadastrado para ' + resp + ' (aba Emails ou Usuários).';
     const dt = d => d ? String(d).slice(0, 10).split('-').reverse().join('/') : '';
     const nome = (pai ? 'novo subitem' : 'nova pendência') + (p.numero ? ' nº ' + p.numero : '');
     const corpo = [
