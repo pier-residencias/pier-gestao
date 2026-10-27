@@ -497,6 +497,8 @@ nav.tabs .admmenu button span{font-size:.78rem;color:var(--muted)}
 .pd-st[data-s="Aguardando síndico"]{color:var(--swap);background-color:var(--swap-bg);border-color:transparent}
 .pd-st[data-s="A cotar"]{color:var(--teal);background-color:var(--teal-bg);border-color:transparent}
 .pd-st[data-s="Pendente"]{color:var(--crit);background-color:var(--crit-bg);border-color:transparent}
+.pd-st[data-s="Cancelado"]{color:var(--muted);background-color:var(--surface-2,transparent);text-decoration:line-through}
+.pd-row.canc .pd-tit{text-decoration:line-through;color:var(--muted)}
 .pd-st option{color:var(--fg);background:var(--surface)}
 .pd-row.late .pd-prazo{border-color:var(--crit);color:var(--crit);font-weight:700}
 .pd-lbl{display:block;font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
@@ -817,6 +819,7 @@ nav.tabs{display:none!important}
 .in-item small{grid-column:2/-1;color:var(--muted);font-size:.78rem}
 .pd-mini{font-size:.72rem;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--grey-bg);color:var(--muted);white-space:nowrap}
 .pd-mini[data-s="Concluído"]{background:var(--ok-bg);color:var(--ok)}
+.pd-mini[data-s="Cancelado"]{color:var(--muted);text-decoration:line-through}
 .pd-mini[data-s="Em andamento"]{background:var(--info-bg);color:var(--info)}
 .pd-mini[data-s="Pendente"]{background:var(--crit-bg);color:var(--crit)}
 .pd-mini[data-s="A cotar"]{background:var(--teal-bg);color:var(--teal)}

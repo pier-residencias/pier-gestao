@@ -3381,7 +3381,12 @@ const PD_SECOES = [
   {nome:"Outras demandas da administração", email:"OUTRAS DEMANDAS DA ADMINISTRAÇÃO"}
 ];
 const PD_OUTRAS = PD_SECOES[PD_SECOES.length-1].nome;
-const PD_STATUS = ["Pendente","A cotar","Em andamento","Aguardando entrega","Aguardando síndico","Concluído"];
+const PD_STATUS = ["Pendente","A cotar","Em andamento","Aguardando entrega","Aguardando síndico","Concluído","Cancelado"];
+// encerrada = concluída ou cancelada (não conta como em aberto nem atrasada)
+const pdFechada = p => p.status === "Concluído" || p.status === "Cancelado";
+// cancelar (ou reabrir uma cancelada): só gerente, síndico ou Administração
+const pdPodeCancelar = () => ehGerente() || ehSindico() || S.perfil === "Administração";
+const pdOpcoesSt = atual => PD_STATUS.map(s => `<option ${s===atual?"selected":""} ${s==="Cancelado" && !pdPodeCancelar() ? "disabled" : ""}>${esc(s)}</option>`).join("");
 const PD_CRIT = ["Alta","Média","Baixa"];
 const PD_FREQ = ["Diária","Semanal","Quinzenal","Mensal","Bimestral","Trimestral","Semestral","Anual"];
 const pdConst = p => p.tipo === "Constante";
@@ -3455,8 +3460,8 @@ function pdAbrirOS(id){
     });
   });
 }
-const pdAguardando = p => !!p && (p.aprovacao === "Aguardando gerente" || p.aprovacao === "Aguardando síndico");
-const pdConclPend = p => !!p && !!String(p.conclPedida||"").trim() && p.status !== "Concluído";
+const pdAguardando = p => !!p && p.status !== "Cancelado" && (p.aprovacao === "Aguardando gerente" || p.aprovacao === "Aguardando síndico");
+const pdConclPend = p => !!p && !!String(p.conclPedida||"").trim() && !pdFechada(p);
 // etapa que falta: {tipo:"inclusao"|"conclusao", etapa:"gerente"|"sindico"|"ambos"}
 // inclusão: gerente e depois síndico; conclusão: gerente e síndico, cada um a sua parte, em qualquer ordem
 const pdEtapa = p => {
@@ -3477,7 +3482,7 @@ const pdCriado = p => {
 };
 const pdRotulo = s => s.rotulo || s.nome;
 const pdSecaoDe = p => { const s = PD_SECOES.find(s => s.nome === p.secao || (s.antigas||[]).includes(p.secao)); return s ? s.nome : PD_OUTRAS; };
-const pdAtrasada = p => { const d = pdPrazoEf(p); return d && p.status !== "Concluído" && d < hoje(); };
+const pdAtrasada = p => { const d = pdPrazoEf(p); return d && !pdFechada(p) && d < hoje(); };
 // prazo inicial de pendência pontual fica bloqueado depois de definido; com o Apps Script novo, o síndico pode alterar
 // (a tarefa constante usa o prazo como próxima execução)
 const pdPrazoFixo = p => !!(p && p.prazo && !pdConst(p)) && !(pdV2() && ehSindico());
@@ -3549,7 +3554,7 @@ function renderPdPainel(){
     {k:"andamento", cor:"info", rot:"Em andamento", v:n("Em andamento"), sub:`${pct(n("Em andamento"))}% do total`, ir:{st:"Em andamento"}},
     {k:"pendente", cor:"ambar", rot:"Pendentes", v:n("Pendente"), sub:`${pct(n("Pendente"))}% do total`, ir:{st:"Pendente"}}
   ];
-  if (pdTemCrit()) cards.push({k:"alta", cor:"vermelho", rot:"Alta criticidade em aberto", v:all.filter(p => p.criticidade === "Alta" && p.status !== "Concluído").length, sub:"criticidade alta, ainda não concluídas", ir:{crit:"Alta"}});
+  if (pdTemCrit()) cards.push({k:"alta", cor:"vermelho", rot:"Alta criticidade em aberto", v:all.filter(p => p.criticidade === "Alta" && !pdFechada(p)).length, sub:"criticidade alta, ainda não concluídas", ir:{crit:"Alta"}});
   cards.push({k:"atraso", cor:"vermelho", rot:"Atrasadas", v:atrasadas, sub: atrasadas ? "com o prazo vencido" : "nenhuma com o prazo vencido", ir:{late:true}});
   if (pdV2()) { const ag = all.filter(pdEtapa).length; cards.push({k:"aprov", cor:"roxo", rot:"Aguardando aprovação", v:ag, sub:"inclusão ou conclusão", ir:{aprov:true}}); }
   if (!ehSindico()) cards.push({k:"nova", cor:"laranja", rot:"Novas do síndico", v:all.filter(pdNova).length, sub:"ainda não vistas", ir:{novas:true}});
@@ -3570,7 +3575,7 @@ function ppSeries(){
     {k:"inc", rot:"Incluídas", v: meses.map(m => pont.filter(p => criada.get(p.id) === m).length)},
     {k:"con", rot:"Concluídas", v: meses.map(m => pont.filter(p => fim(p) === m).length)},
     // em aberto no fim do mês: incluída até o mês e ainda não concluída nele (as concluídas sem data não contam)
-    {k:"abe", rot:"Em aberto no fim do mês", v: meses.map(m => pont.filter(p => { const c = criada.get(p.id); if (c && c > m) return false; if (p.status !== "Concluído") return true; const f = fim(p); return !!f && f > m; }).length)}
+    {k:"abe", rot:"Em aberto no fim do mês", v: meses.map(m => pont.filter(p => { const c = criada.get(p.id); if (c && c > m) return false; if (p.status === "Cancelado") return false; if (p.status !== "Concluído") return true; const f = fim(p); return !!f && f > m; }).length)}
   ]};
 }
 const PP_MESES = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
@@ -3636,7 +3641,7 @@ function renderInicio(){
   if (ehGerente() || ehSindico()) cards.push({k:"aprov", cor:"roxo", rot:"Aguardando sua aprovação", v:minhas, ir:{aprov:true}});
   if (!ehSindico()) cards.push({k:"nova", cor:"laranja", rot:"Novas do síndico", v:all.filter(pdNova).length, ir:{novas:true}});
   cards.push({k:"atraso", cor:"vermelho", rot:"Atrasadas", v:all.filter(pdAtrasada).length, ir:{late:true}});
-  if (pdTemCrit()) cards.push({k:"alta", cor:"vermelho", rot:"Alta criticidade em aberto", v:all.filter(p => p.criticidade === "Alta" && p.status !== "Concluído").length, ir:{crit:"Alta"}});
+  if (pdTemCrit()) cards.push({k:"alta", cor:"vermelho", rot:"Alta criticidade em aberto", v:all.filter(p => p.criticidade === "Alta" && !pdFechada(p)).length, ir:{crit:"Alta"}});
   const tudoOk = cards.every(c => !c.v);
   $("#in-atencao").innerHTML = cards.map((c, i) => `<button type="button" class="in-card ${c.v ? "" : "zero"}" data-i="${i}"><span class="pp-ico ${c.cor}">${inSvg(IN_ICO[c.k])}</span><span><b class="num">${c.v}</b><small>${esc(c.rot)}</small></span></button>`).join("")
     + (tudoOk ? `<p class="in-ok">Nada precisando de atenção agora.</p>` : "");
@@ -3699,7 +3704,7 @@ function pdFiltros(){
 function pdPassa(p){
   if (PD.crit === "__sem" && p.criticidade) return false;
   if (PD.crit && PD.crit !== "__sem" && p.criticidade !== PD.crit) return false;
-  if (PD.hide && p.status === "Concluído" && !pdConst(p)) return false;
+  if (PD.hide && pdFechada(p) && !pdConst(p)) return false;
   if (PD.st && p.status !== PD.st) return false;
   const r = (p.responsavel||"").trim();
   if (PD.resp === "__sem" && r) return false;
@@ -3721,7 +3726,7 @@ function pdResumo(){
     {l:"pendentes", v:n("Pendente"), st:"Pendente"},
     {l:"concluídas", v:feitas, st:"Concluído"}, {l:"atrasadas", v:atrasadas, st:"", late:true}
   ];
-  const altas = all.filter(p => p.criticidade === "Alta" && p.status !== "Concluído").length;
+  const altas = all.filter(p => p.criticidade === "Alta" && !pdFechada(p)).length;
   if (pdTemCrit()) itens.splice(1, 0, {l:"alta criticidade em aberto", v:altas, st:"", crit:"Alta"});
   if (constantes) itens.push({l: constantes === 1 ? "tarefa constante" : "tarefas constantes", v:constantes, st:"", cst:true});
   const aguardam = pdV2() ? all.filter(pdEtapa).length : 0;
@@ -3733,9 +3738,10 @@ function pdResumo(){
   const marcado = it => it.aprov ? PD.aprov : it.cst ? PD.cst : it.novas ? PD.novas : it.late ? PD.late : it.crit ? (PD.crit === it.crit && PD.hide && !PD.st) : (!PD.late && !PD.novas && !PD.cst && !PD.aprov && PD.st === it.st && (it.st || (it.l === "pendências" && !PD.crit)));
   $("#pd-stats").innerHTML = itens.map((it,i) => `<button type="button" class="pd-stat ${it.late?"late":""} ${it.novas?"nova":""} ${it.crit?"alta":""} ${it.cst?"cst":""} ${it.aprov?"aprov":""}" data-i="${i}" aria-pressed="${marcado(it) ? "true" : "false"}"><b>${it.v}</b><span>${esc(it.l)}</span></button>`).join("");
   $$("#pd-stats .pd-stat").forEach(b => b.onclick = () => { const it = itens[+b.dataset.i]; PD.st = it.st; PD.late = !!it.late; PD.novas = !!it.novas; PD.cst = !!it.cst; PD.aprov = !!it.aprov; PD.crit = it.crit || ""; if (it.crit) PD.hide = true; if (it.st === "Concluído" || it.novas || it.aprov) PD.hide = false; pdGuardarFiltros(); renderPend(); });
-  const pct = pont.length ? Math.round(feitas/pont.length*100) : 0;
+  const validas = pont.filter(p => p.status !== "Cancelado").length; // canceladas não contam no progresso
+  const pct = validas ? Math.round(feitas/validas*100) : 0;
   $("#pd-bar").style.width = pct + "%";
-  $("#pd-prog").textContent = all.length ? `${feitas} de ${pont.length} concluídas (${pct}%)` + (constantes ? ` · ${constantes} tarefa${constantes===1?"":"s"} constante${constantes===1?"":"s"} à parte` : "") + (PD.late ? " · mostrando só as atrasadas" : PD.aprov ? " · mostrando só as que aguardam aprovação" : PD.novas ? " · mostrando só as novas do síndico" : PD.cst ? " · mostrando só as tarefas constantes" : "") : "Nenhuma pendência cadastrada";
+  $("#pd-prog").textContent = all.length ? `${feitas} de ${validas} concluídas (${pct}%)` + (constantes ? ` · ${constantes} tarefa${constantes===1?"":"s"} constante${constantes===1?"":"s"} à parte` : "") + (PD.late ? " · mostrando só as atrasadas" : PD.aprov ? " · mostrando só as que aguardam aprovação" : PD.novas ? " · mostrando só as novas do síndico" : PD.cst ? " · mostrando só as tarefas constantes" : "") : "Nenhuma pendência cadastrada";
 }
 function pdLinha(id){
   const f = {};
@@ -3744,7 +3750,7 @@ function pdLinha(id){
   f.obs = pdEl("textarea", {class:"pd-obs", rows:"1", placeholder:"Adicionar observação", "aria-label":"Observação", id:"pdo-"+id});
   f.meta = pdEl("div", {class:"pd-meta"});
   f.st = pdEl("select", {class:"input pd-st", "aria-label":"Situação", id:"pds-"+id});
-  f.st.innerHTML = PD_STATUS.map(s => `<option>${esc(s)}</option>`).join("");
+  f.st.innerHTML = pdOpcoesSt("");
   f.resp = pdEl("select", {class:"input pd-resp", "aria-label":"Responsável", id:"pdr-"+id});
   f.prazo = pdEl("input", {class:"input pd-prazo", type:"date", "aria-label":"Prazo", id:"pdp-"+id});
   f.prazoFixo = pdEl("div", {class:"pd-prazo-fixo", hidden:""});
@@ -3827,10 +3833,11 @@ function pdAtualizar(p){
   pdPor(f.prazo2, p.prazoAtualizado||"");
   f.prazo2.dataset.cheio = p.prazoAtualizado ? "1" : "";
   if (document.activeElement !== f.st) { f.st.value = PD_STATUS.includes(p.status) ? p.status : "Pendente"; f.st.dataset.s = f.st.value; }
+  f.st.disabled = p.status === "Cancelado" && !pdPodeCancelar();
   if (document.activeElement !== f.crit) { f.crit.value = PD_CRIT.includes(p.criticidade) ? p.criticidade : ""; f.crit.dataset.c = f.crit.value; }
   f.crit.disabled = !pdTemCrit();
   const cst = pdConst(p), sub = pdEhSub(p);
-  r.el.classList.toggle("alta", p.criticidade === "Alta" && (cst || p.status !== "Concluído"));
+  r.el.classList.toggle("alta", p.criticidade === "Alta" && (cst || !pdFechada(p)));
   f.st.hidden = cst; f.cst.hidden = !cst;
   f.lblSt.textContent = cst ? "Tarefa constante" : "Situação";
   f.lblPrazo.textContent = cst ? "Próxima execução" : "Prazo inicial";
@@ -3862,6 +3869,7 @@ function pdAtualizar(p){
   }
   r.el.classList.toggle("nova", nova);
   r.el.classList.toggle("done", p.status === "Concluído" && !cst);
+  r.el.classList.toggle("canc", p.status === "Cancelado" && !cst);
   r.el.classList.toggle("late", !!pdAtrasada(p));
   r.el.classList.toggle("sub", sub);
   r.el.classList.toggle("constante", cst);
@@ -3938,7 +3946,7 @@ function pdOrdenar(lista){
   }
   const pos = new Map(lista.map((p,i) => [p.id, i]));
   const CR = {"Alta":0, "Média":1, "Baixa":2};
-  const aberto = p => pdConst(p) || p.status !== "Concluído";
+  const aberto = p => pdConst(p) || !pdFechada(p);
   const cmp = {
     alfa: (a,b) => String(a.titulo||"").trim().localeCompare(String(b.titulo||"").trim(), "pt-BR", {sensitivity:"base", numeric:true}),
     crit: (a,b) => (CR[a.criticidade] ?? 3) - (CR[b.criticidade] ?? 3),
@@ -3984,9 +3992,9 @@ function renderPend(){
     // seção recolhida (a busca por texto mostra tudo, para nada ficar escondido)
     const recolhida = PD.recolhidas.has(s.nome) && !PD.q;
     o.sec.classList.toggle("recolhida", recolhida); o.list.hidden = recolhida; o.tog.setAttribute("aria-expanded", recolhida ? "false" : "true");
-    const feitas = daSecao.filter(p => p.status === "Concluído").length;
-    o.cnt.textContent = daSecao.length ? `${feitas}/${daSecao.length} concluídas` : "sem itens";
-    o.bar.style.width = (daSecao.length ? feitas/daSecao.length*100 : 0) + "%";
+    const feitas = daSecao.filter(p => p.status === "Concluído").length, validas = daSecao.filter(p => p.status !== "Cancelado").length;
+    o.cnt.textContent = daSecao.length ? `${feitas}/${validas} concluídas` : "sem itens";
+    o.bar.style.width = (validas ? feitas/validas*100 : 0) + "%";
     o.sec.hidden = filtro && !vis.length;
     const quero = vis.map(pdAtualizar);
     const agora = [...o.list.children].filter(c => c.classList.contains("pd-row"));
@@ -4040,7 +4048,7 @@ function pdAbrirForm(o){
       <div class="field" id="np-freq-box"><label for="np-freq">Frequência</label><select class="input" id="np-freq">${PD_FREQ.map(f => `<option ${f===(v.frequencia||"Mensal")?"selected":""}>${f}</option>`).join("")}</select></div>` : ""}
       <div class="field"><label for="np-crit">Criticidade <span class="req">*</span></label>
         <select class="input" id="np-crit"><option value="">Escolha</option>${["Baixa","Média","Alta"].map(x => `<option ${x===v.criticidade?"selected":""}>${x}</option>`).join("")}</select></div>
-      <div class="field" id="np-st-box"><label for="np-st">Situação</label><select class="input" id="np-st">${PD_STATUS.map(x => `<option ${x===v.status?"selected":""}>${x}</option>`).join("")}</select></div>
+      <div class="field" id="np-st-box"><label for="np-st">Situação</label><select class="input" id="np-st" ${v.status === "Cancelado" && !pdPodeCancelar() ? "disabled" : ""}>${pdOpcoesSt(v.status)}</select></div>
       <div class="field"><label for="np-prazo" id="np-prazo-lbl">Prazo inicial</label><input class="input" id="np-prazo" type="date" value="${esc(v.prazo||"")}" ${ed && pdPrazoFixo(ed) ? "disabled" : ""}>
         <span class="hint" id="np-prazo-dica">${ed && pdPrazoFixo(ed) ? `Bloqueado${ed.prazoDefinidoEm ? " desde " + esc(fData(ed.prazoDefinidoEm)) : ""}${ed.prazoDefinidoPor ? " por " + esc(ed.prazoDefinidoPor) : ""}. ${pdV2() ? "Só o síndico pode alterar." : "Correção só direto na planilha."}` : ed && ed.prazo && pdV2() && ehSindico() ? "Bloqueado para os demais. Como síndico, você pode alterar." : pdV2() ? "Depois de salvo, só o síndico pode alterar." : "Depois de salvo, o prazo fica bloqueado."}</span></div>
       ${pdV2() ? `<div class="field" id="np-prazo2-box"><label for="np-prazo2">Atualização de prazo</label><input class="input" id="np-prazo2" type="date" value="${esc((ed && ed.prazoAtualizado)||"")}"><span class="hint">Nova data combinada. Pode ser alterada a qualquer momento.</span></div>` : ""}
@@ -4145,8 +4153,8 @@ function pdTextoEmail(){
       const x = [];
       if (p.criticidade) x.push("criticidade " + String(p.criticidade).toLowerCase());
       if (String(p.obs||"").trim()) x.push(String(p.obs).trim());
-      if (p.prazo && (pdConst(p) || p.status !== "Concluído")) x.push((pdConst(p) ? "próxima " : "prazo inicial ") + fData(p.prazo).slice(0,5));
-      if (!pdConst(p) && p.prazoAtualizado && p.status !== "Concluído") x.push("prazo atualizado " + fData(p.prazoAtualizado).slice(0,5));
+      if (p.prazo && (pdConst(p) || !pdFechada(p))) x.push((pdConst(p) ? "próxima " : "prazo inicial ") + fData(p.prazo).slice(0,5));
+      if (!pdConst(p) && p.prazoAtualizado && !pdFechada(p)) x.push("prazo atualizado " + fData(p.prazoAtualizado).slice(0,5));
       if (pdAguardando(p)) x.push("aguardando aprovação do " + (p.aprovacao === "Aguardando gerente" ? "gerente" : "síndico"));
       if (pdConclPend(p)) x.push("conclusão em " + fData(p.conclData).slice(0,5) + " aguardando aprovação");
       if (p.os) x.push(p.os + (p.osStatus ? " " + String(p.osStatus).toLowerCase() : ""));
