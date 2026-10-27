@@ -174,6 +174,23 @@ const ABAS = {
       ['obs', 'Observação'], ['registradoEm', 'Registrado em'], ['registradoPor', 'Registrado por'], ['atualizadoEm', 'Corrigido em'], ['atualizadoPor', 'Corrigido por']],
     num: ['consumo', 'valor']
   },
+  // medição individual de água por unidade (relatório mensal da Exista) e o resumo de cada período (conta da concessionária)
+  mi: {
+    nome: 'Medição individual',
+    criar: true,
+    cols: [['id', 'ID'], ['periodo', 'Período'], ['bloco', 'Bloco'], ['unidade', 'Unidade'], ['dataIni', 'Leitura anterior em'], ['dataFim', 'Leitura atual em'],
+      ['leituraAnt', 'Leitura anterior'], ['leituraAtual', 'Leitura atual'], ['estimada', 'Leitura estimada'], ['consumo', 'Consumo (m³)'], ['valor', 'Valor (R$)'],
+      ['hidrometro', 'Hidrômetro'], ['local', 'Localização'], ['origem', 'Origem'], ['importadoEm', 'Importado em'], ['importadoPor', 'Importado por']],
+    num: ['leituraAnt', 'leituraAtual', 'estimada', 'consumo', 'valor']
+  },
+  mir: {
+    nome: 'Medição individual - resumo',
+    criar: true,
+    cols: [['id', 'ID'], ['periodo', 'Período'], ['dataIni', 'Início (Exista)'], ['dataFim', 'Fim (Exista)'], ['concessionaria', 'Concessionária'],
+      ['concIni', 'Início (concessionária)'], ['concFim', 'Fim (concessionária)'], ['concM3', 'Consumo da concessionária (m³)'], ['concValor', 'Valor da concessionária (R$)'],
+      ['valorM3', 'Valor por m³ (R$)'], ['somaExista', 'Soma da Exista (m³)'], ['vencimento', 'Vencimento'], ['importadoEm', 'Importado em'], ['importadoPor', 'Importado por']],
+    num: ['concM3', 'concValor', 'valorM3', 'somaExista']
+  },
   // rondas (vistorias preventivas): cabeçalho em colunas; os itens da ficha e os dados extras em JSON
   ronda: {
     nome: 'Rondas',
@@ -334,7 +351,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-10-27 constante do medidor';
+const VERSAO = '2026-10-27 medição individual';
 
 function doGet() {
   TABS = {};
@@ -405,6 +422,7 @@ function doPost(e) {
     if (req.acao === 'unidades') { unExigir(conta, false); return json(Object.assign(base, unLista())); }
     if (req.acao === 'espacos') { espExigir(conta); return json(Object.assign(base, espLista())); }
     if (req.acao === 'medicoes') { medExigir(conta, false); return json(Object.assign(base, medLista())); }
+    if (req.acao === 'miLista') { algum(['med_ver', 'med_lancar', 'un_ver', 'un_editar']); return json(Object.assign(base, miLista())); }
     if (req.acao === 'rondas') { rondaExigir(conta, false); return json(Object.assign(base, rondaLista())); }
     if (req.acao === 'rondaFotoVer') { rondaExigir(conta, false); const f = rondaFotoVer(req); delete f.nome; return json(Object.assign(base, { foto: f })); }
     if (req.acao === 'prestVerDoc') { prestExigir(conta, false); const f = prestVerDoc(req); auditar(conta, 'Abriu documento de prestador', f.nome); delete f.nome; return json(Object.assign(base, { arquivo: f })); }
@@ -463,6 +481,8 @@ function doPost(e) {
         case 'espImportar': espExigir(conta); msg = espImportar(req, conta); extra.esp = true; extra.semDados = true; break;
         case 'espEmails': espExigir(conta); msg = espLerEmails(conta); extra.esp = true; extra.semDados = true; break;
         case 'medImportar': medExigir(conta, true); msg = medImportar(req, conta); extra.med = true; extra.semDados = true; break;
+        case 'miImportar': medExigir(conta, true); msg = miImportar(req, conta); extra.mi = true; extra.semDados = true; break;
+        case 'miExcluir': medExigir(conta, true); msg = miExcluir(req, conta); extra.mi = true; extra.semDados = true; break;
         case 'rondaSalvar': rondaExigir(conta, true); msg = rondaSalvar(req, conta); extra.ronda = msg.ronda; msg = msg.texto; extra.semDados = true; break;
         case 'rondaFoto': rondaExigir(conta, true); msg = rondaFoto(req, conta); extra.ronda = msg.ronda; msg = msg.texto; extra.semDados = true; break;
         case 'rondaFotoRemover': rondaExigir(conta, true); msg = rondaFotoRemover(req, conta); extra.ronda = msg.ronda; msg = msg.texto; extra.semDados = true; break;
@@ -478,7 +498,7 @@ function doPost(e) {
     }
     if (extra.pendencias) return json(Object.assign(base, { msg, pendencias: pendLista(), pendVersao: PEND_VERSAO }));
     if (extra.equipe) return json(Object.assign(base, { msg }, extra));
-    if (extra.semDados) return json(Object.assign(base, { msg }, extra.cot ? { cot: extra.cot } : {}, extra.ronda ? { ronda: extra.ronda } : {}, extra.med ? medLista() : {}, extra.esp ? espLista() : {}, extra.forn ? fornLista() : {}, extra.lida ? { lida: extra.lida } : {}));
+    if (extra.semDados) return json(Object.assign(base, { msg }, extra.cot ? { cot: extra.cot } : {}, extra.ronda ? { ronda: extra.ronda } : {}, extra.med ? medLista() : {}, extra.esp ? espLista() : {}, extra.forn ? fornLista() : {}, extra.mi ? miLista() : {}, extra.lida ? { lida: extra.lida } : {}));
     return json(Object.assign(base, { msg, dados: dados(req.meses, conta) }, extra));
   } catch (err) {
     // tentativas sem permissão ficam no histórico de auditoria
@@ -2465,6 +2485,90 @@ function medContas(r, conta) {
 }
 // planilha lida no navegador: leituras (data, medidor, leitura) e/ou contas (mês, medidor, consumo, valor).
 // Grava as linhas certas, pula as repetidas e devolve as com erro.
+// ---------- medição individual (Exista) ----------
+// Cada linha: uma unidade num período (AAAA-MM = mês da leitura atual). O histórico do demonstrativo individual entra só com o consumo
+// e nunca sobrepõe um período importado da planilha. O resumo guarda a conta da concessionária do período (conferência).
+function miLista() {
+  const ls = linhas(tabela('mi')).map(unLimpa), rs = linhas(tabela('mir')).map(unLimpa);
+  ls.sort((a, b) => String(a.periodo).localeCompare(String(b.periodo)) || String(a.bloco).localeCompare(String(b.bloco), 'pt-BR', { numeric: true }) || String(a.unidade).localeCompare(String(b.unidade), 'pt-BR', { numeric: true }));
+  rs.sort((a, b) => String(a.periodo).localeCompare(String(b.periodo)));
+  return { mi: ls, mir: rs };
+}
+const miChave = (p, b, u) => String(p) + '|' + String(b).trim().toLowerCase() + '|' + String(u).trim().toLowerCase();
+const miPer = s => /^\d{4}-\d{2}$/.test(String(s || ''));
+function miNumOpc(v, rot) {
+  if (v === '' || v === null || v === undefined) return '';
+  const n = medNum(v);
+  if (!isFinite(n) || n < 0) throw falha('Valor inválido em ' + rot + '.');
+  return Math.round(n * 1000) / 1000;
+}
+function miImportar(r, conta) {
+  const unidades = Array.isArray(r.unidades) ? r.unidades : [], hist = Array.isArray(r.historico) ? r.historico : [], res = r.resumo || null;
+  if (!unidades.length && !hist.length && !res) throw falha('Nada para importar.');
+  if (unidades.length > 600 || hist.length > 4000) throw falha('Arquivo grande demais para uma importação.');
+  const t = tabela('mi'), todas = linhas(t), porChave = new Map(todas.map(x => [miChave(x.periodo, x.bloco, x.unidade), x]));
+  const novas = [], quando = agora();
+  let atualizadas = 0, hNovos = 0;
+  unidades.forEach((x, i) => {
+    const periodo = String(x.periodo || r.periodo || ''), bloco = texto(x.bloco, 10), unidade = texto(x.unidade, 20);
+    if (!miPer(periodo)) throw falha('Período inválido na linha ' + (i + 1) + '.');
+    if (!unidade) throw falha('Unidade em branco na linha ' + (i + 1) + '.');
+    const consumo = miNumOpc(x.consumo, 'consumo da unidade ' + unidade);
+    if (consumo === '') throw falha('Consumo em branco na unidade ' + unidade + ' (bloco ' + bloco + ').');
+    const o = { periodo, bloco, unidade, dataIni: dataOk(x.dataIni) ? x.dataIni : '', dataFim: dataOk(x.dataFim) ? x.dataFim : '',
+      leituraAnt: miNumOpc(x.leituraAnt, 'leitura anterior'), leituraAtual: miNumOpc(x.leituraAtual, 'leitura atual'), estimada: miNumOpc(x.estimada, 'leitura estimada'),
+      consumo, valor: x.valor === '' || x.valor == null ? '' : Math.round(miNumOpc(x.valor, 'valor') * 100) / 100,
+      origem: 'Planilha Exista', importadoEm: quando, importadoPor: conta.nome };
+    if (x.hidrometro) o.hidrometro = texto(x.hidrometro, 30);
+    if (x.local) o.local = texto(x.local, 60);
+    const k = miChave(periodo, bloco, unidade), atual = porChave.get(k);
+    if (atual) { gravar(t, o, atual._row); atualizadas++; }
+    else { o.id = novoId('MI'); novas.push(o); porChave.set(k, o); }
+  });
+  hist.forEach(x => {
+    const periodo = String(x.periodo || ''), bloco = texto(x.bloco, 10), unidade = texto(x.unidade, 20);
+    if (!miPer(periodo) || !unidade) return;
+    const consumo = miNumOpc(x.consumo, 'histórico da unidade ' + unidade);
+    if (consumo === '') return;
+    const k = miChave(periodo, bloco, unidade);
+    if (porChave.has(k)) return;
+    const o = { id: novoId('MI'), periodo, bloco, unidade, consumo, origem: 'Histórico Exista', importadoEm: quando, importadoPor: conta.nome };
+    novas.push(o); porChave.set(k, o); hNovos++;
+  });
+  anexarLinhas(t, novas);
+  let resumo = '';
+  if (res && miPer(res.periodo)) {
+    const tr = tabela('mir'), atualR = linhas(tr).find(x => x.periodo === res.periodo);
+    const o = { periodo: res.periodo, importadoEm: quando, importadoPor: conta.nome };
+    [['dataIni'], ['dataFim'], ['concIni'], ['concFim'], ['vencimento']].forEach(([k]) => { if (dataOk(res[k])) o[k] = res[k]; });
+    if (res.concessionaria) o.concessionaria = texto(res.concessionaria, 40);
+    [['concM3', 'consumo da concessionária'], ['concValor', 'valor da concessionária'], ['valorM3', 'valor por m³'], ['somaExista', 'soma da Exista']].forEach(([k, rot]) => {
+      const v = miNumOpc(res[k], rot); if (v !== '') o[k] = k === 'concValor' ? Math.round(v * 100) / 100 : v;
+    });
+    if (atualR) gravar(tr, o, atualR._row); else { o.id = novoId('MR'); gravar(tr, o); }
+    resumo = ' Conta da concessionária do período registrada.';
+  }
+  AUDIT_DET = 'Medição individual: ' + (unidades.length ? unidades.length + ' unidade(s) do período ' + String(unidades[0].periodo || r.periodo || '') : '') + (hNovos ? ' · ' + hNovos + ' consumo(s) de histórico' : '') + (resumo ? ' · resumo da conta' : '');
+  return (unidades.length ? (novas.length - hNovos) + ' unidade(s) nova(s) e ' + atualizadas + ' atualizada(s).' : '') + (hNovos ? ' ' + hNovos + ' consumo(s) de meses anteriores.' : '') + resumo;
+}
+function miExcluir(r, conta) {
+  const periodo = String(r.periodo || '');
+  if (!miPer(periodo)) throw falha('Período inválido.');
+  let n = 0;
+  [['mi', 'periodo'], ['mir', 'periodo']].forEach(([k]) => {
+    const t = tabela(k), tot = t.sh.getLastRow() - 1;
+    if (tot < 1) return;
+    const vals = t.sh.getRange(2, 1, tot, t.ncol).getValues(), fica = vals.filter(v => celula(v[t.idx.periodo], false) !== periodo);
+    if (fica.length === vals.length) return;
+    if (k === 'mi') n = vals.length - fica.length;
+    t.sh.getRange(2, 1, tot, t.ncol).clearContent();
+    if (fica.length) t.sh.getRange(2, 1, fica.length, t.ncol).setValues(fica);
+  });
+  if (!n) throw falha('Não há lançamentos neste período.');
+  AUDIT_DET = 'Excluiu o período ' + periodo + ' da medição individual (' + n + ' linha(s))';
+  return 'Período ' + periodo.split('-').reverse().join('/') + ' excluído (' + n + ' unidade(s)).';
+}
+
 function medImportar(r, conta) {
   const ls = Array.isArray(r.leituras) ? r.leituras : [], cs = Array.isArray(r.contas) ? r.contas : [];
   if (!ls.length && !cs.length) throw falha('A planilha não tem lançamentos.');
@@ -4296,6 +4400,7 @@ const ACOES_AUDIT = {
   fornSalvar: 'Fornecedor', fornImportar: 'Importou planilha de fornecedores', fornDasCotacoes: 'Trouxe fornecedores das cotações',
   espReserva: 'Reserva de espaço', espEspaco: 'Espaço', espVistoria: 'Vistoria de espaço', espColar: 'Reserva colada do e-mail', espImportar: 'Importou PDF de reservas', espEmails: 'Leu e-mails de reserva',
   medMedidor: 'Medidor', medLeituras: 'Leitura de medidor', medContas: 'Conta de consumo', medImportar: 'Importou planilha de medições',
+  miImportar: 'Importou medição individual (Exista)', miExcluir: 'Excluiu período da medição individual',
   rondaSalvar: 'Ronda', rondaFoto: 'Foto na ronda', rondaFotoRemover: 'Tirou foto da ronda', rondaResolver: 'Resolveu pendência da ronda',
   visao: 'Abriu tela',
   trocarSenha: 'Trocou a própria senha',
