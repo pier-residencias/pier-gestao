@@ -3737,7 +3737,7 @@ function pdResumo(){
   if (novas && !ehSindico()) itens.unshift({l: novas === 1 ? "nova do síndico" : "novas do síndico", v:novas, st:"", novas:true});
   const marcado = it => it.aprov ? PD.aprov : it.cst ? PD.cst : it.novas ? PD.novas : it.late ? PD.late : it.crit ? (PD.crit === it.crit && PD.hide && !PD.st) : (!PD.late && !PD.novas && !PD.cst && !PD.aprov && PD.st === it.st && (it.st || (it.l === "pendências" && !PD.crit)));
   $("#pd-stats").innerHTML = itens.map((it,i) => `<button type="button" class="pd-stat ${it.late?"late":""} ${it.novas?"nova":""} ${it.crit?"alta":""} ${it.cst?"cst":""} ${it.aprov?"aprov":""}" data-i="${i}" aria-pressed="${marcado(it) ? "true" : "false"}"><b>${it.v}</b><span>${esc(it.l)}</span></button>`).join("");
-  $$("#pd-stats .pd-stat").forEach(b => b.onclick = () => { const it = itens[+b.dataset.i]; PD.st = it.st; PD.late = !!it.late; PD.novas = !!it.novas; PD.cst = !!it.cst; PD.aprov = !!it.aprov; PD.crit = it.crit || ""; if (it.crit) PD.hide = true; if (it.st === "Concluído" || it.novas || it.aprov) PD.hide = false; pdGuardarFiltros(); renderPend(); });
+  $$("#pd-stats .pd-stat").forEach(b => b.onclick = () => { const it = itens[+b.dataset.i]; PD.st = it.st; PD.late = !!it.late; PD.novas = !!it.novas; PD.cst = !!it.cst; PD.aprov = !!it.aprov; PD.crit = it.crit || ""; PD.resp = ""; if (it.crit) PD.hide = true; if (it.st === "Concluído" || it.novas || it.aprov) PD.hide = false; pdGuardarFiltros(); renderPend(); });
   const validas = pont.filter(p => p.status !== "Cancelado").length; // canceladas não contam no progresso
   const pct = validas ? Math.round(feitas/validas*100) : 0;
   $("#pd-bar").style.width = pct + "%";
@@ -4006,6 +4006,14 @@ function renderPend(){
     else if (o.vazio.isConnected) o.vazio.remove();
   }
   for (const id of [...PD.rows.keys()]) if (!pdAchar(id)) { PD.rows.get(id).el.remove(); PD.rows.delete(id); }
+  // filtros que escondem tudo: avisa e oferece limpar (antes a tela ficava em branco)
+  let vf = $("#pd-vazio-filtro");
+  const nada = filtro && all.length && !all.some(pdPassa);
+  if (nada) {
+    if (!vf) { vf = document.createElement("div"); vf.id = "pd-vazio-filtro"; vf.className = "empty"; body.prepend(vf); }
+    vf.innerHTML = `Nenhuma pendência com esses filtros${PD.resp ? ` (responsável: <b>${esc(PD.resp === "__sem" ? "sem responsável" : PD.resp)}</b>)` : ""}. <button type="button" class="btn small" id="pd-limpar">Limpar filtros</button>`;
+    $("#pd-limpar").onclick = () => { Object.assign(PD, {q:"", st:"", crit:"", resp:"", hide:false, late:false, novas:false, cst:false, aprov:false}); const b = $("#pd-q"); if (b) b.value = ""; pdGuardarFiltros(); renderPend(); };
+  } else if (vf) vf.remove();
   const rb = $("#pd-recolher");
   if (rb) { const todas = PD_SECOES.every(s => PD.recolhidas.has(s.nome)); rb.textContent = todas ? "Expandir todas" : "Recolher todas"; rb.setAttribute("aria-pressed", todas ? "true" : "false"); }
   requestAnimationFrame(() => $$("#pd-body .pd-tit, #pd-body .pd-obs").forEach(pdAuto));
