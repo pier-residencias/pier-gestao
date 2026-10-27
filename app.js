@@ -4226,6 +4226,9 @@ const CT = { lista:null, pendOpcoes:[], ia:false, versao:0, edit:null, sujo:fals
 const CT_ST = ["Em cotação","Aguardando aprovação","Aprovada","Cancelada"];
 // "Aguardando gerente/síndico": cotações enviadas antes da aprovação ao mesmo tempo; contam como "Aguardando aprovação"
 const ctAguarda = c => String(c.status || "").startsWith("Aguardando");
+// na lista: quantas mensagens e se a última é de outra pessoa
+const ctConvResumo = c => { const l = c.conversa || []; if (!l.length) return ""; const u = l[l.length - 1], eu = u.usuario ? u.usuario === S.usuario : u.por === S.nome;
+  return `<span class="sub ct-conv-r">${l.length} mensage${l.length === 1 ? "m" : "ns"}${eu ? "" : ` · <span class="pill s-baixo">última de ${esc(u.papel === "Síndico" ? "síndico" : u.por)}</span>`}</span>`; };
 const ctStGrupo = c => ctAguarda(c) ? "Aguardando aprovação" : c.status;
 const ctPossoAprovar = c => ctAguarda(c) && ((ehSindico() && !c.aprovSindico) || (ehGerente() && !c.aprovGerente));
 const CT_CAMPOS = [
@@ -4303,7 +4306,7 @@ function renderCot(){
     + (aguardam ? `<span class="hint">${aguardam} aguardando a sua aprovação</span>` : "");
   corpo.innerHTML = vis.length ? vis.map(c => `<tr class="click" data-ct="${esc(c.id)}" tabindex="0">
       <td class="mono">${esc(c.numero)}</td>
-      <td><b>${esc(c.finalidade)}</b>${c.pendNumero ? `<span class="sub">Pendência ${esc(c.pendNumero)}</span>` : ""}</td>
+      <td><b>${esc(c.finalidade)}</b>${c.pendNumero ? `<span class="sub">Pendência ${esc(c.pendNumero)}</span>` : ""}${ctConvResumo(c)}</td>
       <td class="hide-s num">${c.dados.fornecedores.filter(f => f.empresa).length}</td>
       <td class="hide-m">${esc(c.vencedor || "—")}</td>
       <td class="num">${c.valorVencedor ? esc(fBRL(c.valorVencedor)) : "—"}</td>
@@ -4395,8 +4398,17 @@ function renderCotEditor(){
         <div class="field full"><label for="ct-just">Justificativa</label><textarea class="input" id="ct-just" data-f="justificativa" rows="3" placeholder="Por que este fornecedor: preço, prazo, garantia, especificação…" ${dis}>${esc(d.recomendacao.justificativa)}</textarea></div>
       </div></div>
     <div class="card ct-card"><h3>Observações</h3><textarea class="input" id="ct-obs" data-f="observacoes" rows="3" placeholder="Ex.: modelos não são idênticos; confirmar valor final com o fornecedor" ${dis}>${esc(d.observacoes)}</textarea></div>
-    ${c.id ? `<div class="card ct-card"><h3>Aprovação</h3>${ctAprovHtml(c)}</div>` : ""}`;
+    ${c.id ? `<div class="card ct-card"><h3>Aprovação</h3>${ctAprovHtml(c)}</div>` : ""}
+    ${c.id && (c.status !== "Em cotação" || (c.conversa || []).length) ? `<div class="card ct-card ct-conv"><h3>Conversa</h3>${ctConversaHtml(c)}</div>` : ""}`;
   ctRecalcular();
+}
+// conversa da cotação: síndico, gerente e administração trocam mensagens (cada mensagem avisa o outro lado por e-mail)
+function ctConversaHtml(c){
+  const l = c.conversa || [];
+  const msgs = l.length ? `<ol class="ct-msgs">${l.map(m => { const eu = m.usuario ? m.usuario === S.usuario : m.por === S.nome; return `<li class="ct-msg ${eu ? "eu" : ""} ${/s[ií]ndico/i.test(m.papel) ? "sind" : ""}"><span class="ct-msg-h"><b>${esc(m.por)}</b> · ${esc(m.papel)} · ${esc(fDataHora(m.em))}</span><span class="ct-msg-t">${esc(m.txt)}</span></li>`; }).join("")}</ol>`
+    : `<p class="muted">Nenhuma mensagem ainda. Use este espaço para tirar dúvidas sobre a cotação antes de aprovar ou devolver.</p>`;
+  return msgs + (c.status === "Cancelada" ? `<p class="hint">Cotação cancelada: reabra para conversar sobre ela.</p>`
+    : `<div class="ct-msg-novo"><textarea class="input" id="ct-msg-txt" rows="2" maxlength="1000" placeholder="Escreva uma mensagem…"></textarea><div class="actions"><button type="button" class="btn primary" id="ct-msg-env">Enviar mensagem</button><span class="hint" id="ct-msg-msg">${ehSindico() || ehGerente() ? "A administração recebe" : "O síndico e o gerente recebem"} um aviso por e-mail.</span></div></div>`);
 }
 function ctAprovHtml(c){
   const linha = (rot, v, falta) => `<li><span>${rot}</span> <b>${v ? esc(pdMarca(v)) : falta}</b></li>`;
@@ -5025,6 +5037,14 @@ if (TEM_ADM && $("#t-cotacoes")) {
     if (b.id === "ct-sugerir") { const s = ctSugestao(d); if (!s) { toast("Preencha os preços de todos os itens de pelo menos um fornecedor.", true); return; } d.recomendacao = s; CT.sujo = true; renderCotEditor(); return; }
     if (b.dataset.anx) { ctBaixarArquivo(b.dataset.anx, b.dataset.nome); return; }
     if (b.dataset.op) { b.disabled = true; await ctOp(b.dataset.op); return; }
+    if (b.id === "ct-msg-env") {
+      const t = $("#ct-msg-txt").value.trim(), c = CT.edit;
+      if (!t) { $("#ct-msg-msg").className = "hint err"; $("#ct-msg-msg").textContent = "Escreva a mensagem."; $("#ct-msg-txt").focus(); return; }
+      if (CT.sujo && ctEditavel() && !(await ctSalvar(true))) return;
+      const r = await enviar(b, $("#ct-msg-msg"), "cotSalvar", {cot:{id:c.id}, op:"mensagem", texto:t});
+      if (r && r.cot) { ctAtualizarDaResposta(r.cot); const box = $("#ct-editor .ct-msgs"); if (box) box.lastElementChild && box.lastElementChild.scrollIntoView({block:"nearest"}); }
+      return;
+    }
     if (b.dataset.ia) { b.disabled = true; await ctIA(b.dataset.ia, b.dataset.ia === "ler" ? {indice:+b.dataset.s, fileId:b.dataset.anx2} : null); b.disabled = false; return; }
   });
 }
