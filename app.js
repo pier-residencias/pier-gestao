@@ -35,7 +35,7 @@ const SETORES_PERM = [["Manutenção","setor_manutencao"],["Limpeza","setor_limp
 const setoresDasPerms = p => { const l = SETORES_PERM.filter(x => p && p[x[1]]).map(x => x[0]); return l.length ? l : ["Manutenção"]; };
 const doSetor = x => setorDe(x) === S.setor;
 const can = p => !!(S.perms && S.perms[p]);
-const ABAS_PERM = {painel:["painel"], demandas:["dem_ver","dem_executar","dem_delegar"], os:["os_ver","os_abrir","os_atender","os_gerenciar"], registrar:["registrar_saida","registrar_entrada","registrar_troca","registrar_emprestimo"], itens:["itens_ver"], historico:["historico_ver"], emprestimos:["devolver","registrar_emprestimo"], dashboard:["dashboard"], indicadores:["dashboard"], categorias:["itens_ver"], prestadores:["os_ver","os_abrir","os_atender","os_gerenciar","dem_ver","dem_executar","dem_delegar"], equipe:["os_gerenciar","dem_delegar"], minhaequipe:["os_gerenciar","dem_delegar"], usuarios:["usuarios"], inicio:["pendencias","usuarios","acessos"], pendencias:["pendencias"], pdpainel:["pendencias"], rondas:["ronda_ver","ronda_fazer"], unidades:["un_ver","un_editar"], uncadastro:["un_ver","un_editar"], unconfig:["un_editar"], medlanc:["med_lancar"], medidores:["med_ver","med_lancar"], medrel:["med_ver","med_lancar"], esreservas:["espacos"], fornecedores:["pendencias"], esvistorias:["espacos"], esespacos:["espacos"], cotacoes:["pendencias"], acessos:["acessos"]};
+const ABAS_PERM = {painel:["painel"], demandas:["dem_ver","dem_executar","dem_delegar"], os:["os_ver","os_abrir","os_atender","os_gerenciar"], registrar:["registrar_saida","registrar_entrada","registrar_troca","registrar_emprestimo"], itens:["itens_ver"], historico:["historico_ver"], emprestimos:["devolver","registrar_emprestimo"], dashboard:["dashboard"], indicadores:["dashboard"], categorias:["itens_ver"], prestadores:["os_ver","os_abrir","os_atender","os_gerenciar","dem_ver","dem_executar","dem_delegar"], equipe:["os_gerenciar","dem_delegar"], minhaequipe:["os_gerenciar","dem_delegar"], usuarios:["usuarios"], inicio:["pendencias","usuarios","acessos"], pendencias:["pendencias"], pdpainel:["pendencias"], rondas:["ronda_ver","ronda_fazer"], unidades:["un_ver","un_editar"], uncadastro:["un_ver","un_editar"], unconfig:["un_editar"], medlanc:["med_lancar"], medidores:["med_ver","med_lancar"], medrel:["med_ver","med_lancar"], medind:["med_ver","med_lancar"], esreservas:["espacos"], fornecedores:["pendencias"], esvistorias:["espacos"], esespacos:["espacos"], cotacoes:["pendencias"], acessos:["acessos"]};
 // Se o navegador ainda estiver com a página antiga guardada, o menu Administração não existe nela:
 // o resto do sistema continua funcionando normalmente.
 const TEM_ADM = !!(document.getElementById("tab-adm") && document.getElementById("adm-menu") && document.getElementById("t-pendencias"));
@@ -46,13 +46,13 @@ if (!TEM_ADM || !document.getElementById("t-rondas")) delete ABAS_PERM.rondas;
 if (!TEM_ADM || !document.getElementById("t-unidades")) { delete ABAS_PERM.unidades; delete ABAS_PERM.uncadastro; delete ABAS_PERM.unconfig; }
 if (!TEM_ADM || !document.getElementById("t-fornecedores")) delete ABAS_PERM.fornecedores;
 if (!TEM_ADM || !document.getElementById("t-esreservas")) { delete ABAS_PERM.esreservas; delete ABAS_PERM.esvistorias; delete ABAS_PERM.esespacos; }
-if (!TEM_ADM || !document.getElementById("t-medlanc")) { delete ABAS_PERM.medlanc; delete ABAS_PERM.medidores; delete ABAS_PERM.medrel; }
+if (!TEM_ADM || !document.getElementById("t-medlanc")) { delete ABAS_PERM.medlanc; delete ABAS_PERM.medidores; delete ABAS_PERM.medrel; delete ABAS_PERM.medind; }
 if (!document.getElementById("t-indicadores")) delete ABAS_PERM.indicadores;
 if (!TEM_ADM || !document.getElementById("t-acessos")) delete ABAS_PERM.acessos;
 // O que aparece depende de como a pessoa entrou: Manutenção (tudo do estoque, OS e demandas),
 // Limpeza (só o estoque da limpeza) ou Administração (só o menu Administração).
 // "inicio" primeiro: é a tela que abre ao entrar pela Administração
-const ABAS_ADM = ["inicio","pendencias","pdpainel","cotacoes","rondas","unidades","uncadastro","unconfig","medlanc","medidores","medrel","esreservas","esvistorias","esespacos","fornecedores","usuarios","acessos"];
+const ABAS_ADM = ["inicio","pendencias","pdpainel","cotacoes","rondas","unidades","uncadastro","unconfig","medlanc","medidores","medrel","medind","esreservas","esvistorias","esespacos","fornecedores","usuarios","acessos"];
 const TIPOS_LIMPEZA = ["saida","entrada"];
 const modo = () => S.adm ? "Administração" : S.setor;
 // Mesmo menu nos três setores (pedido de 24/10/2026); cada pessoa vê só o que o perfil permite.
@@ -63,7 +63,7 @@ const modo = () => S.adm ? "Administração" : S.setor;
 // Ronda: só no setor Administração (pedido de 24/10/2026)
 // Unidades e moradores: só no setor Administração (pedido de 24/10/2026; dados pessoais)
 // Central de medições (água, energia e gás): só no setor Administração (pedido de 24/10/2026)
-const SO_ADM = ["inicio","pdpainel","pendencias","cotacoes","rondas","unidades","uncadastro","unconfig","medlanc","medidores","medrel","esreservas","esvistorias","esespacos","fornecedores"], FORA_LIMPEZA = ["demandas","emprestimos","minhaequipe"], SO_MANUT = ["prestadores"];
+const SO_ADM = ["inicio","pdpainel","pendencias","cotacoes","rondas","unidades","uncadastro","unconfig","medlanc","medidores","medrel","medind","esreservas","esvistorias","esespacos","fornecedores"], FORA_LIMPEZA = ["demandas","emprestimos","minhaequipe"], SO_MANUT = ["prestadores"];
 const naManut = () => !S.adm && S.setor !== "Limpeza";
 const abaNoModo = t => t === "painel" ? !S.adm : SO_ADM.includes(t) ? S.adm : SO_MANUT.includes(t) ? naManut() : !(!S.adm && S.setor === "Limpeza" && FORA_LIMPEZA.includes(t));
 const ehSindico = () => norm(S.perfil).includes("sindico");
@@ -171,7 +171,7 @@ function mostrarLogin(msg){
   ($("#l-usuario").value ? $("#l-senha") : $("#l-usuario")).focus();
 }
 // sair encerra a sessão também no servidor: o código guardado no aparelho deixa de valer
-function encerrarLocal(msg){ S.token = ""; S.perms = {}; S.rel = null; S.eq = null; S.pend = null; unLimparMemoria(); mdLimpar(); esLimpar(); FO.lista = null; fecharModal(); apagarSessao(); abrirMenuAdm(false); fecharMenu(); mostrarLogin(msg); renderMenu(); }
+function encerrarLocal(msg){ S.token = ""; S.perms = {}; S.rel = null; S.eq = null; S.pend = null; unLimparMemoria(); mdLimpar(); miLimpar(); esLimpar(); FO.lista = null; fecharModal(); apagarSessao(); abrirMenuAdm(false); fecharMenu(); mostrarLogin(msg); renderMenu(); }
 function sair(msg){
   const tk = S.token;
   if (tk && API) { try { fetch(API, {method:"POST", body:JSON.stringify({acao:"sair", token:tk}), redirect:"follow", keepalive:true}).catch(()=>{}); } catch(e){} }
@@ -348,6 +348,7 @@ function setTab(t){
   if (t==="rondas") { renderRondas(); carregarRondas(true); }
   if (t==="unidades" || t==="uncadastro" || t==="unconfig") { renderUnidadesTudo(); carregarUnidades(); }
   if (t==="medlanc" || t==="medidores" || t==="medrel") { renderMedTudo(); carregarMed(); }
+  if (t==="medind") { renderMI(); carregarMI(); carregarMed(); }
   if (t==="esreservas" || t==="esvistorias" || t==="esespacos") { renderEspTudo(); carregarEsp(); }
   if (t==="fornecedores") { renderForn(); carregarForn(); }
   if (t==="inicio") { renderInicio(); if (can("pendencias")) carregarPend(); }
@@ -457,7 +458,7 @@ const MENU = [
   {g:"Unidades", ico:'<path d="M5 21V4h10v17M15 9h4v12M8 8h1M11 8h1M8 12h1M11 12h1M8 16h1M11 16h1M3 21h18"/>', itens:[
     {t:"unidades", rot:"Lista de unidades"}, {t:"uncadastro", rot:"Atualização cadastral"}, {t:"unconfig", rot:"Configurações"}]},
   {g:"Central de medições", ico:'<path d="M3 7.5c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0M3 12.5c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0M3 17.5c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0"/>', itens:[
-    {t:"medlanc", rot:"Sinalizar consumo"}, {t:"medidores", rot:"Meus medidores"}, {t:"medrel", rot:"Relatórios"}]},
+    {t:"medlanc", rot:"Sinalizar consumo"}, {t:"medidores", rot:"Meus medidores"}, {t:"medrel", rot:"Relatórios"}, {t:"medind", rot:"Medição individual"}]},
   {g:"Espaços", ico:'<path d="M4 21V5a1 1 0 0 1 1-1h9v17M14 8h5v13M3 21h18M10 12v1"/>', itens:[
     {t:"esvistorias", rot:"Checklist"}, {t:"esreservas", rot:"Reservas", b:"b-esp"}, {t:"esespacos", rot:"Espaços"}]},
   {g:"Administração", ico:'<path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 6.5M18 14.5a6 6 0 0 1 3.5 5.5"/>', itens:[
@@ -6207,11 +6208,13 @@ function unFicha(id){
       ${u.pessoas.length ? u.pessoas.map(p => `<tr><td>${esc(p.nome)}</td><td>${sn(p.parentesco)}</td><td>${sn(p.morador)}</td><td class="hide-s">${sn(p.facial)}</td><td class="hide-s">${sn(p.barco)}</td><td class="hide-m un-pre">${sn(p.contatos)}</td></tr>`).join("") : `<tr><td colspan="6"><div class="empty">Nenhuma pessoa cadastrada.</div></td></tr>`}</tbody></table></div>
     <div class="os-grid"><section><h4>Pets (${u.pets.length})</h4>${u.pets.length ? `<ul class="pr-docs">${u.pets.map(p => `<li>${esc(p.descricao)}</li>`).join("")}</ul>` : `<p class="muted">Nenhum.</p>`}</section>
       <section><h4>Veículos (${u.veiculos.length})</h4>${u.veiculos.length ? `<ul class="pr-docs">${u.veiculos.map(v => `<li><b class="mono">${esc(v.placa || "sem placa")}</b> ${esc([v.marca, v.modelo, v.cor].filter(Boolean).join(" · "))}${v.vaga ? ` · vaga ${esc(v.vaga)}` : ""}${v.tag ? ` · TAG ${esc(v.tag)}` : ""}</li>`).join("")}</ul>` : `<p class="muted">Nenhum.</p>`}</section></div>
+    ${miPode() ? `<section class="un-agua" id="un-f-agua"></section>` : ""}
     <div class="actions" style="margin-top:12px">${unPode() ? `<button class="btn primary" type="button" id="un-f-ed">Atualizar cadastro</button>` : ""}<button class="btn" type="button" id="un-f-pr">Imprimir ficha</button><button class="btn" type="button" id="un-f-x">Fechar</button></div>`;
   $("#modal").hidden = false;
   $("#un-f-x").onclick = fecharModal; $("#un-f-x").focus();
   $("#un-f-pr").onclick = () => unImprimir(u);
   if ($("#un-f-ed")) $("#un-f-ed").onclick = () => { fecharModal(); unEditar(u.id); };
+  miNaFicha(u);
 }
 function unExportar(){
   if (!UN.lista) return;
@@ -6535,7 +6538,286 @@ async function carregarMed(forcar){
   catch(e){ MD.erro = e.message; toast(e.message, true); }
   finally { MD.carregando = false; renderMedTudo(); }
 }
-function renderMedTudo(){ renderMedLanc(); renderMedidores(); renderMedRel(); }
+function renderMedTudo(){ renderMedLanc(); renderMedidores(); renderMedRel(); renderMI(); }
+// ---------- Medição individual (Exista): consumo de água por unidade, alertas e conferência com a concessionária ----------
+const MI = { d:null, erro:"", carregando:false, em:0, per:"", bloco:"", q:"", f:"", ord:"" };
+const MI_ALTO = 40;            // a Exista destaca as unidades com 40 m³ ou mais
+const MI_MESES = ["janeiro","fevereiro","marco","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+const miPode = () => can("med_ver") || can("med_lancar") || can("un_ver") || can("un_editar");
+const miRotPer = p => { const [a, m] = String(p).split("-"); return (MI_MESES[+m - 1] ? MI_MESES[+m - 1].replace("marco", "março") : m) + "/" + a; };
+const miBlocoRot = b => String(b) === "0" || !String(b).trim() ? "—" : String(b);
+const miChaveU = x => String(x.bloco).trim().toLowerCase() + "|" + String(x.unidade).trim().toLowerCase();
+const miNumBR = v => { if (typeof v === "number") return v; const s = String(v ?? "").trim(); if (!s) return NaN; return Number(s.includes(",") ? s.replace(/\./g, "").replace(",", ".") : s); };
+function miLimpar(){ MI.d = null; MI.erro = ""; MI.em = 0; }
+async function carregarMI(forcar){
+  if (!TEM_ADM || !S.token || MI.carregando || !miPode()) return;
+  if (!forcar && MI.d && Date.now() - MI.em < 60000) { renderMI(); return; }
+  MI.carregando = true;
+  try { const r = await api("miLista"); MI.d = {mi:r.mi || [], mir:r.mir || []}; MI.em = Date.now(); MI.erro = ""; }
+  catch(e){ MI.erro = e.message; }
+  finally { MI.carregando = false; renderMI(); }
+}
+function miAplicar(r){ if (r && Array.isArray(r.mi)) { MI.d = {mi:r.mi, mir:r.mir || []}; MI.em = Date.now(); } }
+// histórico da unidade (todos os períodos, em ordem) e a análise do período escolhido
+function miHist(x){ const k = miChaveU(x); return MI.d.mi.filter(y => miChaveU(y) === k).sort((a, b) => a.periodo < b.periodo ? -1 : 1); }
+function miAnalise(x){
+  const ant = miHist(x).filter(y => y.periodo < x.periodo).slice(-6).map(y => Number(y.consumo)).filter(n => !isNaN(n));
+  const media = ant.length ? ant.reduce((s, n) => s + n, 0) / ant.length : null, c = Number(x.consumo);
+  const varia = media ? (c - media) / media : null;
+  const alto = c >= MI_ALTO, subiu = media !== null && media > 0 && c >= media * 1.5 && c - media >= 5;
+  return {media, varia, alto, subiu, alerta: alto || subiu};
+}
+// período da tela: o escolhido ou o mais recente que veio da planilha
+function miPeriodos(){ return [...new Set(MI.d.mi.filter(x => x.origem !== "Histórico Exista").map(x => x.periodo))].sort().reverse(); }
+function renderMI(){
+  const sec = $("#t-medind"); if (!sec || sec.hidden) return;
+  const box = $("#mi-corpo"); $("#mi-importar").hidden = !can("med_lancar");
+  if (MI.erro && !MI.d) { box.innerHTML = `<div class="notice crit">${esc(MI.erro)}${/desconhecida/i.test(MI.erro) ? " A medição individual precisa do Apps Script novo (colar o código e implantar uma nova versão)." : ""}</div>`; return; }
+  if (!MI.d) { box.innerHTML = `<div class="empty"><span class="spin" aria-hidden="true"></span> Carregando…</div>`; return; }
+  const pers = miPeriodos();
+  const sp = $("#mi-per");
+  sp.innerHTML = pers.length ? pers.map(p => `<option value="${p}">${esc(miRotPer(p))}</option>`).join("") : `<option value="">—</option>`;
+  if (!pers.includes(MI.per)) MI.per = pers[0] || "";
+  sp.value = MI.per;
+  if (!pers.length) { box.innerHTML = `<div class="empty">Nenhum relatório da Exista importado ainda.${can("med_lancar") ? ` Clique em <b>Importar relatórios da Exista</b> e escolha a planilha (Excel) do mês; o Relatório Global e o Individual (PDF) são opcionais.` : ""}</div>`; return; }
+  const doPer = MI.d.mi.filter(x => x.periodo === MI.per);
+  const blocos = [...new Set(doPer.map(x => String(x.bloco)))].sort((a, b) => a.localeCompare(b, "pt-BR", {numeric:true}));
+  const sb = $("#mi-bloco"); sb.innerHTML = `<option value="">Todos os blocos</option>` + blocos.map(b => `<option value="${esc(b)}">${b === "0" ? "Outros (sem bloco)" : "Bloco " + esc(b)}</option>`).join("");
+  if (!blocos.includes(MI.bloco)) MI.bloco = ""; sb.value = MI.bloco;
+  const an = new Map(doPer.map(x => [x.id, miAnalise(x)]));
+  const soma = doPer.reduce((s, x) => s + (Number(x.consumo) || 0), 0), valor = doPer.reduce((s, x) => s + (Number(x.valor) || 0), 0);
+  const alertas = doPer.filter(x => an.get(x.id).alerta), altos = doPer.filter(x => an.get(x.id).alto).length, subiram = doPer.filter(x => an.get(x.id).subiu).length;
+  const ini = doPer.map(x => x.dataIni).filter(Boolean).sort()[0], fim = doPer.map(x => x.dataFim).filter(Boolean).sort().pop();
+  const card = (rot, v, sub, cor, ico) => `<div class="pp-card md-kpi"><span class="pp-txt"><span class="pp-rot">${rot}</span><b class="pp-v num">${v}</b><span class="pp-sub">${sub}</span></span><span class="pp-ico ${cor}"><svg viewBox="0 0 24 24" aria-hidden="true">${ico}</svg></span></div>`;
+  const icoAgua = MD_INFO["Água"].ico, icoAlerta = '<path d="M12 4 2.5 20h19zM12 10v4.5M12 17.5h.01"/>';
+  let h = `<div class="pp-cards md-cards">`
+    + card("Soma das unidades", `${mdF(soma, 2)} m³`, `${doPer.length} unidade${doPer.length === 1 ? "" : "s"}${ini && fim ? ` · ${fData(ini)} a ${fData(fim)}` : ""}`, "azul", icoAgua)
+    + card("Valor individualizado", valor ? fBRL(valor) : "—", "soma do valor das unidades", "verde", '<path d="M12 3v18M16.5 7.5c0-1.7-2-3-4.5-3s-4.5 1.3-4.5 3 2 2.6 4.5 3 4.5 1.3 4.5 3-2 3-4.5 3-4.5-1.3-4.5-3"/>')
+    + card("Alertas", String(alertas.length), `${altos} com ${MI_ALTO} m³ ou mais · ${subiram} subiram muito`, alertas.length ? "vermelho" : "verde", icoAlerta)
+    + `</div>`;
+  h += miConferencia(soma);
+  // consumo por bloco
+  const porB = blocos.map(b => ({b, s: doPer.filter(x => String(x.bloco) === b).reduce((s, x) => s + (Number(x.consumo) || 0), 0), n: doPer.filter(x => String(x.bloco) === b).length}));
+  const maxB = Math.max(1, ...porB.map(x => x.s));
+  h += `<section class="panel mi-blocos"><h3 class="mi-h">Consumo por bloco</h3>${porB.map(x => `<button type="button" class="mi-barra" data-mi-bloco="${esc(x.b)}" aria-pressed="${MI.bloco === x.b}"><span class="mi-bn">${x.b === "0" ? "Outros" : "Bloco " + esc(x.b)}</span><span class="mi-bt"><span style="width:${(x.s / maxB * 100).toFixed(1)}%"></span></span><span class="mi-bv num">${mdF(x.s, 1)} m³<span class="sub">${x.n} un.</span></span></button>`).join("")}</section>`;
+  // tabela
+  const q = norm(MI.q);
+  let vis = doPer.filter(x => (!MI.bloco || String(x.bloco) === MI.bloco) && (!q || norm(x.unidade + " " + x.bloco + " " + (x.hidrometro || "")).includes(q)) && (MI.f !== "alertas" || an.get(x.id).alerta));
+  if (MI.ord === "consumo") vis = vis.slice().sort((a, b) => Number(b.consumo) - Number(a.consumo));
+  else if (MI.ord === "variacao") vis = vis.slice().sort((a, b) => (an.get(b.id).varia ?? -9) - (an.get(a.id).varia ?? -9));
+  const pill = a => (a.alto ? `<span class="pill s-zero">${MI_ALTO}+ m³</span>` : "") + (a.subiu ? `<span class="pill s-baixo">subiu ${mdF(a.varia * 100, 0)}%</span>` : "") + (!a.alerta ? `<span class="pill s-ok">Normal</span>` : "");
+  h += `<div class="tablebox"><table class="mi-tab"><thead><tr><th>Bloco</th><th>Unidade</th><th class="hide-s num">Leitura anterior</th><th class="hide-s num">Leitura atual</th><th class="num">Consumo</th><th class="hide-m num">Média anterior</th><th class="num">Valor</th><th>Situação</th></tr></thead><tbody>`
+    + (vis.length ? vis.map(x => { const a = an.get(x.id); return `<tr class="click ${a.alerta ? "mi-alerta" : ""}" data-mi-u="${esc(x.id)}" tabindex="0"><td>${esc(miBlocoRot(x.bloco))}</td><td><b>${esc(x.unidade)}</b></td><td class="hide-s num">${x.leituraAnt !== "" ? mdF(x.leituraAnt, 2) : "—"}</td><td class="hide-s num">${x.leituraAtual !== "" ? mdF(x.leituraAtual, 2) : "—"}</td><td class="num"><b>${mdF(x.consumo, 2)} m³</b></td><td class="hide-m num">${a.media !== null ? mdF(a.media, 2) + " m³" : "—"}</td><td class="num">${x.valor !== "" ? fBRL(x.valor) : "—"}</td><td>${pill(a)}</td></tr>`; }).join("")
+      : `<tr><td colspan="8"><div class="empty">Nenhuma unidade com esses filtros.</div></td></tr>`)
+    + `</tbody></table></div>`;
+  h += can("med_lancar") ? `<p class="hint mi-rod">Importou o período errado? <button type="button" class="link" id="mi-excluir">Excluir ${esc(miRotPer(MI.per))}</button></p>` : "";
+  box.innerHTML = h;
+}
+// conferência: conta da concessionária x soma da Exista x hidrômetros de água da área comum (Central de medições)
+function miConferencia(soma){
+  const r = MI.d.mir.find(x => x.periodo === MI.per);
+  if (!r || r.concM3 === "" || r.concM3 === undefined) return `<section class="panel mi-conf"><h3 class="mi-h">Conferência com a concessionária</h3><p class="muted">Importe também o <b>Relatório Global</b> (PDF) da Exista deste mês para comparar a soma das unidades com a conta da concessionária.</p></section>`;
+  const conc = Number(r.concM3), ex = r.somaExista !== "" ? Number(r.somaExista) : soma;
+  let comum = null, cobre = "";
+  if (MD.d && r.concIni && r.concFim) {
+    const meds = MD.d.medidores.filter(m => m.tipo === "Água" && m.ativo !== "Não");
+    if (meds.length) {
+      const dias = mdDiasEntre(r.concIni, r.concFim); let s = 0, n = 0;
+      meds.forEach(m => { const f = mdSomaFaixa(m, mdSomaDia(r.concIni, 1), r.concFim); s += f.s * mdFator(m, "m³"); n = Math.max(n, f.n); });
+      comum = s; cobre = n < dias ? ` (leituras em ${n} de ${dias} dias)` : "";
+    }
+  }
+  const dif = conc - ex - (comum || 0), pct = conc ? dif / conc * 100 : 0;
+  const leitura = Math.abs(pct) < 3 ? `<span class="pill s-ok">Bate com a conta</span> diferença pequena (até 3%).`
+    : dif > 0 ? `<span class="pill s-baixo">Sobra água não medida</span> a concessionária cobrou mais do que a soma das unidades${comum !== null ? " e da área comum" : ""}: pode ser área comum sem medidor, vazamento ou unidade sem leitura.`
+    : `<span class="pill s-baixo">Medição acima da conta</span> as unidades somaram mais do que a conta. Os períodos de leitura da Exista e da concessionária são diferentes; confira se a diferença se repete nos próximos meses.`;
+  return `<section class="panel mi-conf"><h3 class="mi-h">Conferência com a ${esc(r.concessionaria || "concessionária")}</h3>
+    <dl class="mi-dl"><div><dt>Conta da ${esc(r.concessionaria || "concessionária")}</dt><dd><b>${mdF(conc, 1)} m³</b>${r.concValor !== "" ? ` · ${fBRL(r.concValor)}` : ""}<span class="sub">${r.concIni ? `${fData(r.concIni)} a ${fData(r.concFim)}` : ""}${r.valorM3 !== "" ? ` · ${fBRL(r.valorM3)}/m³` : ""}${r.vencimento ? ` · vence ${fData(r.vencimento)}` : ""}</span></dd></div>
+      <div><dt>Soma da Exista (unidades)</dt><dd><b>${mdF(ex, 1)} m³</b><span class="sub">${r.dataIni ? `${fData(r.dataIni)} a ${fData(r.dataFim)}` : ""}</span></dd></div>
+      <div><dt>Área comum (hidrômetros de água da Central)</dt><dd>${comum !== null ? `<b>${mdF(comum, 1)} m³</b><span class="sub">no período da conta${cobre}</span>` : `<span class="muted">sem leituras no período da conta</span>`}</dd></div>
+      <div><dt>Diferença</dt><dd><b class="${Math.abs(pct) >= 3 ? "md-sobe" : ""}">${dif > 0 ? "+" : ""}${mdF(dif, 1)} m³ (${pct > 0 ? "+" : ""}${mdF(pct, 1)}%)</b></dd></div></dl>
+    <p class="hint">${leitura}</p></section>`;
+}
+function miAbrirUnidade(id){
+  const x = MI.d.mi.find(y => y.id === id); if (!x) return;
+  const hs = miHist(x), max = Math.max(1, ...hs.map(y => Number(y.consumo) || 0)), a = miAnalise(x);
+  const info = hs.slice().reverse().find(y => y.hidrometro) || {};
+  $("#modal-box").innerHTML = `<h3>Unidade ${esc(x.unidade)}${String(x.bloco) !== "0" ? ` · Bloco ${esc(x.bloco)}` : ""}</h3>
+    <p class="muted">${info.hidrometro ? `Hidrômetro ${esc(info.hidrometro)}${info.local ? ` · ${esc(info.local)}` : ""} · ` : ""}${a.media !== null ? `média anterior ${mdF(a.media, 2)} m³` : "sem histórico anterior"}</p>
+    <div class="mi-hist">${hs.map(y => `<div class="mi-hb ${y.periodo === x.periodo ? "atual" : ""}"><span class="mi-hv num">${mdF(y.consumo, 1)}</span><span class="mi-hbar" style="height:${Math.max(2, (Number(y.consumo) || 0) / max * 100).toFixed(1)}%"></span><span class="mi-hm">${esc(miRotPer(y.periodo).slice(0, 3))}/${esc(String(y.periodo).slice(2, 4))}</span></div>`).join("")}</div>
+    <div class="tablebox flat"><table><thead><tr><th>Período</th><th class="num">Leitura atual</th><th class="num">Consumo</th><th class="num">Valor</th></tr></thead><tbody>
+      ${hs.slice().reverse().map(y => `<tr><td>${esc(miRotPer(y.periodo))}${y.dataFim ? `<span class="sub">${fData(y.dataFim)}</span>` : ""}</td><td class="num">${y.leituraAtual !== "" && y.leituraAtual !== undefined ? mdF(y.leituraAtual, 2) : "—"}</td><td class="num"><b>${mdF(y.consumo, 2)} m³</b></td><td class="num">${y.valor !== "" && y.valor !== undefined ? fBRL(y.valor) : "—"}</td></tr>`).join("")}
+    </tbody></table></div>
+    <div class="actions"><button class="btn" type="button" id="mi-u-x">Fechar</button></div>`;
+  $("#modal").hidden = false; $("#mi-u-x").onclick = fecharModal; $("#mi-u-x").focus();
+}
+// ----- leitura dos relatórios da Exista -----
+// planilha (Excel): cabeçalho TIPO | UNIDADE | BLOCO | DATA | ... | LEITURA ANTERIOR | LEITURA ATUAL | LEITURA ESTIMADA | CONSUMO EM M³ | INDIVIDUAL R$
+function miLerPlanilha(F){
+  const t = (r, c) => { const v = F.val(r, c); return v === undefined || v === null ? "" : v; };
+  const n = s => norm(String(s)).replace(/\s+/g, " ").trim();
+  let hr = -1, col = {};
+  for (let r = F.r0; r <= Math.min(F.r1, F.r0 + 40) && hr < 0; r++) {
+    const m = {};
+    for (let c = F.c0; c <= F.c1; c++) {
+      const h = n(t(r, c));
+      if (h === "tipo") m.tipo = c; else if (h === "unidade") m.unidade = c; else if (h === "bloco") m.bloco = c; else if (h === "data") m.data = c;
+      else if (/^leitura anterior/.test(h)) m.ant = c; else if (/^leitura atual/.test(h)) m.atual = c; else if (/^leitura estimada/.test(h)) m.est = c;
+      else if (/^consumo/.test(h)) m.consumo = c; else if (/^individual|^valor/.test(h)) m.valor = c;
+    }
+    if (m.unidade !== undefined && m.consumo !== undefined) { hr = r; col = m; }
+  }
+  if (hr < 0) return null;
+  // "Período da leitura:" ini - fim (acima do cabeçalho)
+  let ini = "", fim = "";
+  for (let r = F.r0; r < hr; r++) for (let c = F.c0; c <= F.c1; c++) if (/^periodo da leitura/.test(n(t(r, c)))) {
+    const ds = []; for (let k = c + 1; k <= F.c1; k++) { const d = dataPlanilha(t(r, k)); if (d) ds.push(d); }
+    ini = ds[0] || ""; fim = ds[1] || "";
+  }
+  const out = [];
+  for (let r = hr + 1; r <= F.r1; r++) {
+    const u = String(t(r, col.unidade)).trim(); if (!u) continue;
+    if (col.tipo !== undefined) { const tp = n(t(r, col.tipo)); if (tp && !/agua/.test(tp)) continue; }
+    const consumo = miNumBR(t(r, col.consumo)); if (isNaN(consumo)) continue;
+    const dataFim = col.data !== undefined ? dataPlanilha(t(r, col.data)) || fim : fim;
+    const num = k => { if (col[k] === undefined) return ""; const v = miNumBR(t(r, col[k])); return isNaN(v) ? "" : Math.round(v * 1000) / 1000; };
+    out.push({bloco: col.bloco !== undefined ? String(t(r, col.bloco)).trim() : "", unidade:u, dataIni:ini, dataFim, leituraAnt:num("ant"), leituraAtual:num("atual"), estimada:num("est"), consumo:Math.round(consumo * 1000) / 1000, valor: col.valor !== undefined ? num("valor") : ""});
+  }
+  if (!out.length) return null;
+  const periodo = (out.map(x => x.dataFim).filter(Boolean).sort().pop() || fim || "").slice(0, 7);
+  out.forEach(x => { x.periodo = periodo; });
+  return {periodo, ini, fim, unidades:out};
+}
+const miBR = s => { const m = /(\d{2})\/(\d{2})\/(\d{4})/.exec(String(s || "")); return m ? `${m[3]}-${m[2]}-${m[1]}` : ""; };
+// Relatório Global (PDF): dados da concessionária e soma da Exista
+function miLerGlobal(linhas){
+  const L = linhas.map(l => String(l).replace(/\s+/g, " ").trim()), tudo = L.join("\n");
+  if (!/consumo global/i.test(tudo)) return null;
+  const pega = re => { const m = re.exec(tudo); return m ? m[1] : ""; };
+  const pers = [...tudo.matchAll(/Per[ií]odo da leitura:? (\d{2}\/\d{2}\/\d{4}) ?- ?(\d{2}\/\d{2}\/\d{4})/gi)];
+  const num = re => { const v = miNumBR(pega(re)); return isNaN(v) ? "" : v; };
+  const r = {
+    dataIni: pers[0] ? miBR(pers[0][1]) : "", dataFim: pers[0] ? miBR(pers[0][2]) : "",
+    concIni: pers[1] ? miBR(pers[1][1]) : "", concFim: pers[1] ? miBR(pers[1][2]) : "",
+    concessionaria: pega(/Nome da concession[aá]ria (.+)/i).trim(),
+    vencimento: miBR(pega(/vencimento da conta (\d{2}\/\d{2}\/\d{4})/i)),
+    concM3: num(/Consumo total da concession[aá]ria m³ ([\d.,]+)/i), concValor: num(/Valor total da concession[aá]ria R\$ ([\d.,]+)/i),
+    valorM3: num(/Valor por m³[^\n]*?R\$\/m³ ([\d.,]+)/i), somaExista: num(/Soma do consumo medido pela EXISTA m³ ([\d.,]+)/i)
+  };
+  r.periodo = r.dataFim.slice(0, 7);
+  return r.periodo && r.concM3 !== "" ? r : null;
+}
+// Demonstrativo Individual (PDF): hidrômetro, localização e o histórico de consumo dos meses anteriores de cada unidade
+function miLerIndividual(linhas){
+  const L = linhas.map(l => String(l).replace(/\s+/g, " ").trim());
+  const out = []; let cur = null;
+  const MES = "(janeiro|fevereiro|mar[cç]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)";
+  L.forEach(l => {
+    let m = /^UNIDADE:? (\S+(?: \S+)*?) Bloco (\S+)/i.exec(l);
+    if (m) { cur = {unidade:m[1].trim(), bloco:m[2].trim(), hist:[], hidrometro:"", local:"", fim:""}; out.push(cur); return; }
+    if (!cur) return;
+    m = new RegExp("^" + MES + " ([\\d.,]+)(?: (\\S+) (.+?) (\\d{2}/\\d{2}/\\d{4}) [\\d.,]+ (\\d{2}/\\d{2}/\\d{4}) [\\d.,]+ [\\d.,]+ [\\d.,]+)?$", "i").exec(l);
+    if (m) {
+      cur.hist.push({mes: MI_MESES.indexOf(norm(m[1]).replace("ç", "c")) + 1, consumo: miNumBR(m[2])});
+      if (m[3]) { cur.hidrometro = m[3]; cur.local = m[4]; cur.fim = miBR(m[6]); }
+    }
+  });
+  const ok = out.filter(u => u.hist.length);
+  if (!ok.length) return null;
+  const fimGeral = ok.map(u => u.fim).filter(Boolean).sort().pop() || "";
+  return {periodo: fimGeral.slice(0, 7), unidades: ok};
+}
+// meses do histórico do demonstrativo → períodos (AAAA-MM) anteriores ao período de referência
+function miHistDe(u, periodo){
+  const ref = (u.fim || "").slice(0, 7) || periodo; if (!ref) return [];
+  const ano = +ref.slice(0, 4), mesRef = +ref.slice(5, 7);
+  return u.hist.filter(h => h.mes > 0 && !isNaN(h.consumo)).map(h => ({periodo: `${h.mes < mesRef ? ano : ano - 1}-${String(h.mes).padStart(2, "0")}`, bloco:u.bloco, unidade:u.unidade, consumo: Math.round(h.consumo * 1000) / 1000}));
+}
+async function miLerArquivo(file){
+  if (/\.xlsx$/i.test(file.name)) {
+    const abas = await xlsxLer(await file.arrayBuffer());
+    for (const a of abas) { const r = miLerPlanilha(a.folha); if (r) return {tipo:"planilha", r}; }
+    return {tipo:"?", erro:"Não achei a tabela da Exista (TIPO, UNIDADE, BLOCO… CONSUMO EM M³) nesta planilha."};
+  }
+  if (/\.pdf$/i.test(file.name)) {
+    const lib = await carregarPDFjs(), doc = await lib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise, pags = [];
+    for (let i = 1; i <= Math.min(doc.numPages, 200); i++) { const pg = await doc.getPage(i); pags.push((await pg.getTextContent()).items); }
+    const linhas = LeitorNF.montarLinhas(pags);
+    const g = miLerGlobal(linhas); if (g) return {tipo:"global", r:g};
+    const ind = miLerIndividual(linhas); if (ind) return {tipo:"individual", r:ind};
+    return {tipo:"?", erro:"Este PDF não parece o Relatório Global nem o Demonstrativo Individual da Exista."};
+  }
+  return {tipo:"?", erro:"Escolha a planilha (.xlsx) ou os PDFs da Exista."};
+}
+function miImportar(){
+  $("#modal-box").innerHTML = `<h3>Importar relatórios da Exista</h3>
+    <p class="hint" style="margin:-6px 0 12px">Escolha a <b>planilha (Excel)</b> do mês. Se quiser, junte também o <b>Relatório Global</b> (PDF, traz a conta da concessionária) e o <b>Demonstrativo Individual</b> (PDF, traz o hidrômetro e os meses anteriores de cada unidade). Pode escolher os três de uma vez.</p>
+    <div class="field full"><input class="input" type="file" id="mi-arqs" accept=".xlsx,.pdf" multiple></div>
+    <div id="mi-prev"></div>
+    <div class="actions"><button class="btn primary" type="button" id="mi-ok" disabled>Importar</button><button class="btn" type="button" id="mi-x">Cancelar</button><span class="hint" id="mi-msg"></span></div>`;
+  $("#modal").hidden = false; $("#mi-x").onclick = fecharModal;
+  let lido = null;
+  $("#mi-arqs").onchange = async () => {
+    const fs = [...$("#mi-arqs").files]; lido = null; $("#mi-ok").disabled = true;
+    if (!fs.length) { $("#mi-prev").innerHTML = ""; return; }
+    $("#mi-prev").innerHTML = `<div class="empty"><span class="spin" aria-hidden="true"></span> Lendo ${fs.length} arquivo${fs.length === 1 ? "" : "s"}…</div>`;
+    const res = [];
+    for (const f of fs) { try { res.push(Object.assign({nome:f.name}, await miLerArquivo(f))); } catch(e){ res.push({nome:f.name, tipo:"?", erro:"Não consegui ler este arquivo."}); } }
+    const pl = res.find(x => x.tipo === "planilha"), gl = res.find(x => x.tipo === "global"), ind = res.find(x => x.tipo === "individual");
+    const periodo = (pl && pl.r.periodo) || (gl && gl.r.periodo) || (ind && ind.r.periodo) || "";
+    const li = [];
+    res.filter(x => x.erro).forEach(x => li.push(`<li class="err">${esc(x.nome)}: ${esc(x.erro)}</li>`));
+    if (pl) { const s = pl.r.unidades.reduce((a, x) => a + x.consumo, 0); li.push(`<li><b>Planilha:</b> ${pl.r.unidades.length} unidades · ${mdF(s, 2)} m³ · leitura de ${fData(pl.r.ini)} a ${fData(pl.r.fim)}</li>`); }
+    if (gl) li.push(`<li><b>Relatório Global:</b> ${esc(gl.r.concessionaria || "concessionária")} ${mdF(gl.r.concM3, 1)} m³${gl.r.concValor !== "" ? " · " + fBRL(gl.r.concValor) : ""} (${fData(gl.r.concIni)} a ${fData(gl.r.concFim)}) · soma da Exista ${gl.r.somaExista !== "" ? mdF(gl.r.somaExista, 1) + " m³" : "—"}</li>`);
+    if (ind) li.push(`<li><b>Demonstrativo Individual:</b> ${ind.r.unidades.length} unidades · ${ind.r.unidades.filter(u => u.hidrometro).length ? "hidrômetro e " : ""}${Math.max(...ind.r.unidades.map(u => u.hist.length))} meses anteriores de consumo</li>`);
+    const per = [pl, gl, ind].filter(Boolean).map(x => x.r.periodo).filter(Boolean);
+    const conflito = new Set(per).size > 1;
+    if (conflito) li.push(`<li class="err">Os arquivos são de meses diferentes (${[...new Set(per)].map(miRotPer).join(", ")}). Escolha os do mesmo mês.</li>`);
+    const jaTem = periodo && MI.d && MI.d.mi.some(x => x.periodo === periodo && x.origem !== "Histórico Exista");
+    $("#mi-prev").innerHTML = `<div class="notice ${conflito || !(pl || gl || ind) ? "crit" : ""}" style="margin:0 0 12px"><p style="margin:0 0 6px"><b>Período: ${periodo ? esc(miRotPer(periodo)) : "—"}</b>${jaTem ? " · já importado antes: as unidades serão atualizadas" : ""}</p><ul class="mi-li">${li.join("")}</ul></div>`;
+    if (conflito || !(pl || gl || ind) || !periodo) return;
+    // o demonstrativo completa a planilha com o hidrômetro e a localização de cada unidade
+    const info = new Map(ind ? ind.r.unidades.map(u => [miChaveU(u), u]) : []);
+    const unidades = pl ? pl.r.unidades.map(x => { const u = info.get(miChaveU(x)); return u ? Object.assign({}, x, {hidrometro:u.hidrometro, local:u.local}) : x; }) : [];
+    lido = {periodo, unidades, historico: ind ? ind.r.unidades.flatMap(u => miHistDe(u, periodo)) : [], resumo: gl ? gl.r : null};
+    $("#mi-ok").disabled = false;
+  };
+  $("#mi-ok").onclick = () => { if (!lido) return; enviar($("#mi-ok"), $("#mi-msg"), "miImportar", lido, r => { miAplicar(r); MI.per = lido.periodo; fecharModal(); toast(r.msg); renderMI(); }); };
+}
+$("#mi-importar").addEventListener("click", miImportar);
+$("#mi-per").addEventListener("change", e => { MI.per = e.target.value; renderMI(); });
+$("#mi-bloco").addEventListener("change", e => { MI.bloco = e.target.value; renderMI(); });
+$("#mi-q").addEventListener("input", e => { MI.q = e.target.value.trim(); renderMI(); });
+$("#mi-filtro").addEventListener("change", e => { MI.f = e.target.value; renderMI(); });
+$("#mi-ord").addEventListener("change", e => { MI.ord = e.target.value; renderMI(); });
+$("#mi-corpo").addEventListener("click", e => {
+  const b = e.target.closest("[data-mi-bloco]"); if (b) { MI.bloco = MI.bloco === b.dataset.miBloco ? "" : b.dataset.miBloco; renderMI(); return; }
+  const u = e.target.closest("[data-mi-u]"); if (u) { miAbrirUnidade(u.dataset.miU); return; }
+  if (e.target.id === "mi-excluir") {
+    const per = MI.per;
+    $("#modal-box").innerHTML = `<h3>Excluir ${esc(miRotPer(per))}?</h3><p>Apaga as unidades e a conferência deste período da medição individual. Use só se importou o arquivo errado; depois é só importar de novo.</p><div class="actions"><button class="btn danger" type="button" id="mi-del-ok">Excluir o período</button><button class="btn" type="button" id="mi-del-x">Cancelar</button><span class="hint" id="mi-del-msg"></span></div>`;
+    $("#modal").hidden = false; $("#mi-del-x").onclick = fecharModal;
+    $("#mi-del-ok").onclick = () => enviar($("#mi-del-ok"), $("#mi-del-msg"), "miExcluir", {periodo:per}, r => { miAplicar(r); MI.per = ""; fecharModal(); toast(r.msg); renderMI(); });
+  }
+});
+$("#mi-corpo").addEventListener("keydown", e => { if (e.key === "Enter") { const u = e.target.closest("[data-mi-u]"); if (u) miAbrirUnidade(u.dataset.miU); } });
+// ficha da unidade (aba Unidades): consumo de água da medição individual
+async function miNaFicha(u){
+  const box = $("#un-f-agua"); if (!box || !miPode()) return;
+  const bn = (/\d+/.exec(unBlocoCurto(u.bloco)) || [""])[0], num = String(u.numero).trim().toLowerCase();
+  const pinta = () => {
+    if (!$("#un-f-agua")) return;
+    if (!MI.d) { box.innerHTML = MI.erro ? "" : `<p class="muted">Carregando…</p>`; return; }
+    const hs = MI.d.mi.filter(x => String(x.unidade).trim().toLowerCase() === num && (String(x.bloco).trim() === bn || (!bn && !String(x.bloco).trim()))).sort((a, b) => a.periodo < b.periodo ? -1 : 1).slice(-6);
+    if (!hs.length) { box.innerHTML = `<h4>Água (medição individual)</h4><p class="muted">Sem dados da Exista para esta unidade.</p>`; return; }
+    const ult = hs[hs.length - 1], a = miAnalise(ult);
+    box.innerHTML = `<h4>Água (medição individual)</h4><p>${esc(miRotPer(ult.periodo))}: <b>${mdF(ult.consumo, 2)} m³</b>${ult.valor !== "" && ult.valor !== undefined ? ` · ${fBRL(ult.valor)}` : ""}${a.media !== null ? ` · média anterior ${mdF(a.media, 2)} m³` : ""} ${a.alto ? `<span class="pill s-zero">${MI_ALTO}+ m³</span>` : ""}${a.subiu ? `<span class="pill s-baixo">subiu ${mdF(a.varia * 100, 0)}%</span>` : ""}</p>
+      <p class="muted">${hs.map(x => `${esc(miRotPer(x.periodo).slice(0, 3))}/${esc(String(x.periodo).slice(2, 4))}: ${mdF(x.consumo, 1)} m³`).join(" · ")}</p>`;
+  };
+  pinta();
+  if (!MI.d) { await carregarMI(); pinta(); }
+}
+
 const mdAviso = () => /desconhecida/i.test(MD.erro) ? " A Central de medições precisa do Apps Script novo (colar o código e implantar uma nova versão)." : "";
 function mdCarregando(box){
   if (MD.erro && !MD.d) { box.innerHTML = `<div class="notice crit">${esc(MD.erro)}${mdAviso()}</div>`; return true; }

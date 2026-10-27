@@ -1116,6 +1116,25 @@ td.num.atras{color:var(--crit);font-weight:700}
 .md-obs-t{margin:0;font-size:.86rem}
 .md-card-a{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:auto}
 .md-relbar{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;margin-bottom:16px}
+/* medição individual (Exista) */
+.mi-h{margin:0 0 10px;font-size:1rem}
+.mi-conf,.mi-blocos{margin-bottom:16px}
+.mi-dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 16px;margin:0 0 8px}
+.mi-dl dt{font-size:.74rem;font-weight:700;color:var(--muted)}.mi-dl dd{margin:2px 0 0}.mi-dl .sub{display:block;font-size:.8rem;color:var(--muted)}
+.mi-barra{display:grid;grid-template-columns:80px 1fr auto;gap:10px;align-items:center;width:100%;background:none;border:0;padding:5px 4px;border-radius:6px;cursor:pointer;color:inherit;font:inherit;text-align:left}
+.mi-barra:hover,.mi-barra[aria-pressed="true"]{background:var(--surface-2)}
+.mi-bn{font-weight:600;font-size:.88rem}.mi-bt{height:10px;background:var(--surface-2);border-radius:5px;overflow:hidden}.mi-bt span{display:block;height:100%;background:#2563eb;border-radius:5px}
+.mi-bv{font-size:.85rem;white-space:nowrap}.mi-bv .sub{margin-left:6px;color:var(--muted);font-size:.78rem}
+.mi-tab tr.mi-alerta td:first-child{box-shadow:inset 3px 0 0 var(--crit)}
+.mi-tab td .pill{margin-right:4px}
+.mi-rod{margin-top:10px}
+.mi-li{margin:0;padding-left:18px;display:grid;gap:4px}.mi-li .err{color:var(--crit)}
+.mi-hist{display:flex;align-items:flex-end;gap:6px;height:140px;margin:10px 0 14px;overflow-x:auto}
+.mi-hb{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;min-width:38px;height:100%;gap:3px}
+.mi-hbar{width:22px;background:#93b4f0;border-radius:4px 4px 0 0}.mi-hb.atual .mi-hbar{background:#2563eb}
+.mi-hv{font-size:.72rem}.mi-hm{font-size:.7rem;color:var(--muted);white-space:nowrap}
+.un-agua{margin-top:12px}.un-agua h4{margin:0 0 6px}.un-agua p{margin:0 0 4px}
+@media (max-width:640px){.mi-barra{grid-template-columns:62px 1fr auto}}
 .md-relbar-a{margin-left:auto;display:flex;gap:10px}
 .md-xls{background:#10b981;border-color:#10b981;color:#fff}.md-pdf{background:#dc2626;border-color:#dc2626;color:#fff}
 .md-sec{margin-bottom:16px;padding:18px}

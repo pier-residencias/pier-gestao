@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap"></noscript>
-<link rel="stylesheet" href="estilo.css?v=20261027const">
+<link rel="stylesheet" href="estilo.css?v=20261027mi">
 </head>
 <body>
 <div class="login" id="login" hidden>
@@ -306,6 +306,17 @@
       <label class="md-lbl">Tipo <select class="input" id="mr-tipo"><option value="dia">Dados diários</option><option value="mes">Dados mensais</option></select></label>
       <span class="md-relbar-a"><button class="btn md-xls" type="button" id="mr-excel">Excel</button><button class="btn md-pdf" type="button" id="mr-pdf">PDF</button></span></div>
     <div id="mr-corpo"><div class="empty">Carregando os relatórios…</div></div>
+  </section>
+
+  <section id="t-medind" hidden>
+    <div class="un-head"><div><h2 class="sec">Medição individual</h2><p class="muted">Consumo de água de cada unidade pelos relatórios da Exista, com alertas de consumo alto e a conferência com a conta da concessionária.</p></div>
+      <div class="actions"><button class="btn primary" type="button" id="mi-importar">Importar relatórios da Exista</button></div></div>
+    <div class="panel md-relbar"><label class="md-lbl">Período <select class="input" id="mi-per"></select></label>
+      <label class="md-lbl">Bloco <select class="input" id="mi-bloco"></select></label>
+      <label class="md-lbl">Unidade <input class="input" id="mi-q" type="search" placeholder="Ex.: 101"></label>
+      <label class="md-lbl">Mostrar <select class="input" id="mi-filtro"><option value="">Todas as unidades</option><option value="alertas">Só os alertas</option></select></label>
+      <label class="md-lbl">Ordenar <select class="input" id="mi-ord"><option value="">Bloco e unidade</option><option value="consumo">Maior consumo</option><option value="variacao">Maior aumento</option></select></label></div>
+    <div id="mi-corpo"><div class="empty">Carregando…</div></div>
   </section>
 
   <section id="t-esreservas" hidden>
@@ -723,7 +734,7 @@
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="config.js"></script>
-<script src="nfe.js?v=20261027const"></script>
-<script src="app.js?v=20261027const"></script>
+<script src="nfe.js?v=20261027mi"></script>
+<script src="app.js?v=20261027mi"></script>
 </body>
 </html>
