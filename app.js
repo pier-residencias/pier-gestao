@@ -3684,7 +3684,10 @@ function pdSalvarDepois(id, campo, valor){
   PD.timers.set(k, setTimeout(() => { PD.timers.delete(k); pdSalvar(id, {[campo]:valor}); }, 800));
 }
 
+// lembretes por e-mail: só a Administração (ou quem gerencia usuários)
+function pdPodeLemb(){ return S.perfil === "Administração" || can("usuarios"); }
 function pdFiltros(){
+  $("#pd-lemb").hidden = !pdPodeLemb();
   const fs = $("#pd-fs");
   if (!fs.options.length) fs.innerHTML = `<option value="">Todas as situações</option>` + PD_STATUS.map(s => `<option>${esc(s)}</option>`).join("");
   fs.value = PD.st;
@@ -4200,6 +4203,30 @@ if ($("#pd-ord")) $("#pd-ord").addEventListener("change", e => { PD.ord = e.targ
 if ($("#pd-recolher")) $("#pd-recolher").addEventListener("click", () => {
   const todas = PD_SECOES.every(s => PD.recolhidas.has(s.nome));
   PD.recolhidas = todas ? new Set() : new Set(PD_SECOES.map(s => s.nome)); pdGuardarRecolhidas(); renderPend();
+});
+// lembretes automáticos por e-mail (segunda e quinta, 9h): cada responsável recebe as pendências dele; o síndico, o resumo
+function pdLembretesTela(L, aviso){
+  const lin = L.previa.map(x => `<tr><td><b>${esc(x.resp)}</b></td><td class="num">${x.n}</td><td class="num">${x.atrasadas ? `<span class="pill s-zero">${x.atrasadas}</span>` : "0"}</td><td>${x.emails ? `<span class="pill s-ok">${x.emails} e-mail${x.emails === 1 ? "" : "s"}</span>` : `<span class="pill s-baixo">sem e-mail</span>`}</td></tr>`).join("");
+  $("#modal-box").innerHTML = `<h3>Lembretes por e-mail</h3>
+    <p class="hint" style="margin:-6px 0 12px">Toda <b>segunda e quinta, a partir das 9h</b>, cada responsável recebe por e-mail só as pendências em aberto que estão com ele (atrasadas primeiro). O síndico recebe o resumo de todos. Os e-mails vêm do cadastro em Usuários (perfil com o mesmo nome do responsável) e da aba Emails.</p>
+    <p><b>Situação:</b> ${L.ativo ? `<span class="pill s-ok">Ativo</span>` : `<span class="pill p-ajuste">Desativado</span>`}${L.ultimo ? `<span class="hint" style="display:block;margin-top:4px">Último envio: ${esc(L.ultimo)}</span>` : ""}</p>
+    <div class="tablebox flat"><table><thead><tr><th>Responsável</th><th class="num">Em aberto</th><th class="num">Atrasadas</th><th>Recebe</th></tr></thead><tbody>${lin || `<tr><td colspan="4"><div class="empty">Nenhuma pendência em aberto com responsável.</div></td></tr>`}</tbody></table></div>
+    <p class="hint">${L.semResp ? `${L.semResp} pendência${L.semResp === 1 ? "" : "s"} sem responsável (aparece${L.semResp === 1 ? "" : "m"} só no resumo do síndico). ` : ""}Resumo ao síndico: ${L.sindico ? "sim" : "<b>sem e-mail do síndico cadastrado</b>"}.</p>
+    <div class="actions">${L.ativo ? `<button class="btn" type="button" id="lb-off">Desativar</button>` : `<button class="btn primary" type="button" id="lb-on">Ativar lembretes</button>`}<button class="btn" type="button" id="lb-agora">Enviar agora</button><button class="btn" type="button" id="lb-x">Fechar</button><span class="hint" id="lb-msg">${aviso ? esc(aviso) : ""}</span></div>`;
+  $("#modal").hidden = false; $("#lb-x").onclick = fecharModal;
+  const op = (b, o) => enviar(b, $("#lb-msg"), "pendLembretes", {op:o}, r => pdLembretesTela(r.lembretes, r.msg));
+  if ($("#lb-on")) $("#lb-on").onclick = () => op($("#lb-on"), "ativar");
+  if ($("#lb-off")) $("#lb-off").onclick = () => op($("#lb-off"), "desativar");
+  $("#lb-agora").onclick = () => {
+    const b = $("#lb-agora");
+    if (!b.dataset.conf) { b.dataset.conf = "1"; b.textContent = "Confirmar envio agora"; b.classList.add("primary"); $("#lb-msg").textContent = "Vai mandar os e-mails agora para todos os responsáveis com e-mail."; return; }
+    op(b, "enviar");
+  };
+}
+$("#pd-lemb").addEventListener("click", async () => {
+  $("#modal-box").innerHTML = `<h3>Lembretes por e-mail</h3><div class="empty"><span class="spin" aria-hidden="true"></span> Carregando…</div>`; $("#modal").hidden = false;
+  try { const r = await api("pendLembretes", {op:"status"}); pdLembretesTela(r.lembretes); }
+  catch(e){ $("#modal-box").innerHTML = `<h3>Lembretes por e-mail</h3><div class="notice crit">${esc(/desconhecida/i.test(e.message) ? "Os lembretes precisam do Apps Script novo (colar o código e implantar uma nova versão)." : e.message)}</div><div class="actions"><button class="btn" type="button" id="lb-x">Fechar</button></div>`; $("#lb-x").onclick = fecharModal; }
 });
 $("#pd-mail").addEventListener("click", () => {
   if (!S.pend) return;
