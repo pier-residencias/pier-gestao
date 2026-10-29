@@ -4212,8 +4212,37 @@ function pdLembretesTela(L, aviso){
     <p><b>Situação:</b> ${L.ativo ? `<span class="pill s-ok">Ativo</span>` : `<span class="pill p-ajuste">Desativado</span>`}${L.ultimo ? `<span class="hint" style="display:block;margin-top:4px">Último envio: ${esc(L.ultimo)}</span>` : ""}</p>
     <div class="tablebox flat"><table><thead><tr><th>Responsável</th><th class="num">Em aberto</th><th class="num">Atrasadas</th><th>Recebe</th></tr></thead><tbody>${lin || `<tr><td colspan="4"><div class="empty">Nenhuma pendência em aberto com responsável.</div></td></tr>`}</tbody></table></div>
     <p class="hint">${L.semResp ? `${L.semResp} pendência${L.semResp === 1 ? "" : "s"} sem responsável (aparece${L.semResp === 1 ? "" : "m"} só no resumo do síndico). ` : ""}Resumo ao síndico: ${L.sindico ? "sim" : "<b>sem e-mail do síndico cadastrado</b>"}.</p>
-    <div class="actions">${L.ativo ? `<button class="btn" type="button" id="lb-off">Desativar</button>` : `<button class="btn primary" type="button" id="lb-on">Ativar lembretes</button>`}<button class="btn" type="button" id="lb-agora">Enviar agora</button><button class="btn" type="button" id="lb-x">Fechar</button><span class="hint" id="lb-msg">${aviso ? esc(aviso) : ""}</span></div>`;
+    <div class="actions">${L.ativo ? `<button class="btn" type="button" id="lb-off">Desativar</button>` : `<button class="btn primary" type="button" id="lb-on">Ativar lembretes</button>`}<button class="btn" type="button" id="lb-agora">Enviar agora</button><button class="btn" type="button" id="lb-x">Fechar</button><span class="hint" id="lb-msg">${aviso ? esc(aviso) : ""}</span></div>
+    ${L.cfg ? (() => { const c = L.cfg; return `<details class="lb-pers" ${PD.lbAberto ? "open" : ""}><summary><b>Personalizar o e-mail</b></summary>
+      <form class="form" id="lb-f" novalidate autocomplete="off">
+        <div class="field full"><label for="lb-abre">Abertura</label><textarea class="input" id="lb-abre" rows="3" maxlength="1500">${esc(c.abertura)}</textarea><span class="hint">Pode usar: <code>{responsavel}</code> <code>{total}</code> <code>{atrasadas}</code> <code>{data}</code> — o sistema troca pelo valor de cada e-mail.</span></div>
+        <div class="field full"><label for="lb-fecha">Fechamento</label><textarea class="input" id="lb-fecha" rows="2" maxlength="1500">${esc(c.fechamento)}</textarea></div>
+        <div class="field full"><label for="lb-ass">Assinatura</label><textarea class="input" id="lb-ass" rows="2" maxlength="1500">${esc(c.assinatura)}</textarea></div>
+        <div class="field full lb-chks"><span class="lbl-campo">Mostrar no e-mail</span>
+          <label class="pd-chk"><input type="checkbox" id="lb-agr" ${c.agrupar ? "checked" : ""}> Agrupar por situação (atrasadas primeiro)</label>
+          <label class="pd-chk"><input type="checkbox" id="lb-crit" ${c.crit ? "checked" : ""}> Criticidade</label>
+          <label class="pd-chk"><input type="checkbox" id="lb-prazo" ${c.prazo ? "checked" : ""}> Prazo</label>
+          <label class="pd-chk"><input type="checkbox" id="lb-obs" ${c.obs ? "checked" : ""}> Observações</label></div>
+        <div class="full actions"><button class="btn primary" type="button" id="lb-salvar">Salvar personalização</button>
+          <select class="input" id="lb-pr-resp" aria-label="Prévia de quem">${L.previa.map(x => `<option value="${esc(x.resp)}">Prévia: ${esc(x.resp)}</option>`).join("")}<option value="__sindico">Prévia: resumo do síndico</option></select>
+          <button class="btn" type="button" id="lb-ver">Ver prévia</button><span class="hint" id="lb-f-msg"></span></div>
+      </form>
+      <div id="lb-prev"></div></details>`; })() : ""}`;
+  $("#modal-box").classList.add("largo");
   $("#modal").hidden = false; $("#lb-x").onclick = fecharModal;
+  const lbDet = $("#modal-box .lb-pers"); if (lbDet) lbDet.ontoggle = () => { PD.lbAberto = lbDet.open; };
+  const lbCfg = () => ({abertura:$("#lb-abre").value, fechamento:$("#lb-fecha").value, assinatura:$("#lb-ass").value, agrupar:$("#lb-agr").checked, crit:$("#lb-crit").checked, prazo:$("#lb-prazo").checked, obs:$("#lb-obs").checked});
+  if ($("#lb-salvar")) $("#lb-salvar").onclick = () => enviar($("#lb-salvar"), $("#lb-f-msg"), "pendLembretes", {op:"config", cfg:lbCfg()}, r => { PD.lbAberto = true; pdLembretesTela(r.lembretes, r.msg); });
+  if ($("#lb-ver")) $("#lb-ver").onclick = async () => {
+    const b = $("#lb-ver"), msg = $("#lb-f-msg"); b.disabled = true; msg.className = "hint"; msg.innerHTML = `<span class="spin" aria-hidden="true"></span> Montando a prévia…`;
+    try {
+      const r = await api("pendLembretes", {op:"previa", resp:$("#lb-pr-resp").value, cfg:lbCfg()});
+      msg.textContent = "";
+      $("#lb-prev").innerHTML = `<p class="hint lb-assunto"><b>Assunto:</b> ${esc(r.previa.assunto)}</p><iframe class="lb-frame" title="Prévia do e-mail" sandbox></iframe>`;
+      $("#lb-prev .lb-frame").srcdoc = r.previa.html;
+    } catch(e){ msg.className = "hint err"; msg.textContent = e.message; }
+    finally { b.disabled = false; }
+  };
   const op = (b, o) => enviar(b, $("#lb-msg"), "pendLembretes", {op:o}, r => pdLembretesTela(r.lembretes, r.msg));
   if ($("#lb-on")) $("#lb-on").onclick = () => op($("#lb-on"), "ativar");
   if ($("#lb-off")) $("#lb-off").onclick = () => op($("#lb-off"), "desativar");

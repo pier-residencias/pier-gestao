@@ -351,7 +351,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-10-28 lembretes de pendências';
+const VERSAO = '2026-10-29 e-mail dos lembretes com logo';
 
 function doGet() {
   TABS = {};
@@ -423,8 +423,8 @@ function doPost(e) {
     if (req.acao === 'espacos') { espExigir(conta); return json(Object.assign(base, espLista())); }
     if (req.acao === 'pendLembretes') {
       if (conta.perfil !== PERFIL_TOTAL && !conta.perms.usuarios) negar();
-      const r = pendLembretesAcao(String(req.op || 'status'), conta);
-      if (req.op && req.op !== 'status') auditar(conta, 'Lembretes de pendências', r.msg || '');
+      const r = pendLembretesAcao(String(req.op || 'status'), conta, req);
+      if (req.op && req.op !== 'status' && req.op !== 'previa') auditar(conta, 'Lembretes de pendências', r.msg || '');
       return json(Object.assign(base, r));
     }
     if (req.acao === 'medicoes') { medExigir(conta, false); return json(Object.assign(base, medLista())); }
@@ -3236,34 +3236,127 @@ function lembLinha(p, hj) {
   if (pendAguardando(p)) partes.push('aguardando aprovação');
   return ' • ' + partes.join(' · ') + (String(p.obs || '').trim() ? '\n     Obs.: ' + String(p.obs).trim().replace(/\s+/g, ' ').slice(0, 200) : '');
 }
+// ----- personalização do e-mail (tela Lembretes por e-mail): textos e o que mostrar -----
+const LEMB_CFG_PADRAO = {
+  abertura: 'Olá, {responsavel}! Estas são as pendências em aberto com você no Controle de pendências do Pier Gestão ({total} no total, {atrasadas} atrasada(s)).',
+  fechamento: 'Por favor, atualize a situação no sistema assim que houver novidade.',
+  assinatura: 'Administração – Condomínio Residencial Pier',
+  agrupar: true, obs: true, crit: true, prazo: true
+};
+function lembCfg() {
+  let c = {};
+  try { c = JSON.parse(PropertiesService.getScriptProperties().getProperty('LEMB_CFG') || '{}') || {}; } catch (e) { c = {}; }
+  const o = Object.assign({}, LEMB_CFG_PADRAO);
+  ['abertura', 'fechamento', 'assinatura'].forEach(k => { if (typeof c[k] === 'string') o[k] = c[k]; });
+  ['agrupar', 'obs', 'crit', 'prazo'].forEach(k => { if (typeof c[k] === 'boolean') o[k] = c[k]; });
+  return o;
+}
+function lembSalvarCfg(v) {
+  const o = {};
+  ['abertura', 'fechamento', 'assinatura'].forEach(k => { o[k] = String(v[k] == null ? '' : v[k]).slice(0, 1500); });
+  ['agrupar', 'obs', 'crit', 'prazo'].forEach(k => { o[k] = v[k] !== false; });
+  PropertiesService.getScriptProperties().setProperty('LEMB_CFG', JSON.stringify(o));
+  return o;
+}
+// logo do condomínio (PNG pequeno) para o topo dos e-mails: vai junto da mensagem (cid:logo), sem depender de link externo
+const LEMB_LOGO_B64 = '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';
+const lembLogoBlob = () => Utilities.newBlob(Utilities.base64Decode(LEMB_LOGO_B64), 'image/png', 'logo-pier.png');
+const lembH = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const lembTxtHtml = s => lembH(s).replace(/\n/g, '<br>');
+const lembDt = d => String(d).split('-').reverse().join('/');
+const lembAtras = (p, hj) => { const pz = lembPrazo(p); return pz && pz < hj ? Math.round((Date.parse(hj + 'T12:00:00') - Date.parse(pz + 'T12:00:00')) / 864e5) : 0; };
+const LEMB_ORDEM_ST = ['Em andamento', 'Pendente', 'A cotar', 'Aguardando entrega', 'Aguardando síndico'];
+const lembPlural = (n, um, varios) => n + ' ' + (n === 1 ? um : varios);
+function lembTrocar(t, x) { return String(t || '').replace(/\{(\w+)\}/g, (m, k) => (k in x ? x[k] : m)); }
+// blocos da lista: atrasadas primeiro e depois por situação (ou um bloco só)
+function lembBlocos(lista, hj, cfg) {
+  if (!cfg.agrupar) return [{ tit: '', l: lista }];
+  const atr = lista.filter(p => lembAtras(p, hj) > 0), resto = lista.filter(p => !lembAtras(p, hj));
+  const sts = LEMB_ORDEM_ST.concat([...new Set(resto.map(p => p.status || 'Pendente'))].filter(s => LEMB_ORDEM_ST.indexOf(s) < 0));
+  const out = atr.length ? [{ tit: 'Atrasadas', l: atr, cor: '#b42318' }] : [];
+  sts.forEach(st => { const l = resto.filter(p => (p.status || 'Pendente') === st); if (l.length) out.push({ tit: st, l }); });
+  return out;
+}
+// tabela de um bloco (HTML com estilos na própria tag, como os programas de e-mail exigem)
+function lembTabela(lista, hj, cfg, comSt) {
+  const th = 'style="text-align:left;padding:8px 10px;font-size:12px;color:#5b6b7a;border-bottom:2px solid #d6e0e8;font-weight:600"';
+  const td = 'style="padding:8px 10px;border-bottom:1px solid #e6edf2;vertical-align:top;font-size:14px;color:#16283a"';
+  const corCrit = { Alta: ['#fde8e8', '#b42318'], 'Média': ['#fff4e0', '#a15c00'], Baixa: ['#e6f4ea', '#1e7b3c'] };
+  const pill = (t, bg, fg) => '<span style="display:inline-block;padding:2px 8px;border-radius:10px;background:' + bg + ';color:' + fg + ';font-size:12px;font-weight:600;white-space:nowrap">' + lembH(t) + '</span>';
+  const linhas = lista.map(p => {
+    const a = lembAtras(p, hj), pz = lembPrazo(p);
+    let h = '<tr><td ' + td + ' width="40"><b>' + lembH(p.numero || '—') + '</b></td><td ' + td + '>' + lembH(p.titulo)
+      + (pendAguardando(p) ? ' ' + pill('aguardando aprovação', '#eef2ff', '#3949ab') : '')
+      + (cfg.obs && String(p.obs || '').trim() ? '<div style="color:#5b6b7a;font-size:12px;margin-top:3px">' + lembTxtHtml(String(p.obs).trim().slice(0, 300)) + '</div>' : '') + '</td>';
+    if (cfg.crit) h += '<td ' + td + '>' + (p.criticidade ? pill(p.criticidade, (corCrit[p.criticidade] || ['#eef1f4', '#41505e'])[0], (corCrit[p.criticidade] || ['#eef1f4', '#41505e'])[1]) : '<span style="color:#9aa8b5">—</span>') + '</td>';
+    if (cfg.prazo) h += '<td ' + td.replace('vertical-align:top;', 'vertical-align:top;white-space:nowrap;') + '>' + (pz ? (a ? '<b style="color:#b42318">' + lembDt(pz) + '</b><div style="color:#b42318;font-size:12px">atrasada há ' + lembPlural(a, 'dia', 'dias') + '</div>' : lembDt(pz) + (pz === hj ? '<div style="color:#a15c00;font-size:12px">vence hoje</div>' : '')) : '<span style="color:#9aa8b5">sem prazo</span>') + '</td>';
+    if (comSt) h += '<td ' + td + '>' + lembH(p.status || 'Pendente') + '</td>';
+    return h + '</tr>';
+  }).join('');
+  return '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:0 0 18px">'
+    + '<tr><th ' + th + ' width="44">Nº</th><th ' + th + '>Pendência</th>' + (cfg.crit ? '<th ' + th + ' width="100">Criticidade</th>' : '') + (cfg.prazo ? '<th ' + th + ' width="130">Prazo</th>' : '') + (comSt ? '<th ' + th + ' width="140">Situação</th>' : '') + '</tr>'
+    + linhas + '</table>';
+}
+function lembHtmlLista(lista, hj, cfg) {
+  return lembBlocos(lista, hj, cfg).map(b => (b.tit ? '<h3 style="margin:18px 0 6px;font-size:15px;color:' + (b.cor || '#17324d') + '">' + lembH(b.tit) + ' (' + b.l.length + ')</h3>' : '') + lembTabela(b.l, hj, cfg, !cfg.agrupar || b.tit === 'Atrasadas')).join('');
+}
+// logo: 'cid:logo' no e-mail enviado; na prévia da tela, a imagem embutida (data:)
+function lembMoldura(titulo, sub, miolo, cfg, logo) {
+  const src = logo || 'cid:logo';
+  return '<div style="background:#eef3f7;padding:24px 12px;font-family:Arial,Helvetica,sans-serif">'
+    + '<div style="max-width:760px;margin:0 auto;background:#ffffff;border-radius:10px;overflow:hidden;border:1px solid #d6e0e8">'
+    + '<div style="background:#ffffff;padding:16px 24px 10px;text-align:center;border-bottom:1px solid #e6edf2"><img src="' + src + '" width="220" alt="Pier Residências" style="display:inline-block;width:220px;max-width:70%;height:auto;border:0"></div>'
+    + '<div style="background:#17324d;color:#ffffff;padding:18px 24px"><div style="font-size:12px;letter-spacing:2px;opacity:.8">PIER GESTÃO</div><div style="font-size:20px;font-weight:700;margin-top:4px">' + lembH(titulo) + '</div>' + (sub ? '<div style="font-size:13px;opacity:.85;margin-top:4px">' + lembH(sub) + '</div>' : '') + '</div>'
+    + '<div style="padding:20px 24px">' + miolo
+    + (cfg.fechamento ? '<p style="font-size:14px;color:#16283a;margin:8px 0 14px">' + lembTxtHtml(cfg.fechamento) + '</p>' : '')
+    + (cfg.assinatura ? '<p style="font-size:14px;color:#16283a;margin:0 0 6px">' + lembTxtHtml(cfg.assinatura) + '</p>' : '')
+    + '</div><div style="background:#f5f8fa;color:#7a8a99;font-size:11px;padding:12px 24px;border-top:1px solid #e6edf2">Veja e atualize em: Pier Gestão → Administração → Pendências e compras → Controle de pendências. Mensagem automática (toda segunda e quinta); não responda este e-mail.</div>'
+    + '</div></div>';
+}
+// e-mail de um responsável: assunto, texto simples (para programas sem HTML) e HTML
+function lembEmailResp(resp, lista, hj, cfg, logo) {
+  const atras = lista.filter(p => lembAtras(p, hj) > 0).length;
+  const x = { responsavel: resp, total: lista.length, atrasadas: atras, data: lembDt(hj) };
+  const abertura = lembTrocar(cfg.abertura, x);
+  const html = lembMoldura('Pendências de ' + resp, lembDt(hj) + ' · ' + lembPlural(lista.length, 'em aberto', 'em aberto') + (atras ? ' · ' + lembPlural(atras, 'atrasada', 'atrasadas') : ''),
+    (abertura ? '<p style="font-size:14px;color:#16283a;margin:0 0 14px">' + lembTxtHtml(abertura) + '</p>' : '') + lembHtmlLista(lista, hj, cfg), cfg, logo);
+  const texto = [abertura, ''].concat(lista.map(p => lembLinha(p, hj)), ['', lembTrocar(cfg.fechamento, x), '', cfg.assinatura]).join('\n');
+  return { assunto: 'Pier Gestão – pendências de ' + resp + ': ' + lista.length + ' em aberto' + (atras ? ', ' + atras + ' atrasada' + (atras === 1 ? '' : 's') : ''), texto, html };
+}
+function lembEmailSindico(d, semEmail, cfg, logo) {
+  const total = Object.keys(d.grupos).reduce((s, k) => s + d.grupos[k].length, 0) + d.semResp.length;
+  const resps = Object.keys(d.grupos).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const resumoTab = '<table role="presentation" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:0 0 16px">' + resps.map(r => {
+    const l = d.grupos[r], a = l.filter(p => lembAtras(p, d.hj) > 0).length;
+    return '<tr><td style="padding:4px 14px 4px 0;font-size:14px"><b>' + lembH(r) + '</b></td><td style="padding:4px 14px 4px 0;font-size:14px">' + lembPlural(l.length, 'em aberto', 'em aberto') + '</td><td style="padding:4px 0;font-size:14px;color:' + (a ? '#b42318' : '#1e7b3c') + '">' + (a ? lembPlural(a, 'atrasada', 'atrasadas') : 'em dia') + (semEmail.indexOf(r) >= 0 ? ' <span style="color:#a15c00">· sem e-mail cadastrado</span>' : '') + '</td></tr>';
+  }).join('') + (d.semResp.length ? '<tr><td style="padding:4px 14px 4px 0;font-size:14px"><b>Sem responsável</b></td><td colspan="2" style="font-size:14px">' + d.semResp.length + '</td></tr>' : '') + '</table>';
+  const secoes = resps.map(r => '<h2 style="margin:22px 0 4px;font-size:17px;color:#17324d;border-bottom:2px solid #17324d;padding-bottom:4px">' + lembH(r) + '</h2>' + lembHtmlLista(d.grupos[r], d.hj, cfg)).join('')
+    + (d.semResp.length ? '<h2 style="margin:22px 0 4px;font-size:17px;color:#17324d;border-bottom:2px solid #17324d;padding-bottom:4px">Sem responsável</h2>' + lembHtmlLista(d.semResp, d.hj, cfg) : '');
+  const html = lembMoldura('Resumo das pendências por responsável', lembDt(d.hj) + ' · ' + total + ' em aberto',
+    '<p style="font-size:14px;color:#16283a;margin:0 0 12px">Resumo das pendências em aberto. Os responsáveis com e-mail cadastrado receberam hoje a lista deles.</p>' + resumoTab + secoes, cfg, logo);
+  const texto = ['Resumo das pendências em aberto por responsável (' + total + ' no total).', ''].concat(resps.map(r => [r.toUpperCase() + ' — ' + d.grupos[r].length + ' em aberto' + (semEmail.indexOf(r) >= 0 ? ' (sem e-mail cadastrado)' : '')].concat(d.grupos[r].map(p => lembLinha(p, d.hj))).join('\n')), d.semResp.length ? ['SEM RESPONSÁVEL — ' + d.semResp.length].concat(d.semResp.map(p => lembLinha(p, d.hj))).join('\n') : [], ['', cfg.assinatura]).join('\n\n');
+  return { assunto: 'Pier Gestão – resumo das pendências por responsável (' + total + ' em aberto)', texto, html };
+}
 // envia os lembretes; devolve um resumo do que saiu (para a tela e para o registro)
 function lembEnviar(forcado) {
-  const props = PropertiesService.getScriptProperties(), d = lembDados();
+  const props = PropertiesService.getScriptProperties(), d = lembDados(), cfg = lembCfg();
   if (!forcado && props.getProperty('LEMB_PEND_DIA') === d.hj) return { enviados: 0, msg: 'Os lembretes de hoje já foram enviados.' };
   const sind = emailsDoSetor('Síndico'), enviados = [], semEmail = [];
-  const rodape = ['', 'Veja e atualize em: Pier Gestão → Administração → Pendências e compras → Controle de pendências.', 'Mensagem automática do Pier Gestão (toda segunda e quinta). Não responda este e-mail.'];
   Object.keys(d.grupos).sort((a, b) => a.localeCompare(b, 'pt-BR')).forEach(resp => {
-    const lista = d.grupos[resp], atras = lista.filter(p => { const pz = lembPrazo(p); return pz && pz < d.hj; }).length;
+    const lista = d.grupos[resp];
     const dest = emailsDoSetor(resp).filter(e => sind.indexOf(e) < 0); // o síndico já recebe tudo no resumo
     if (!dest.length) { if (!emailsDoSetor(resp).length) semEmail.push(resp); return; }
-    const corpo = ['Olá! Estas são as pendências em aberto com ' + resp + ' no Controle de pendências do Pier Gestão:', '']
-      .concat(lista.map(p => lembLinha(p, d.hj)), rodape).join('\n');
+    const m = lembEmailResp(resp, lista, d.hj, cfg);
     try {
-      MailApp.sendEmail({ to: dest.join(','), subject: 'Pier Gestão – pendências de ' + resp + ': ' + lista.length + ' em aberto' + (atras ? ', ' + atras + ' atrasada' + (atras === 1 ? '' : 's') : ''), body: corpo, name: 'Pier Gestão' });
+      MailApp.sendEmail({ to: dest.join(','), subject: m.assunto, body: m.texto, htmlBody: m.html, inlineImages: { logo: lembLogoBlob() }, name: 'Pier Gestão' });
       enviados.push(resp + ' (' + lista.length + ')');
     } catch (e) { Logger.log('Lembrete de ' + resp + ' não enviado: ' + e.message); }
   });
   let resumo = '';
   if (sind.length) {
-    const total = Object.keys(d.grupos).reduce((s, k) => s + d.grupos[k].length, 0) + d.semResp.length;
-    const blocos = Object.keys(d.grupos).sort((a, b) => a.localeCompare(b, 'pt-BR')).map(resp => {
-      const l = d.grupos[resp], atras = l.filter(p => { const pz = lembPrazo(p); return pz && pz < d.hj; }).length;
-      return [resp.toUpperCase() + ' — ' + l.length + ' em aberto' + (atras ? ', ' + atras + ' atrasada' + (atras === 1 ? '' : 's') : '') + (semEmail.indexOf(resp) >= 0 ? ' (sem e-mail cadastrado: não recebeu o lembrete)' : '')].concat(l.map(p => lembLinha(p, d.hj))).join('\n');
-    });
-    if (d.semResp.length) blocos.push(['SEM RESPONSÁVEL — ' + d.semResp.length].concat(d.semResp.map(p => lembLinha(p, d.hj))).join('\n'));
-    const corpo = ['Resumo das pendências em aberto por responsável (' + total + ' no total). Os responsáveis com e-mail cadastrado receberam a lista deles hoje.', ''].concat(blocos.join('\n\n'), rodape).join('\n');
+    const m = lembEmailSindico(d, semEmail, cfg);
     try {
-      MailApp.sendEmail({ to: sind.join(','), subject: 'Pier Gestão – resumo das pendências por responsável (' + total + ' em aberto)', body: corpo, name: 'Pier Gestão' });
+      MailApp.sendEmail({ to: sind.join(','), subject: m.assunto, body: m.texto, htmlBody: m.html, inlineImages: { logo: lembLogoBlob() }, name: 'Pier Gestão' });
       resumo = ' Resumo enviado ao síndico.';
     } catch (e) { Logger.log('Resumo ao síndico não enviado: ' + e.message); }
   }
@@ -3280,7 +3373,16 @@ function lembretePendencias() {
   try { lembEnviar(false); } finally { lock.releaseLock(); }
 }
 function lembAtivo() { return ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === LEMB_FUNCAO); }
-function pendLembretesAcao(op, conta) {
+function pendLembretesAcao(op, conta, req) {
+  if (op === 'config') { lembSalvarCfg((req && req.cfg) || {}); return Object.assign(lembStatus(), { msg: 'Texto e formato do e-mail salvos.' }); }
+  if (op === 'previa') {
+    const d = lembDados(), cfg = req && req.cfg ? Object.assign(lembCfg(), req.cfg) : lembCfg(), resp = String((req && req.resp) || '');
+    const logo = 'data:image/png;base64,' + LEMB_LOGO_B64;
+    if (resp === '__sindico') return { previa: lembEmailSindico(d, [], cfg, logo) };
+    const r = d.grupos[resp] ? resp : Object.keys(d.grupos).sort((a, b) => a.localeCompare(b, 'pt-BR'))[0];
+    if (!r) throw falha('Não há pendências em aberto com responsável para mostrar a prévia.');
+    return { previa: Object.assign(lembEmailResp(r, d.grupos[r], d.hj, cfg, logo), { resp: r }) };
+  }
   if (op === 'ativar' || op === 'desativar') {
     ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === LEMB_FUNCAO).forEach(t => ScriptApp.deleteTrigger(t));
     if (op === 'ativar') [ScriptApp.WeekDay.MONDAY, ScriptApp.WeekDay.THURSDAY].forEach(dia => ScriptApp.newTrigger(LEMB_FUNCAO).timeBased().onWeekDay(dia).atHour(LEMB_HORA).create());
@@ -3298,7 +3400,7 @@ function lembStatus() {
     ativo: lembAtivo(), ultimo: PropertiesService.getScriptProperties().getProperty('LEMB_PEND_ULTIMO') || '',
     previa: Object.keys(d.grupos).sort((a, b) => a.localeCompare(b, 'pt-BR')).map(resp => ({ resp, n: d.grupos[resp].length,
       atrasadas: d.grupos[resp].filter(p => { const pz = lembPrazo(p); return pz && pz < d.hj; }).length, emails: emailsDoSetor(resp).length })),
-    semResp: d.semResp.length, sindico: sind.length } };
+    semResp: d.semResp.length, sindico: sind.length, cfg: lembCfg() } };
 }
 
 // ---------- controle de pendências (menu Administração) ----------
