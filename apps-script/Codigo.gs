@@ -351,7 +351,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-10-27 conversa da cotação';
+const VERSAO = '2026-10-28 lembretes de pendências';
 
 function doGet() {
   TABS = {};
@@ -421,6 +421,12 @@ function doPost(e) {
     if (req.acao === 'cotVerArquivo') { pode('pendencias'); const f = cotVerArquivo(req); auditar(conta, 'Abriu arquivo de cotação', f.nome); delete f.nome; return json(Object.assign(base, { arquivo: f })); }
     if (req.acao === 'unidades') { unExigir(conta, false); return json(Object.assign(base, unLista())); }
     if (req.acao === 'espacos') { espExigir(conta); return json(Object.assign(base, espLista())); }
+    if (req.acao === 'pendLembretes') {
+      if (conta.perfil !== PERFIL_TOTAL && !conta.perms.usuarios) negar();
+      const r = pendLembretesAcao(String(req.op || 'status'), conta);
+      if (req.op && req.op !== 'status') auditar(conta, 'Lembretes de pendências', r.msg || '');
+      return json(Object.assign(base, r));
+    }
     if (req.acao === 'medicoes') { medExigir(conta, false); return json(Object.assign(base, medLista())); }
     if (req.acao === 'miLista') { algum(['med_ver', 'med_lancar', 'un_ver', 'un_editar']); return json(Object.assign(base, miLista())); }
     if (req.acao === 'rondas') { rondaExigir(conta, false); return json(Object.assign(base, rondaLista())); }
@@ -3181,6 +3187,7 @@ function autorizar() {
   const limpeza = garantirLimpeza() + garantirSindico() + garantirGerente();
   abaEmails();
   garantirLinhaEmail('Segurança');
+  Logger.log('Acionadores do projeto: ' + ScriptApp.getProjectTriggers().length + ' (a permissão para os lembretes automáticos fica autorizada).');
   Logger.log('E-mail: ' + MailApp.getRemainingDailyQuota() + ' envios disponíveis hoje (a permissão de enviar e-mail fica autorizada).');
   const senhas = migrarSenhas();
   garantirColunaProvisoria();
@@ -3188,6 +3195,110 @@ function autorizar() {
   const arquivos = verificarArquivos();
   Logger.log('Pronto: pastas de fotos e de notas fiscais, abas OS, Demandas, Preventivas, Pendencias e Emails, setores e permissões verificadas.' + limpeza);
   Logger.log('Segurança: ' + senhas + ' ' + arquivos);
+}
+
+// ---------- lembrete das pendências por e-mail (segunda e quinta, 9h) ----------
+// Cada responsável (Auxiliar, Supervisor, Gerência…) recebe só as pendências em aberto que estão com ele; o síndico recebe o resumo geral.
+// Os endereços vêm da aba Emails e do e-mail cadastrado em Usuários (perfil com o mesmo nome do responsável).
+const LEMB_HORA = 9, LEMB_FUNCAO = 'lembretePendencias';
+const LEMB_CRIT = { Alta: 0, 'Média': 1, Baixa: 2 };
+function lembAberta(p, hj) {
+  if (p.status === 'Concluído' || p.status === 'Cancelado') return false;
+  if (p.tipo === 'Constante') return !!p.prazo && String(p.prazo).slice(0, 10) <= hj; // tarefa constante: só quando a execução está vencida
+  return true;
+}
+const lembPrazo = p => String((p.tipo !== 'Constante' && p.prazoAtualizado) || p.prazo || '').slice(0, 10);
+function lembDados() {
+  const hj = hoje(), grupos = {}, semResp = [];
+  linhas(tabela('pend')).filter(p => lembAberta(p, hj)).forEach(p => {
+    const r = String(p.responsavel || '').trim();
+    if (!r) { semResp.push(p); return; }
+    (grupos[r] = grupos[r] || []).push(p);
+  });
+  const ordem = (a, b) => {
+    const pa = lembPrazo(a), pb = lembPrazo(b), la = !!pa && pa < hj, lb = !!pb && pb < hj;
+    if (la !== lb) return la ? -1 : 1;
+    const ca = LEMB_CRIT[a.criticidade] ?? 3, cb = LEMB_CRIT[b.criticidade] ?? 3;
+    if (ca !== cb) return ca - cb;
+    return (pa || '9999') < (pb || '9999') ? -1 : (pa || '9999') > (pb || '9999') ? 1 : 0;
+  };
+  Object.keys(grupos).forEach(k => grupos[k].sort(ordem));
+  return { hj, grupos, semResp };
+}
+function lembLinha(p, hj) {
+  const dt = d => String(d).split('-').reverse().join('/');
+  const pz = lembPrazo(p), dias = pz ? Math.round((Date.parse(hj + 'T12:00:00') - Date.parse(pz + 'T12:00:00')) / 864e5) : 0;
+  const partes = [(p.numero ? 'Nº ' + p.numero + ' – ' : '') + String(p.titulo).slice(0, 140)];
+  if (p.criticidade) partes.push('criticidade ' + p.criticidade.toLowerCase());
+  if (pz) partes.push((p.tipo === 'Constante' ? 'execução ' : 'prazo ') + dt(pz) + (dias > 0 ? ' (ATRASADA há ' + dias + ' dia' + (dias === 1 ? '' : 's') + ')' : dias === 0 ? ' (vence hoje)' : ''));
+  else partes.push('sem prazo');
+  partes.push(String(p.status || 'Pendente').toLowerCase());
+  if (pendAguardando(p)) partes.push('aguardando aprovação');
+  return ' • ' + partes.join(' · ') + (String(p.obs || '').trim() ? '\n     Obs.: ' + String(p.obs).trim().replace(/\s+/g, ' ').slice(0, 200) : '');
+}
+// envia os lembretes; devolve um resumo do que saiu (para a tela e para o registro)
+function lembEnviar(forcado) {
+  const props = PropertiesService.getScriptProperties(), d = lembDados();
+  if (!forcado && props.getProperty('LEMB_PEND_DIA') === d.hj) return { enviados: 0, msg: 'Os lembretes de hoje já foram enviados.' };
+  const sind = emailsDoSetor('Síndico'), enviados = [], semEmail = [];
+  const rodape = ['', 'Veja e atualize em: Pier Gestão → Administração → Pendências e compras → Controle de pendências.', 'Mensagem automática do Pier Gestão (toda segunda e quinta). Não responda este e-mail.'];
+  Object.keys(d.grupos).sort((a, b) => a.localeCompare(b, 'pt-BR')).forEach(resp => {
+    const lista = d.grupos[resp], atras = lista.filter(p => { const pz = lembPrazo(p); return pz && pz < d.hj; }).length;
+    const dest = emailsDoSetor(resp).filter(e => sind.indexOf(e) < 0); // o síndico já recebe tudo no resumo
+    if (!dest.length) { if (!emailsDoSetor(resp).length) semEmail.push(resp); return; }
+    const corpo = ['Olá! Estas são as pendências em aberto com ' + resp + ' no Controle de pendências do Pier Gestão:', '']
+      .concat(lista.map(p => lembLinha(p, d.hj)), rodape).join('\n');
+    try {
+      MailApp.sendEmail({ to: dest.join(','), subject: 'Pier Gestão – pendências de ' + resp + ': ' + lista.length + ' em aberto' + (atras ? ', ' + atras + ' atrasada' + (atras === 1 ? '' : 's') : ''), body: corpo, name: 'Pier Gestão' });
+      enviados.push(resp + ' (' + lista.length + ')');
+    } catch (e) { Logger.log('Lembrete de ' + resp + ' não enviado: ' + e.message); }
+  });
+  let resumo = '';
+  if (sind.length) {
+    const total = Object.keys(d.grupos).reduce((s, k) => s + d.grupos[k].length, 0) + d.semResp.length;
+    const blocos = Object.keys(d.grupos).sort((a, b) => a.localeCompare(b, 'pt-BR')).map(resp => {
+      const l = d.grupos[resp], atras = l.filter(p => { const pz = lembPrazo(p); return pz && pz < d.hj; }).length;
+      return [resp.toUpperCase() + ' — ' + l.length + ' em aberto' + (atras ? ', ' + atras + ' atrasada' + (atras === 1 ? '' : 's') : '') + (semEmail.indexOf(resp) >= 0 ? ' (sem e-mail cadastrado: não recebeu o lembrete)' : '')].concat(l.map(p => lembLinha(p, d.hj))).join('\n');
+    });
+    if (d.semResp.length) blocos.push(['SEM RESPONSÁVEL — ' + d.semResp.length].concat(d.semResp.map(p => lembLinha(p, d.hj))).join('\n'));
+    const corpo = ['Resumo das pendências em aberto por responsável (' + total + ' no total). Os responsáveis com e-mail cadastrado receberam a lista deles hoje.', ''].concat(blocos.join('\n\n'), rodape).join('\n');
+    try {
+      MailApp.sendEmail({ to: sind.join(','), subject: 'Pier Gestão – resumo das pendências por responsável (' + total + ' em aberto)', body: corpo, name: 'Pier Gestão' });
+      resumo = ' Resumo enviado ao síndico.';
+    } catch (e) { Logger.log('Resumo ao síndico não enviado: ' + e.message); }
+  }
+  if (!forcado) props.setProperty('LEMB_PEND_DIA', d.hj); // o envio manual não impede o automático do dia
+  props.setProperty('LEMB_PEND_ULTIMO', agora() + ' · ' + (enviados.length ? enviados.join(', ') : 'nenhum responsável') + (resumo ? ' · resumo ao síndico' : ''));
+  return { enviados: enviados.length, msg: (enviados.length ? 'Lembretes enviados: ' + enviados.join(', ') + '.' : 'Nenhum responsável com e-mail para receber.') + resumo + (semEmail.length ? ' Sem e-mail cadastrado: ' + semEmail.join(', ') + '.' : '') };
+}
+// chamada pelo acionador de tempo (segunda e quinta, 9h)
+function lembretePendencias() {
+  const dia = new Date().getDay();
+  if (dia !== 1 && dia !== 4) return;
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return;
+  try { lembEnviar(false); } finally { lock.releaseLock(); }
+}
+function lembAtivo() { return ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === LEMB_FUNCAO); }
+function pendLembretesAcao(op, conta) {
+  if (op === 'ativar' || op === 'desativar') {
+    ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === LEMB_FUNCAO).forEach(t => ScriptApp.deleteTrigger(t));
+    if (op === 'ativar') [ScriptApp.WeekDay.MONDAY, ScriptApp.WeekDay.THURSDAY].forEach(dia => ScriptApp.newTrigger(LEMB_FUNCAO).timeBased().onWeekDay(dia).atHour(LEMB_HORA).create());
+  } else if (op === 'enviar') {
+    const lock = LockService.getScriptLock();
+    if (!lock.tryLock(30000)) throw falha('Sistema ocupado. Tente de novo em instantes.');
+    let r; try { r = lembEnviar(true); } finally { lock.releaseLock(); }
+    return Object.assign(lembStatus(), { msg: r.msg });
+  } else if (op !== 'status') throw falha('Operação inválida.');
+  return Object.assign(lembStatus(), op === 'status' ? {} : { msg: op === 'ativar' ? 'Lembretes ativados: toda segunda e quinta, a partir das 9h.' : 'Lembretes desativados.' });
+}
+function lembStatus() {
+  const d = lembDados(), sind = emailsDoSetor('Síndico');
+  return { lembretes: {
+    ativo: lembAtivo(), ultimo: PropertiesService.getScriptProperties().getProperty('LEMB_PEND_ULTIMO') || '',
+    previa: Object.keys(d.grupos).sort((a, b) => a.localeCompare(b, 'pt-BR')).map(resp => ({ resp, n: d.grupos[resp].length,
+      atrasadas: d.grupos[resp].filter(p => { const pz = lembPrazo(p); return pz && pz < d.hj; }).length, emails: emailsDoSetor(resp).length })),
+    semResp: d.semResp.length, sindico: sind.length } };
 }
 
 // ---------- controle de pendências (menu Administração) ----------
