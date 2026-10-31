@@ -512,7 +512,22 @@ function doPost(e) {
       auditar(conta, ACOES_AUDIT[req.acao] || String(req.acao || ''), String(err.message), 'Negado');
       alertaSeguranca('negado', conta.usuario, 'Tentativa sem permissão: ' + (ACOES_AUDIT[req.acao] || String(req.acao || '')) + ' — ' + String(err.message), '', conta.nome);
     }
-    return json({ ok: false, erro: err.paraUsuario ? err.message : 'Erro no servidor: ' + err.message });
+    if (err && err.paraUsuario)
+  return json({ ok: false, erro: err.message });
+
+const referencia = Utilities.getUuid().slice(0, 8);
+
+console.error(
+  'Pier Gestão: erro interno [' + referencia + '] na ação ' +
+  String(req.acao || '').slice(0, 50),
+  err
+);
+
+return json({
+  ok: false,
+  erro: 'Não foi possível concluir a operação. Informe o código ' +
+        referencia + ' à Administração.'
+});
   }
 }
 
