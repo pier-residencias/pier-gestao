@@ -385,7 +385,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-02 Pier Gestão 2.0 — alerta de arquivo já importado';
+const VERSAO = '2026-11-02 Pier Gestão 2.0 — demonstrativo individual';
 
 function doGet() {
   TABS = {};
@@ -2700,7 +2700,7 @@ function miImportar(r, conta) {
     const o = { periodo, bloco, unidade, dataIni: dataOk(x.dataIni) ? x.dataIni : '', dataFim: dataOk(x.dataFim) ? x.dataFim : '',
       leituraAnt: miNumOpc(x.leituraAnt, 'leitura anterior'), leituraAtual: miNumOpc(x.leituraAtual, 'leitura atual'), estimada: miNumOpc(x.estimada, 'leitura estimada'),
       consumo, valor: x.valor === '' || x.valor == null ? '' : Math.round(miNumOpc(x.valor, 'valor') * 100) / 100,
-      origem: x.origem === 'Relatório Global' ? 'Relatório Global' : 'Planilha Exista', importadoEm: quando, importadoPor: conta.nome };
+      origem: ['Relatório Global', 'Demonstrativo Individual'].indexOf(x.origem) >= 0 ? x.origem : 'Planilha Exista', importadoEm: quando, importadoPor: conta.nome };
     if (x.hidrometro) o.hidrometro = texto(x.hidrometro, 30);
     if (x.local) o.local = texto(x.local, 60);
     const k = miChave(periodo, bloco, unidade), atual = porChave.get(k);
