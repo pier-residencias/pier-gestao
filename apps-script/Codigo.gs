@@ -385,7 +385,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-02 Pier Gestão 2.0 — demonstrativo individual';
+const VERSAO = '2026-11-02 Pier Gestão 2.0 — importação em lote';
 
 function doGet() {
   TABS = {};
@@ -2629,7 +2629,7 @@ const ARQ_TIPOS = { unImportar: 'Cadastro de unidades', medImportar: 'Planilha d
   prestImportar: 'Planilha de prestadores', importarContagem: 'Contagem de estoque', miImportar: 'Medição individual (Exista)', cotSalvar: 'Mapa de cotação' };
 const arqHashOk = h => /^[0-9a-f]{64}$/.test(String(h || ''));
 function arqVerificar(hashes) {
-  const hs = (Array.isArray(hashes) ? hashes : []).map(h => String(h).toLowerCase()).filter(arqHashOk).slice(0, 20);
+  const hs = (Array.isArray(hashes) ? hashes : []).map(h => String(h).toLowerCase()).filter(arqHashOk).slice(0, 80);
   if (!hs.length) return [];
   return linhasOnde(tabela('arq'), ['hash'], x => hs.indexOf(String(x.hash).toLowerCase()) >= 0)
     .map(x => ({ hash: x.hash, tipo: x.tipo, nome: x.nomeArq, tamanho: x.tamanho, quando: x.importadoEm, por: x.importadoPor, resumo: x.resumo }))

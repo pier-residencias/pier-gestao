@@ -7077,6 +7077,61 @@ $("#mi-ate").addEventListener("change", e => { MI.gAte = e.target.value; renderM
 $("#mi-gbloco").addEventListener("change", e => { MI.gBloco = e.target.value; renderMI(); });
 $("#mi-xls").addEventListener("click", miExcel);
 $("#mi-pdf").addEventListener("click", miPDF);
+// ----- importação em lote: arquivos de vários meses, agrupados por período -----
+function miMontarPeriodo(periodo, itens){
+  const pl = itens.find(x => x.tipo === "planilha"), gls = itens.filter(x => x.tipo === "global"), ind = itens.find(x => x.tipo === "individual");
+  const glU = gls.find(g => g.r.unidades.length), glR = gls.find(g => g.r.concM3 !== "");
+  const info = new Map(ind ? ind.r.unidades.map(u => [miChaveU(u), u]) : []);
+  const doInd = ind ? ind.r.unidades.filter(u => u.atual && u.atual.consumo !== "").map(u => Object.assign({origem:"Demonstrativo Individual", periodo, bloco:u.bloco, unidade:u.unidade, dataIni:u.ini, dataFim:u.fim}, u.atual)) : [];
+  const base = pl ? pl.r.unidades : glU ? glU.r.unidades : doInd;
+  const unidades = base.map(x => { const u = info.get(miChaveU(x)); return Object.assign({}, x, {periodo}, u ? {hidrometro:u.hidrometro, local:u.local} : {}); });
+  return {periodo, unidades, historico: ind ? ind.r.unidades.flatMap(u => miHistDe(u, periodo)) : [], resumo: glR ? Object.assign({}, glR.r, {unidades:undefined}) : null,
+    arquivos: itens.map(x => x.arq).filter(Boolean), nomes: itens.map(x => x.nome), conc: glR ? glR.r : null};
+}
+function miLote(res){
+  const porP = new Map();
+  res.filter(x => x.r && x.r.periodo).forEach(x => { if (!porP.has(x.r.periodo)) porP.set(x.r.periodo, []); porP.get(x.r.periodo).push(x); });
+  const pers = [...porP.keys()].sort(), lista = pers.map(p => miMontarPeriodo(p, porP.get(p)));
+  const ja = p => MI.d && MI.d.mi.some(x => x.periodo === p && x.origem !== "Histórico Exista");
+  // meses que faltam entre o primeiro e o último
+  const faltam = []; if (pers.length) { let [a, m] = pers[0].split("-").map(Number); const fim = pers[pers.length - 1];
+    for (let i = 0; i < 600; i++) { const p = `${a}-${String(m).padStart(2, "0")}`; if (p > fim) break; if (!porP.has(p) && !(MI.d && MI.d.mi.some(x => x.periodo === p))) faltam.push(p); m++; if (m > 12) { m = 1; a++; } } }
+  const erros = res.filter(x => x.erro || !x.r);
+  const nJa = lista.filter(x => ja(x.periodo)).length;
+  $("#mi-prev").innerHTML = `<div class="notice" style="margin:0 0 12px"><p style="margin:0 0 6px"><b>${lista.length} períodos</b> em ${res.length} arquivos · de ${esc(miRotPer(pers[0]))} a ${esc(miRotPer(pers[pers.length - 1]))}</p>
+      ${faltam.length ? `<p class="err" style="margin:0 0 6px">Faltam relatórios de: ${faltam.map(p => esc(miRotPer(p))).join(", ")}.</p>` : ""}
+      ${erros.length ? `<ul class="mi-li">${erros.map(x => `<li class="err">${esc(x.nome)}: ${esc(x.erro || "não reconhecido")}</li>`).join("")}</ul>` : ""}</div>
+    <div class="tablebox flat mi-lote"><table><thead><tr><th>Período</th><th class="num">Unidades</th><th class="num">Consumo</th><th class="num hide-s">Conta</th><th class="hide-m">Arquivos</th><th>Situação</th></tr></thead><tbody>
+      ${lista.slice().reverse().map(x => `<tr><td><b>${esc(miRotPer(x.periodo))}</b></td><td class="num">${x.unidades.length || "—"}</td><td class="num">${x.unidades.length ? mdF(x.unidades.reduce((s, u) => s + (Number(u.consumo) || 0), 0), 1) + " m³" : "—"}</td><td class="num hide-s">${x.conc ? mdF(x.conc.concM3, 0) + " m³" : "—"}</td><td class="hide-m">${x.nomes.map(esc).join("<br>")}</td><td>${ja(x.periodo) ? `<span class="pill s-baixo">já importado</span>` : `<span class="pill s-ok">novo</span>`}</td></tr>`).join("")}
+    </tbody></table></div>
+    ${nJa ? `<label class="pd-chk" style="margin:10px 0 0"><input type="checkbox" id="mi-lote-subst"> Substituir também os ${nJa} período${nJa === 1 ? "" : "s"} que já estão no sistema (sem marcar, eles são pulados)</label>` : ""}`;
+  const novos = lista.filter(x => !ja(x.periodo)).length;
+  $("#mi-ok").textContent = `Importar ${novos} período${novos === 1 ? "" : "s"}`;
+  $("#mi-ok").disabled = !novos;
+  const ck = $("#mi-lote-subst");
+  if (ck) ck.onchange = () => { const n = ck.checked ? lista.length : novos; $("#mi-ok").textContent = `Importar ${n} período${n === 1 ? "" : "s"}`; $("#mi-ok").disabled = !n; };
+  return {lista, ja};
+}
+async function miLoteImportar(L){
+  const subst = $("#mi-lote-subst") && $("#mi-lote-subst").checked;
+  const fila = L.lista.filter(x => subst || !L.ja(x.periodo)), msg = $("#mi-msg"), b = $("#mi-ok");
+  b.disabled = true; $("#mi-x").disabled = true;
+  let feitos = 0, ult = null;
+  for (const x of fila) {
+    msg.className = "hint"; msg.innerHTML = `<span class="spin" aria-hidden="true"></span> Importando ${feitos + 1} de ${fila.length}: ${esc(miRotPer(x.periodo))}…`;
+    try {
+      ARQ_PEND.miImportar = x.arquivos;
+      const r = await api("miImportar", {periodo:x.periodo, unidades:x.unidades, historico:x.historico, resumo:x.resumo});
+      miAplicar(r); feitos++; ult = x.periodo;
+    } catch(e){
+      msg.className = "hint err"; msg.textContent = `Parou em ${miRotPer(x.periodo)}: ${e.message}. ${feitos} período${feitos === 1 ? "" : "s"} importado${feitos === 1 ? "" : "s"} antes disso.`;
+      b.disabled = false; $("#mi-x").disabled = false; renderMI(); return;
+    }
+  }
+  delete ARQ_PEND.miImportar;
+  $("#mi-x").disabled = false; if (ult) MI.per = ult; fecharModal(); renderMI();
+  toast(`${feitos} período${feitos === 1 ? "" : "s"} importado${feitos === 1 ? "" : "s"} na medição individual.`);
+}
 // ----- importações: o que entrou em cada período (planilha, PDF, histórico, conta) e a exclusão -----
 function miImportacoes(aviso){
   if (!MI.d) return;
@@ -7229,20 +7284,28 @@ async function miLerArquivo(file){
 }
 function miImportar(){
   $("#modal-box").innerHTML = `<h3>Importar relatórios da Exista</h3>
-    <p class="hint" style="margin:-6px 0 12px">Escolha a <b>planilha (Excel)</b> do mês. Se quiser, junte também o <b>Relatório Global</b> (PDF, traz a conta da concessionária) e o <b>Demonstrativo Individual</b> (PDF, traz o hidrômetro e os meses anteriores de cada unidade). Pode escolher os três de uma vez.</p>
+    <p class="hint" style="margin:-6px 0 12px">Escolha a <b>planilha (Excel)</b> do mês. Se quiser, junte também o <b>Relatório Global</b> (PDF, traz a conta da concessionária) e o <b>Demonstrativo Individual</b> (PDF, traz o hidrômetro e os meses anteriores de cada unidade). Pode escolher os três de uma vez — e também <b>vários meses de uma vez</b> (por exemplo, todos os relatórios antigos): o sistema separa por mês e importa um de cada vez.</p>
     <div class="field full"><input class="input" type="file" id="mi-arqs" accept=".xlsx,.pdf" multiple></div>
     <div id="mi-prev"></div>
     <div class="actions"><button class="btn primary" type="button" id="mi-ok" disabled>Importar</button><button class="btn" type="button" id="mi-x">Cancelar</button><span class="hint" id="mi-msg"></span></div>`;
   $("#modal").hidden = false; $("#mi-x").onclick = fecharModal;
-  let lido = null;
+  let lido = null, lote = null;
   $("#mi-arqs").onchange = async () => {
     const fs = [...$("#mi-arqs").files]; lido = null; $("#mi-ok").disabled = true;
     if (!fs.length) { $("#mi-prev").innerHTML = ""; return; }
     $("#mi-prev").innerHTML = `<div class="empty"><span class="spin" aria-hidden="true"></span> Conferindo se ${fs.length === 1 ? "o arquivo já foi importado" : "os arquivos já foram importados"}…</div>`;
     if (!(await arqConferir("miImportar", fs, $("#mi-prev")))) { $("#mi-arqs").value = ""; return; }
     $("#mi-prev").innerHTML = `<div class="empty"><span class="spin" aria-hidden="true"></span> Lendo ${fs.length} arquivo${fs.length === 1 ? "" : "s"}…</div>`;
+    const hs = ARQ_PEND.miImportar || [];
     const res = [];
-    for (const f of fs) { try { res.push(Object.assign({nome:f.name}, await miLerArquivo(f))); } catch(e){ res.push({nome:f.name, tipo:"?", erro:"Não consegui ler este arquivo."}); } }
+    for (let i = 0; i < fs.length; i++) {
+      const f = fs[i];
+      if (fs.length > 3) $("#mi-prev").innerHTML = `<div class="empty"><span class="spin" aria-hidden="true"></span> Lendo ${i + 1} de ${fs.length}: ${esc(f.name)}…</div>`;
+      try { res.push(Object.assign({nome:f.name, arq:hs[i]}, await miLerArquivo(f))); } catch(e){ res.push({nome:f.name, tipo:"?", erro:"Não consegui ler este arquivo."}); }
+    }
+    // arquivos de vários meses: importação em lote, um período de cada vez
+    if (new Set(res.filter(x => x.r && x.r.periodo).map(x => x.r.periodo)).size > 1) { lote = miLote(res); lido = null; return; }
+    lote = null;
     const pl = res.find(x => x.tipo === "planilha"), gl = res.find(x => x.tipo === "global"), ind = res.find(x => x.tipo === "individual");
     const periodo = (pl && pl.r.periodo) || (gl && gl.r.periodo) || (ind && ind.r.periodo) || "";
     const li = [];
@@ -7269,7 +7332,7 @@ function miImportar(){
     $("#mi-ok").disabled = !!jaOk;
     if (jaOk) jaOk.onchange = () => { $("#mi-ok").disabled = !jaOk.checked; };
   };
-  $("#mi-ok").onclick = () => { if (!lido) return; enviar($("#mi-ok"), $("#mi-msg"), "miImportar", lido, r => { miAplicar(r); MI.per = lido.periodo; fecharModal(); toast(r.msg); renderMI(); }); };
+  $("#mi-ok").onclick = () => { if (lote) { miLoteImportar(lote); return; } if (!lido) return; enviar($("#mi-ok"), $("#mi-msg"), "miImportar", lido, r => { miAplicar(r); MI.per = lido.periodo; fecharModal(); toast(r.msg); renderMI(); }); };
 }
 $("#mi-importar").addEventListener("click", miImportar);
 $("#mi-per").addEventListener("change", e => { MI.per = e.target.value; renderMI(); });
