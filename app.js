@@ -50,7 +50,10 @@ if (!TEM_ADM || !document.getElementById("t-inicio")) delete ABAS_PERM.inicio;
 if (!TEM_ADM || !document.getElementById("t-rondas")) delete ABAS_PERM.rondas;
 if (!TEM_ADM || !document.getElementById("t-unidades")) { delete ABAS_PERM.unidades; delete ABAS_PERM.uncadastro; delete ABAS_PERM.unconfig; }
 if (!TEM_ADM || !document.getElementById("t-fornecedores")) delete ABAS_PERM.fornecedores;
-if (!TEM_ADM || !document.getElementById("t-esreservas")) { delete ABAS_PERM.esreservas; delete ABAS_PERM.esvistorias; delete ABAS_PERM.esespacos; }
+// Espaços (reservas, checklist e espaços) tirados do sistema a pedido da administração (02/11/2026): as telas somem; os dados ficam na planilha.
+// Para voltar, troque ESPACOS_ATIVO para true (e no Apps Script também).
+const ESPACOS_ATIVO = false;
+if (!ESPACOS_ATIVO || !TEM_ADM || !document.getElementById("t-esreservas")) { delete ABAS_PERM.esreservas; delete ABAS_PERM.esvistorias; delete ABAS_PERM.esespacos; }
 if (!TEM_ADM || !document.getElementById("t-medlanc")) { delete ABAS_PERM.medlanc; delete ABAS_PERM.medidores; delete ABAS_PERM.medrel; delete ABAS_PERM.medind; }
 if (!document.getElementById("t-indicadores")) delete ABAS_PERM.indicadores;
 if (!TEM_ADM || !document.getElementById("t-acessos")) delete ABAS_PERM.acessos;
@@ -579,7 +582,7 @@ const MENU = [
     {t:"itens", rot:"Materiais", b:"b-itens"}, {t:"contagem",rot:"Contagem de estoque",b:"b-cont"}, {t:"aprovacoes",rot:"Aprovações de estoque",b:"b-aprov"}, {t:"categorias", rot:"Categorias de materiais"}, {t:"registrar", rot:"Registrar movimentação"}, {t:"historico", rot:"Histórico"}, {t:"emprestimos", rot:"Empréstimos", b:"b-emp"}]},
   {g:"Manutenção e rotinas", ico:'<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3.6 17.4a1.9 1.9 0 0 0 2.7 2.7l5.7-5.7a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.3-.3-2.4z"/>', itens:[
     {t:"indicadores", rot:"Indicadores"}, {t:"os", acao:"osnova", perm:"os_abrir", rot:"Abrir OS"}, {t:"demandas", acao:"preventiva", perm:"dem_delegar", rot:"Manutenção preventiva"}, {t:"rondas", rot:"Ronda", b:"b-ronda"}, {t:"prestadores", rot:"Prestadores de serviço", b:"b-prest"},
-    {t:"os", rot:"Ordens de serviço (OS)", b:"b-os"}, {t:"demandas", rot:"Demandas", b:"b-dem"}]},
+    {t:"os", rot:"Ordens de serviço (OS)", b:"b-os"}]}, // "Demandas" saiu do menu (02/11/2026); a Manutenção preventiva continua abrindo a tela
   {g:"Compras e pendências", ico:'<path d="M8 5h11M8 12h11M8 19h11M4 5h.01M4 12h.01M4 19h.01"/>', itens:[
     {t:"pendencias", rot:"Controle de pendências", b:"b-adm"}, {t:"pendencias", acao:"nova", rot:"Incluir pendência"}, {t:"cotacoes", rot:"Cotações"}, {t:"fornecedores", rot:"Fornecedores"}]},
   {t:"correspondencias",rot:"Correspondências",ico:'<path d="M3 6h18v12H3zM3 6l9 7 9-7"/>'},
@@ -1260,7 +1263,7 @@ function aplicarPermissoes(){
   $("#dm-nova").hidden = !can("dem_delegar");
   $("#pv-box").hidden = !can("dem_delegar");
   renderMenu();
-  $("#k-dem-box").hidden = $("#p-dem-box").hidden = !podeAba("demandas");
+  $("#k-dem-box").hidden = $("#p-dem-box").hidden = true; // Demandas fora do menu/Home (02/11/2026)
   $("#k-os-box").hidden = $("#p-os-box").hidden = !podeAba("os");
   $("#m-osref-box").hidden = !podeAba("os") || !["saida","troca"].includes(S.tipo);
   $("#m-novo").closest(".hint").hidden = !can("itens_cadastrar");
@@ -2043,7 +2046,7 @@ const fTel = t => { const d = String(t||"").replace(/\D/g,"").replace(/^55(?=\d{
 // destaque para quem recebeu demandas novas
 function renderAvisoDem(){
   const el = $("#aviso-dem"); if (!el) return;
-  const novas = S.token && can("dem_executar") && podeAba("demandas") ? minhasNovas().sort(ordemDem) : [];
+  const novas = []; // aviso de demandas novas desligado (Demandas fora do menu, 02/11/2026)
   if (!novas.length) { el.innerHTML = ""; return; }
   el.innerHTML = `<div class="aviso-dem" role="status">
     <div class="aviso-txt"><b class="aviso-tit">${novas.length===1 ? "Você recebeu 1 demanda nova" : `Você recebeu ${novas.length} demandas novas`}</b>
