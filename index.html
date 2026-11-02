@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap"></noscript>
-<link rel="stylesheet" href="estilo.css?v=20261102producao">
+<link rel="stylesheet" href="estilo.css?v=20261102migraf">
 <link rel="stylesheet" href="visual-2.css?v=20261102producao">
 <style>
 html.pier-iniciando body>main,html.pier-iniciando body>header,html.pier-iniciando body>aside,html.pier-iniciando #side-fundo {visibility:hidden;}
@@ -364,7 +364,12 @@ html.pier-iniciando body>main,html.pier-iniciando body>header,html.pier-iniciand
   <section id="t-medind" hidden>
     <div class="un-head"><div><h2 class="sec">Medição individual</h2><p class="muted">Consumo de água de cada unidade pelos relatórios da Exista, com alertas de consumo alto e a conferência com a conta da concessionária.</p></div>
       <div class="actions"><button class="btn" type="button" id="mi-imps">Importações</button><button class="btn primary" type="button" id="mi-importar">Importar relatórios da Exista</button></div></div>
-    <div class="panel md-relbar"><label class="md-lbl">Período <select class="input" id="mi-per"></select></label>
+    <div class="ind-vistas md-abas mi-vistas" id="mi-vistas" role="tablist" aria-label="Medição individual"><button type="button" role="tab" data-v="periodo" aria-selected="true">Período</button><button type="button" role="tab" data-v="graf" aria-selected="false">Gráficos e relatórios</button></div>
+    <div class="panel md-relbar" id="mi-gbar" hidden><label class="md-lbl">De <select class="input" id="mi-de"></select></label>
+      <label class="md-lbl">Até <select class="input" id="mi-ate"></select></label>
+      <label class="md-lbl">Bloco <select class="input" id="mi-gbloco"></select></label>
+      <span class="md-relbar-a"><button class="btn md-xls" type="button" id="mi-xls">Excel</button><button class="btn md-pdf" type="button" id="mi-pdf">PDF</button></span></div>
+    <div class="panel md-relbar" id="mi-pbar"><label class="md-lbl">Período <select class="input" id="mi-per"></select></label>
       <label class="md-lbl">Bloco <select class="input" id="mi-bloco"></select></label>
       <label class="md-lbl">Unidade <input class="input" id="mi-q" type="search" placeholder="Ex.: 101"></label>
       <label class="md-lbl">Mostrar <select class="input" id="mi-filtro"><option value="">Todas as unidades</option><option value="alertas">Só os alertas</option></select></label>
@@ -801,7 +806,7 @@ html.pier-iniciando body>main,html.pier-iniciando body>header,html.pier-iniciand
 <script src="config.js"></script>
 <script src="nfe.js?v=20261101os5"></script>
 <script src="vendor/qrcode.js?v=2.0.4"></script>
-<script src="app.js?v=20261102mimp"></script>
+<script src="app.js?v=20261102migraf"></script>
 
 </body>
 </html>

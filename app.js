@@ -6751,7 +6751,7 @@ async function carregarMed(forcar){
 }
 function renderMedTudo(){ renderMedLanc(); renderMedidores(); renderMedRel(); renderMI(); }
 // ---------- Medição individual (Exista): consumo de água por unidade, alertas e conferência com a concessionária ----------
-const MI = { d:null, erro:"", carregando:false, em:0, per:"", bloco:"", q:"", f:"", ord:"" };
+const MI = { d:null, erro:"", carregando:false, em:0, per:"", bloco:"", q:"", f:"", ord:"", vista:"periodo", gDe:"", gAte:"", gBloco:"" };
 const MI_ALTO = 40;            // a Exista destaca as unidades com 40 m³ ou mais
 const MI_MESES = ["janeiro","fevereiro","marco","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
 const miPode = () => can("med_ver") || can("med_lancar") || can("un_ver") || can("un_editar");
@@ -6764,7 +6764,7 @@ function miRotPerLongo(p){
   const mes = d => (MI_MESES[+d.slice(5, 7) - 1] || "").replace("marco", "março");
   return (mes(ini) === mes(fim) ? mes(fim) : mes(ini) + "/" + mes(fim)) + " " + fim.slice(0, 4) + " · leitura " + fData(ini).slice(0, 5) + " a " + fData(fim).slice(0, 5);
 }
-const miBlocoRot = b => String(b) === "0" || !String(b).trim() ? "—" : String(b);
+const miBlocoRot = b => String(b) === "0" || !String(b).trim() ? "—" : miBlocoNome(b);
 const miChaveU = x => String(x.bloco).trim().toLowerCase() + "|" + String(x.unidade).trim().toLowerCase();
 const miNumBR = v => { if (typeof v === "number") return v; const s = String(v ?? "").trim(); if (!s) return NaN; return Number(s.includes(",") ? s.replace(/\./g, "").replace(",", ".") : s); };
 function miLimpar(){ MI.d = null; MI.erro = ""; MI.em = 0; }
@@ -6772,11 +6772,11 @@ async function carregarMI(forcar){
   if (!TEM_ADM || !S.token || MI.carregando || !miPode()) return;
   if (!forcar && MI.d && Date.now() - MI.em < 60000) { renderMI(); return; }
   MI.carregando = true;
-  try { const r = await api("miLista"); MI.d = {mi:r.mi || [], mir:r.mir || []}; MI.em = Date.now(); MI.erro = ""; }
+  try { const r = await api("miLista"); MI.d = {mi:r.mi || [], mir:r.mir || [], blocos:r.miBlocos || {}}; MI.em = Date.now(); MI.erro = ""; }
   catch(e){ MI.erro = e.message; }
   finally { MI.carregando = false; renderMI(); }
 }
-function miAplicar(r){ if (r && Array.isArray(r.mi)) { MI.d = {mi:r.mi, mir:r.mir || []}; MI.em = Date.now(); } }
+function miAplicar(r){ if (r && Array.isArray(r.mi)) { MI.d = {mi:r.mi, mir:r.mir || [], blocos:r.miBlocos || (MI.d && MI.d.blocos) || {}}; MI.em = Date.now(); } }
 // histórico da unidade (todos os períodos, em ordem) e a análise do período escolhido
 function miHist(x){ const k = miChaveU(x); return MI.d.mi.filter(y => miChaveU(y) === k).sort((a, b) => a.periodo < b.periodo ? -1 : 1); }
 function miAnalise(x){
@@ -6793,6 +6793,9 @@ function renderMI(){
   const box = $("#mi-corpo"); $("#mi-importar").hidden = !can("med_lancar"); $("#mi-imps").hidden = !MI.d;
   if (MI.erro && !MI.d) { box.innerHTML = `<div class="notice crit">${esc(MI.erro)}${/desconhecida/i.test(MI.erro) ? " A medição individual precisa do Apps Script novo (colar o código e implantar uma nova versão)." : ""}</div>`; return; }
   if (!MI.d) { box.innerHTML = `<div class="empty"><span class="spin" aria-hidden="true"></span> Carregando…</div>`; return; }
+  $$("#mi-vistas [data-v]").forEach(b => b.setAttribute("aria-selected", String(b.dataset.v === MI.vista)));
+  $("#mi-gbar").hidden = MI.vista !== "graf"; $("#mi-pbar").hidden = MI.vista === "graf";
+  if (MI.vista === "graf") { renderMIGraf(box); return; }
   const pers = miPeriodos();
   const sp = $("#mi-per");
   sp.innerHTML = pers.length ? pers.map(p => `<option value="${p}">${esc(miRotPerLongo(p))}</option>`).join("") : `<option value="">—</option>`;
@@ -6801,7 +6804,7 @@ function renderMI(){
   if (!pers.length) { box.innerHTML = `<div class="empty">Nenhum relatório da Exista importado ainda.${can("med_lancar") ? ` Clique em <b>Importar relatórios da Exista</b> e escolha a planilha (Excel) do mês; o Relatório Global e o Individual (PDF) são opcionais.` : ""}</div>`; return; }
   const doPer = MI.d.mi.filter(x => x.periodo === MI.per);
   const blocos = [...new Set(doPer.map(x => String(x.bloco)))].sort((a, b) => a.localeCompare(b, "pt-BR", {numeric:true}));
-  const sb = $("#mi-bloco"); sb.innerHTML = `<option value="">Todos os blocos</option>` + blocos.map(b => `<option value="${esc(b)}">${b === "0" ? "Outros (sem bloco)" : "Bloco " + esc(b)}</option>`).join("");
+  const sb = $("#mi-bloco"); sb.innerHTML = `<option value="">Todos os blocos</option>` + blocos.map(b => `<option value="${esc(b)}">${esc(miBlocoLongo(b))}</option>`).join("");
   if (!blocos.includes(MI.bloco)) MI.bloco = ""; sb.value = MI.bloco;
   const an = new Map(doPer.map(x => [x.id, miAnalise(x)]));
   const soma = doPer.reduce((s, x) => s + (Number(x.consumo) || 0), 0), valor = doPer.reduce((s, x) => s + (Number(x.valor) || 0), 0);
@@ -6818,7 +6821,7 @@ function renderMI(){
   // consumo por bloco
   const porB = blocos.map(b => ({b, s: doPer.filter(x => String(x.bloco) === b).reduce((s, x) => s + (Number(x.consumo) || 0), 0), n: doPer.filter(x => String(x.bloco) === b).length}));
   const maxB = Math.max(1, ...porB.map(x => x.s));
-  h += `<section class="panel mi-blocos"><h3 class="mi-h">Consumo por bloco</h3>${porB.map(x => `<button type="button" class="mi-barra" data-mi-bloco="${esc(x.b)}" aria-pressed="${MI.bloco === x.b}"><span class="mi-bn">${x.b === "0" ? "Outros" : "Bloco " + esc(x.b)}</span><span class="mi-bt"><span style="width:${(x.s / maxB * 100).toFixed(1)}%"></span></span><span class="mi-bv num">${mdF(x.s, 1)} m³<span class="sub">${x.n} un.</span></span></button>`).join("")}</section>`;
+  h += `<section class="panel mi-blocos"><h3 class="mi-h">Consumo por bloco${can("med_lancar") ? ` <button type="button" class="link small-link" id="mi-nomear">Nomear blocos</button>` : ""}</h3>${porB.map(x => `<button type="button" class="mi-barra" data-mi-bloco="${esc(x.b)}" aria-pressed="${MI.bloco === x.b}"><span class="mi-bn">${esc(miBlocoNome(x.b))}${x.b !== "0" && MI.d.blocos && MI.d.blocos[String(Number(x.b))] ? `<span class="sub">Bloco ${esc(x.b)}</span>` : ""}</span><span class="mi-bt"><span style="width:${(x.s / maxB * 100).toFixed(1)}%"></span></span><span class="mi-bv num">${mdF(x.s, 1)} m³<span class="sub">${x.n} un.</span></span></button>`).join("")}</section>`;
   // tabela
   const q = norm(MI.q);
   let vis = doPer.filter(x => (!MI.bloco || String(x.bloco) === MI.bloco) && (!q || norm(x.unidade + " " + x.bloco + " " + (x.hidrometro || "")).includes(q)) && (MI.f !== "alertas" || an.get(x.id).alerta));
@@ -6865,7 +6868,7 @@ function miAbrirUnidade(id){
   const x = MI.d.mi.find(y => y.id === id); if (!x) return;
   const hs = miHist(x), max = Math.max(1, ...hs.map(y => Number(y.consumo) || 0)), a = miAnalise(x);
   const info = hs.slice().reverse().find(y => y.hidrometro) || {};
-  $("#modal-box").innerHTML = `<h3>Unidade ${esc(x.unidade)}${String(x.bloco) !== "0" ? ` · Bloco ${esc(x.bloco)}` : ""}</h3>
+  $("#modal-box").innerHTML = `<h3>Unidade ${esc(x.unidade)}${String(x.bloco) !== "0" ? ` · ${esc(miBlocoLongo(x.bloco))}` : ""}</h3>
     <p class="muted">${info.hidrometro ? `Hidrômetro ${esc(info.hidrometro)}${info.local ? ` · ${esc(info.local)}` : ""} · ` : ""}${a.media !== null ? `média anterior ${mdF(a.media, 2)} m³` : "sem histórico anterior"}</p>
     <div class="mi-hist">${hs.map(y => `<div class="mi-hb ${y.periodo === x.periodo ? "atual" : ""}"><span class="mi-hv num">${mdF(y.consumo, 1)}</span><span class="mi-hbar" style="height:${Math.max(2, (Number(y.consumo) || 0) / max * 100).toFixed(1)}%"></span><span class="mi-hm">${esc(miRotPer(y.periodo).slice(0, 3))}/${esc(String(y.periodo).slice(2, 4))}</span></div>`).join("")}</div>
     <div class="tablebox flat"><table><thead><tr><th>Período</th><th class="num">Leitura atual</th><th class="num">Consumo</th><th class="num">Valor</th>${can("med_lancar") ? "<th></th>" : ""}</tr></thead><tbody>
@@ -6880,6 +6883,160 @@ function miAbrirUnidade(id){
     enviar(b, $("#mi-u-msg"), "miExcluir", {id:b.dataset.miDl}, r => { miAplicar(r); renderMI(); if (outro && MI.d.mi.some(y => y.id === outro.id)) miAbrirUnidade(outro.id); else fecharModal(); toast(r.msg); });
   };
 }
+// ----- nomes dos blocos -----
+const miBlocoNome = b => { const k = String(b).trim(); if (k === "0" || !k) return "Outros"; const n = MI.d && MI.d.blocos && MI.d.blocos[String(Number(k))]; return n ? n : "Bloco " + k; };
+const miBlocoLongo = b => { const k = String(b).trim(); if (k === "0" || !k) return "Outros (sem bloco)"; const n = MI.d && MI.d.blocos && MI.d.blocos[String(Number(k))]; return n ? `Bloco ${k} · ${n}` : "Bloco " + k; };
+function miNomearBlocos(){
+  const bs = [...new Set(MI.d.mi.map(x => String(x.bloco)))].filter(b => b && b !== "0").sort((a, b) => a.localeCompare(b, "pt-BR", {numeric:true}));
+  $("#modal-box").innerHTML = `<h3>Nomes dos blocos</h3><p class="hint" style="margin:-6px 0 12px">Os nomes aparecem no consumo por bloco, nos filtros, nos gráficos e nos relatórios. Deixe em branco para mostrar só "Bloco N".</p>
+    <form class="form" id="mi-nb" novalidate autocomplete="off">${bs.map(b => `<div class="field"><label for="mi-nb-${esc(b)}">Bloco ${esc(b)}</label><input class="input" id="mi-nb-${esc(b)}" data-b="${esc(b)}" maxlength="40" value="${esc((MI.d.blocos || {})[String(Number(b))] || "")}" placeholder="Nome do bloco"></div>`).join("")}</form>
+    <div class="actions"><button class="btn primary" type="button" id="mi-nb-ok">Salvar nomes</button><button class="btn" type="button" id="mi-nb-x">Cancelar</button><span class="hint" id="mi-nb-msg"></span></div>`;
+  $("#modal").hidden = false; $("#mi-nb-x").onclick = fecharModal; const p1 = $("#mi-nb input"); if (p1) p1.focus();
+  $("#mi-nb-ok").onclick = () => { const o = {}; $$("#mi-nb input").forEach(i => { o[String(Number(i.dataset.b))] = i.value.trim(); });
+    enviar($("#mi-nb-ok"), $("#mi-nb-msg"), "miBlocos", {blocos:o}, r => { miAplicar(r); fecharModal(); renderMI(); }); };
+}
+// ----- gráficos e relatórios (acompanhamento ao longo dos períodos) -----
+const MI_FAIXAS = [[0, 10, "até 10 m³"], [10, 20, "10 a 20"], [20, 30, "20 a 30"], [30, 40, "30 a 40"], [40, Infinity, "40 m³ ou mais"]];
+function miTodosPeriodos(){ return [...new Set(MI.d.mi.map(x => x.periodo).concat(MI.d.mir.map(x => x.periodo)))].filter(Boolean).sort(); }
+function miGrafDados(){
+  const todos = miTodosPeriodos();
+  if (!todos.length) return null;
+  if (!todos.includes(MI.gAte)) MI.gAte = todos[todos.length - 1];
+  if (!todos.includes(MI.gDe) || MI.gDe > MI.gAte) MI.gDe = todos[Math.max(0, todos.indexOf(MI.gAte) - 11)];
+  const pers = todos.filter(p => p >= MI.gDe && p <= MI.gAte), bl = MI.gBloco;
+  const doP = p => MI.d.mi.filter(x => x.periodo === p && (!bl || String(x.bloco) === bl));
+  const linhas = pers.map(p => {
+    const ls = doP(p), r = MI.d.mir.find(x => x.periodo === p), soma = ls.reduce((s, x) => s + (Number(x.consumo) || 0), 0);
+    const valor = ls.reduce((s, x) => s + (Number(x.valor) || 0), 0), conc = r && r.concM3 !== "" && r.concM3 !== undefined ? Number(r.concM3) : null;
+    return {p, n:ls.length, soma, media:ls.length ? soma / ls.length : null, valor:valor || null, conc, concValor: r && r.concValor !== "" && r.concValor !== undefined ? Number(r.concValor) : null,
+      exista: r && r.somaExista !== "" && r.somaExista !== undefined ? Number(r.somaExista) : null, altos:ls.filter(x => Number(x.consumo) >= MI_ALTO).length, hist:ls.length && ls.every(x => x.origem === "Histórico Exista")};
+  });
+  const blocos = [...new Set(MI.d.mi.filter(x => pers.includes(x.periodo)).map(x => String(x.bloco)))].sort((a, b) => a.localeCompare(b, "pt-BR", {numeric:true}));
+  const porBloco = blocos.map(b => ({b, v:pers.map(p => { const ls = MI.d.mi.filter(x => x.periodo === p && String(x.bloco) === b); return ls.length ? ls.reduce((s, x) => s + (Number(x.consumo) || 0), 0) : null; })}));
+  const ult = [...pers].reverse().find(p => doP(p).length) || MI.gAte, ultLs = doP(ult);
+  const faixas = MI_FAIXAS.map(([a, z, rot]) => ({rot, v:ultLs.filter(x => Number(x.consumo) >= a && Number(x.consumo) < z).length}));
+  const top = ultLs.slice().sort((a, b) => Number(b.consumo) - Number(a.consumo)).slice(0, 10);
+  return {todos, pers, linhas, blocos, porBloco, ult, ultLs, faixas, top};
+}
+const miRotCurto = p => { const [a, m] = String(p).split("-"); return (PP_MESES[+m - 1] || m) + "/" + a.slice(2); };
+// gráfico de colunas (com linhas por cima), no mesmo estilo dos relatórios de consumo
+function miGrafV(o){
+  const W = o.W, H = W < 560 ? 230 : 280, pl = o.brl ? 84 : 62, pr = 14, pt = 16, pb = 40, iw = W - pl - pr, ih = H - pt - pb;
+  const vals = (o.barras || []).concat(o.linhas || []).flatMap(s => s.v).filter(v => v !== null && v !== undefined);
+  const max = Math.max(0, ...vals), passo = o.inteiro ? Math.max(1, Math.round(mdPasso(max))) : mdPasso(max), top = Math.max(passo, Math.ceil(max / passo) * passo);
+  const n = o.cats.length, x = i => pl + iw * (i + .5) / n, y = v => pt + ih - ih * v / top;
+  let g = "";
+  for (let v = 0; v <= top + 1e-9; v += passo) g += `<line x1="${pl}" x2="${W - pr}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="#d6dee8"/><text x="${pl - 6}" y="${(y(v) + 4).toFixed(1)}" text-anchor="end" font-size="11" fill="#5b6b7d">${o.brl ? "R$ " + mdF(v, 0) : mdF(v, passo < 1 ? 1 : 0)}</text>`;
+  const cabe = Math.max(1, Math.floor(iw / 48)), pulo = Math.ceil(n / cabe);
+  o.cats.forEach((c, i) => { if ((n - 1 - i) % pulo === 0) g += `<text x="${x(i).toFixed(1)}" y="${H - pb + 16}" text-anchor="middle" font-size="11" fill="#5b6b7d">${esc(o.rot ? o.rot(c) : c)}</text>`; });
+  g += `<text transform="translate(14 ${pt + ih / 2}) rotate(-90)" text-anchor="middle" font-size="11" fill="#5b6b7d">${esc(o.eixo || "")}</text>`;
+  const bs = o.barras || [], gw = iw / n * .7, bw = gw / Math.max(1, bs.length);
+  bs.forEach((s, k) => s.v.forEach((v, i) => { if (v === null || v === undefined) return; const h = Math.max(0, ih * v / top), x0 = x(i) - gw / 2 + k * bw;
+    g += `<rect x="${x0.toFixed(1)}" y="${(pt + ih - h).toFixed(1)}" width="${Math.max(1, bw - 2).toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${s.cor}"><title>${esc(o.rot ? o.rot(o.cats[i]) : o.cats[i])} · ${esc(s.nome)}: ${o.brl ? fBRL(v) : mdF(v, 1) + " " + esc(o.un || "")}</title></rect>`; }));
+  (o.linhas || []).forEach(s => {
+    let d = "", ab = false;
+    s.v.forEach((v, i) => { if (v === null || v === undefined) { ab = false; return; } d += (ab ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1); ab = true; });
+    g += `<path d="${d}" fill="none" stroke="${s.cor}" stroke-width="2.2" stroke-linejoin="round" ${s.tracejada ? 'stroke-dasharray="6 4"' : ""}/>`;
+    g += s.v.map((v, i) => v === null || v === undefined ? "" : `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3.4" fill="${s.cor}" stroke="#fff" stroke-width="1.2"><title>${esc(o.rot ? o.rot(o.cats[i]) : o.cats[i])} · ${esc(s.nome)}: ${o.brl ? fBRL(v) : mdF(v, 1) + " " + esc(o.un || "")}</title></circle>`).join("");
+  });
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(o.titulo || "Gráfico")}">${g}</svg>`;
+}
+// barras deitadas (ranking)
+function miGrafH(itens, W, un){
+  const lh = 26, rotW = Math.min(150, Math.round(W * .32)), H = itens.length * lh + 8, iw = W - rotW - 70, max = Math.max(1, ...itens.map(i => i.v));
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Ranking">${itens.map((it, k) => { const y0 = 4 + k * lh, w = Math.max(2, iw * it.v / max);
+    return `<text x="${rotW - 8}" y="${y0 + 16}" text-anchor="end" font-size="12" fill="currentColor">${esc(it.rot)}</text><rect x="${rotW}" y="${y0 + 4}" width="${w.toFixed(1)}" height="16" rx="3" fill="${it.cor || "#2563eb"}"><title>${esc(it.rot)}: ${mdF(it.v, 1)} ${esc(un)}</title></rect><text x="${(rotW + w + 6).toFixed(1)}" y="${y0 + 16}" font-size="12" fill="currentColor">${mdF(it.v, 1)}${un === "un." ? "" : " " + esc(un)}</text>`; }).join("")}</svg>`;
+}
+const miLeg = s => `<div class="mi-leg">${s.map(x => `<span><i style="background:${x.cor}"></i>${esc(x.nome)}</span>`).join("")}</div>`;
+function miGrafHtml(G, W){
+  const cats = G.pers, Wc = Math.max(280, W), azul = "#2563eb", lar = "#f59e0b", verde = "#10b981";
+  const semBloco = !MI.gBloco;
+  const ev = miGrafV({W:Wc, cats, rot:miRotCurto, un:"m³", eixo:"Consumo (m³)", titulo:"Evolução do consumo", barras:[{nome:"Soma das unidades", cor:azul, v:G.linhas.map(l => l.n ? l.soma : null)}], linhas: semBloco ? [{nome:"Conta da concessionária", cor:lar, v:G.linhas.map(l => l.conc)}] : []});
+  const blc = semBloco && G.porBloco.length > 1 ? miGrafV({W:Wc, cats, rot:miRotCurto, un:"m³", eixo:"Consumo (m³)", titulo:"Consumo por bloco", linhas:G.porBloco.map((b, k) => ({nome:miBlocoNome(b.b), cor:MD_CORES[k % MD_CORES.length], v:b.v}))}) : "";
+  const val = G.linhas.some(l => l.valor || l.concValor) ? miGrafV({W:Wc, cats, rot:miRotCurto, brl:true, eixo:"Valor", titulo:"Valor por período", barras:[{nome:"Valor das unidades", cor:verde, v:G.linhas.map(l => l.valor)}], linhas: semBloco ? [{nome:"Conta da concessionária (R$)", cor:lar, v:G.linhas.map(l => l.concValor)}] : []}) : "";
+  const med = miGrafV({W:Wc, cats, rot:miRotCurto, un:"m³", eixo:"m³ por unidade", titulo:"Média por unidade", linhas:[{nome:"Média por unidade", cor:"#8b5cf6", v:G.linhas.map(l => l.media)}]});
+  const fx = miGrafV({W:Wc, inteiro:true, cats:G.faixas.map(f => f.rot), un:"unidades", eixo:"Unidades", titulo:"Unidades por faixa", barras:[{nome:"Unidades", cor:azul, v:G.faixas.map(f => f.v)}]});
+  const tp = G.top.length ? miGrafH(G.top.map(x => ({rot:`${miBlocoNome(x.bloco)} · ${x.unidade}`, v:Number(x.consumo), cor:Number(x.consumo) >= MI_ALTO ? "#dc2626" : azul})), Wc, "m³") : "";
+  const card = (tit, sub, svg, leg) => `<section class="panel mi-gcard"><h3 class="mi-h">${esc(tit)}</h3>${sub ? `<p class="hint mi-gsub">${sub}</p>` : ""}${leg || ""}<div class="mi-gbox">${svg}</div></section>`;
+  return card("Evolução do consumo", semBloco ? "Soma das unidades (Exista) e a conta da concessionária, período a período." : `Soma das unidades de ${esc(miBlocoLongo(MI.gBloco))}.`, ev, miLeg([{nome:"Soma das unidades", cor:azul}].concat(semBloco ? [{nome:"Conta da concessionária", cor:lar}] : [])))
+    + (blc ? card("Consumo por bloco", "Como cada bloco evolui ao longo dos períodos.", blc, miLeg(G.porBloco.map((b, k) => ({nome:miBlocoNome(b.b), cor:MD_CORES[k % MD_CORES.length]})))) : "")
+    + card("Média por unidade", "Consumo médio de cada unidade no período (bom para comparar meses com mais ou menos unidades medidas).", med, "")
+    + (val ? card("Valor por período", "Soma do valor individualizado das unidades" + (semBloco ? " e o valor da conta." : "."), val, miLeg([{nome:"Valor das unidades", cor:verde}].concat(semBloco ? [{nome:"Conta (R$)", cor:lar}] : []))) : "")
+    + card(`Unidades por faixa de consumo · ${miRotPer(G.ult)}`, `A Exista destaca as unidades com ${MI_ALTO} m³ ou mais.`, fx, "")
+    + (tp ? card(`Maiores consumos · ${miRotPer(G.ult)}`, `Em vermelho, ${MI_ALTO} m³ ou mais.`, tp, "") : "");
+}
+function miTabelasHtml(G){
+  const pc = (a, b) => a === null || b === null || !b ? "—" : `${a - b > 0 ? "+" : ""}${mdF((a - b) / b * 100, 1)}%`;
+  const res = `<section class="panel mi-gcard mi-gfull"><h3 class="mi-h">Resumo por período</h3><div class="tablebox flat"><table><thead><tr><th>Período</th><th class="num">Unidades</th><th class="num">Consumo</th><th class="num">Média/unidade</th><th class="num hide-s">Valor</th><th class="num">Conta</th><th class="num hide-s">Conta (R$)</th><th class="num hide-m">Unidades x conta</th><th class="num">${MI_ALTO}+ m³</th></tr></thead><tbody>
+    ${G.linhas.slice().reverse().map(l => `<tr><td><b>${esc(miRotPer(l.p))}</b>${l.hist ? `<span class="sub">só histórico</span>` : ""}</td><td class="num">${l.n || "—"}</td><td class="num">${l.n ? mdF(l.soma, 1) + " m³" : "—"}</td><td class="num">${l.media !== null ? mdF(l.media, 2) + " m³" : "—"}</td><td class="num hide-s">${l.valor ? fBRL(l.valor) : "—"}</td><td class="num">${l.conc !== null ? mdF(l.conc, 1) + " m³" : "—"}</td><td class="num hide-s">${l.concValor !== null ? fBRL(l.concValor) : "—"}</td><td class="num hide-m">${pc(l.exista !== null ? l.exista : l.n ? l.soma : null, l.conc)}</td><td class="num">${l.n ? l.altos : "—"}</td></tr>`).join("")}</tbody></table></div></section>`;
+  const blc = G.blocos.length ? `<section class="panel mi-gcard mi-gfull"><h3 class="mi-h">Consumo por bloco e período (m³)</h3><div class="tablebox flat"><table><thead><tr><th>Bloco</th>${G.pers.map(p => `<th class="num">${esc(miRotCurto(p))}</th>`).join("")}</tr></thead><tbody>
+    ${G.porBloco.map(b => `<tr><td><b>${esc(miBlocoNome(b.b))}</b>${b.b !== "0" && MI.d.blocos && MI.d.blocos[String(Number(b.b))] ? `<span class="sub">Bloco ${esc(b.b)}</span>` : ""}</td>${b.v.map(v => `<td class="num">${v === null ? "—" : mdF(v, 1)}</td>`).join("")}</tr>`).join("")}</tbody></table></div></section>` : "";
+  return res + blc;
+}
+function renderMIGraf(box){
+  const G = miGrafDados();
+  if (!G) { box.innerHTML = `<div class="empty">Nenhum relatório da Exista importado ainda.</div>`; return; }
+  const op = p => `<option value="${p}">${esc(miRotPer(p))}</option>`;
+  $("#mi-de").innerHTML = G.todos.map(op).join(""); $("#mi-de").value = MI.gDe;
+  $("#mi-ate").innerHTML = G.todos.map(op).join(""); $("#mi-ate").value = MI.gAte;
+  const bs = [...new Set(MI.d.mi.map(x => String(x.bloco)))].sort((a, b) => a.localeCompare(b, "pt-BR", {numeric:true}));
+  $("#mi-gbloco").innerHTML = `<option value="">Todos os blocos</option>` + bs.map(b => `<option value="${esc(b)}">${esc(miBlocoLongo(b))}</option>`).join("");
+  if (!bs.includes(MI.gBloco)) MI.gBloco = ""; $("#mi-gbloco").value = MI.gBloco;
+  box.innerHTML = `<div class="mi-graf" id="mi-graf"></div>`;
+  const W = Math.min(820, Math.max(280, ($("#mi-graf").clientWidth || 800) > 900 ? Math.floor(($("#mi-graf").clientWidth - 16) / 2) - 34 : ($("#mi-graf").clientWidth || 340) - 34));
+  $("#mi-graf").innerHTML = miGrafHtml(G, W) + miTabelasHtml(G);
+  MI.ultGraf = G;
+}
+let miResizeT = 0;
+window.addEventListener("resize", () => { clearTimeout(miResizeT); miResizeT = setTimeout(() => { if ($("#t-medind") && !$("#t-medind").hidden && MI.vista === "graf") renderMI(); }, 200); });
+function miExcel(){
+  const G = MI.ultGraf; if (!G) { toast("Não há dados para exportar.", true); return; }
+  try {
+    const X = xlsxMini(), cab = {b:true, cor:"FFFFFFFF", fill:"FF1F4E79", wrap:false}, tit = {b:true, wrap:false}, num = {h:"right", num:"#,##0.00"};
+    let r = 1;
+    X.cel(r, 1, `Medição individual (Exista) — ${miRotPer(G.pers[0])} a ${miRotPer(G.pers[G.pers.length - 1])}${MI.gBloco ? " · " + miBlocoLongo(MI.gBloco) : ""}`, tit); r += 2;
+    X.cel(r++, 1, "Resumo por período", tit);
+    ["Período","Unidades","Consumo (m³)","Média por unidade (m³)","Valor das unidades (R$)","Conta (m³)","Conta (R$)",`Unidades com ${MI_ALTO}+ m³`].forEach((c, j) => X.cel(r, j + 1, c, cab)); r++;
+    G.linhas.forEach(l => { [miRotPer(l.p), l.n || "", l.n ? Math.round(l.soma * 100) / 100 : "", l.media !== null ? Math.round(l.media * 100) / 100 : "", l.valor || "", l.conc !== null ? l.conc : "", l.concValor !== null ? l.concValor : "", l.n ? l.altos : ""].forEach((v, j) => X.cel(r, j + 1, v, j ? num : undefined)); r++; });
+    r++; X.cel(r++, 1, "Consumo por bloco e período (m³)", tit);
+    ["Bloco"].concat(G.pers.map(miRotPer)).forEach((c, j) => X.cel(r, j + 1, c, cab)); r++;
+    G.porBloco.forEach(b => { X.cel(r, 1, miBlocoLongo(b.b)); b.v.forEach((v, j) => X.cel(r, j + 2, v === null ? "" : Math.round(v * 100) / 100, num)); r++; });
+    r++; X.cel(r++, 1, "Consumo por unidade e período (m³)", tit);
+    ["Bloco", "Unidade"].concat(G.pers.map(miRotPer)).forEach((c, j) => X.cel(r, j + 1, c, cab)); r++;
+    const us = [...new Map(MI.d.mi.filter(x => G.pers.includes(x.periodo) && (!MI.gBloco || String(x.bloco) === MI.gBloco)).map(x => [miChaveU(x), x])).values()]
+      .sort((a, b) => String(a.bloco).localeCompare(String(b.bloco), "pt-BR", {numeric:true}) || String(a.unidade).localeCompare(String(b.unidade), "pt-BR", {numeric:true}));
+    us.forEach(u => { X.cel(r, 1, miBlocoLongo(u.bloco)); X.cel(r, 2, String(u.unidade)); const k = miChaveU(u);
+      G.pers.forEach((p, j) => { const x = MI.d.mi.find(y => y.periodo === p && miChaveU(y) === k); X.cel(r, j + 3, x ? Number(x.consumo) : "", num); }); r++; });
+    X.col(1, 26); X.col(2, 14); for (let j = 3; j <= G.pers.length + 2; j++) X.col(j, 14);
+    mdBaixar(X.gerar("Medicao individual"), `Medicao individual - Pier ${hoje()}.xlsx`);
+    registrarTela("exportar_medicao_individual", miRotPer(G.pers[G.pers.length - 1]));
+  } catch(e){ toast(e.message || "Não foi possível gerar a planilha.", true); }
+}
+function miPDF(){
+  const G = MI.ultGraf; if (!G) { toast("Não há dados para o relatório.", true); return; }
+  registrarTela("imprimir_medicao_individual", miRotPer(G.pers[G.pers.length - 1]));
+  const corpo = miGrafHtml(G, 700) + miTabelasHtml(G);
+  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Medição individual - ${esc(miRotPer(G.pers[G.pers.length - 1]))}</title><style>
+    @page{size:A4;margin:12mm} body{font:11px Calibri,Arial,sans-serif;color:#1f2a37;margin:0}
+    .cab{border-bottom:3px solid #1f3a56;padding-bottom:6px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:flex-end} h1{font-size:16px;margin:0}
+    .mi-gcard{break-inside:avoid;margin:0 0 10px} .mi-h{font-size:13px;background:#1f3a56;color:#fff;padding:5px 7px;margin:12px 0 6px} .mi-gsub,.hint{color:#4b5b6b;font-size:10px;margin:0 0 4px}
+    .mi-leg{display:flex;gap:14px;justify-content:center;font-size:10px;color:#4b5b6b;flex-wrap:wrap} .mi-leg i{display:inline-block;width:18px;height:8px;margin-right:4px;border-radius:2px}
+    svg{display:block;margin:0 auto 6px} table{border-collapse:collapse;width:100%} th,td{border:1px solid #c9d4df;padding:3px 5px;text-align:left} th{background:#eef3f7;font-size:10px} .num{text-align:right} .sub{display:block;color:#5b6b7a;font-size:9px}
+  </style></head><body><div class="cab"><div><h1>PIER RESIDÊNCIAS — MEDIÇÃO INDIVIDUAL DE ÁGUA</h1><div>${esc(miRotPer(G.pers[0]))} a ${esc(miRotPer(G.pers[G.pers.length - 1]))}${MI.gBloco ? " · " + esc(miBlocoLongo(MI.gBloco)) : ""} · relatórios da Exista</div></div><div class="hint">Emitido em ${fData(hoje())} por ${esc(S.nome || "")}</div></div>${corpo}</body></html>`;
+  let fr = $("#md-print-frame"); if (fr) fr.remove();
+  fr = document.createElement("iframe"); fr.id = "md-print-frame"; fr.setAttribute("aria-hidden", "true");
+  fr.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
+  document.body.appendChild(fr);
+  fr.contentDocument.open(); fr.contentDocument.write(html); fr.contentDocument.close();
+  setTimeout(() => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch(e){ toast("Não foi possível abrir a impressão.", true); } }, 100);
+  return html;
+}
+$("#mi-vistas").addEventListener("click", ev => { const b = ev.target.closest("[data-v]"); if (b && b.dataset.v !== MI.vista) { MI.vista = b.dataset.v; renderMI(); } });
+$("#mi-de").addEventListener("change", e => { MI.gDe = e.target.value; renderMI(); });
+$("#mi-ate").addEventListener("change", e => { MI.gAte = e.target.value; renderMI(); });
+$("#mi-gbloco").addEventListener("change", e => { MI.gBloco = e.target.value; renderMI(); });
+$("#mi-xls").addEventListener("click", miExcel);
+$("#mi-pdf").addEventListener("click", miPDF);
 // ----- importações: o que entrou em cada período (planilha, PDF, histórico, conta) e a exclusão -----
 function miImportacoes(aviso){
   if (!MI.d) return;
@@ -7066,6 +7223,7 @@ $("#mi-q").addEventListener("input", e => { MI.q = e.target.value.trim(); render
 $("#mi-filtro").addEventListener("change", e => { MI.f = e.target.value; renderMI(); });
 $("#mi-ord").addEventListener("change", e => { MI.ord = e.target.value; renderMI(); });
 $("#mi-corpo").addEventListener("click", e => {
+  if (e.target.id === "mi-nomear") { miNomearBlocos(); return; }
   const b = e.target.closest("[data-mi-bloco]"); if (b) { MI.bloco = MI.bloco === b.dataset.miBloco ? "" : b.dataset.miBloco; renderMI(); return; }
   const u = e.target.closest("[data-mi-u]"); if (u) { miAbrirUnidade(u.dataset.miU); return; }
   if (e.target.id === "mi-excluir") {
