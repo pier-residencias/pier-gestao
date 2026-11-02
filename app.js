@@ -7084,7 +7084,7 @@ function miImportacoes(aviso){
   const lanc = can("med_lancar");
   const lin = pers.map(p => {
     const ls = MI.d.mi.filter(x => x.periodo === p), r = MI.d.mir.find(x => x.periodo === p);
-    const pl = ls.filter(x => x.origem === "Planilha Exista").length, gl = ls.filter(x => x.origem === "Relatório Global").length, hi = ls.filter(x => x.origem === "Histórico Exista").length;
+    const pl = ls.filter(x => x.origem === "Planilha Exista").length, gl = ls.filter(x => x.origem === "Relatório Global" || x.origem === "Demonstrativo Individual").length, hi = ls.filter(x => x.origem === "Histórico Exista").length;
     const soma = ls.reduce((s, x) => s + (Number(x.consumo) || 0), 0), valor = ls.reduce((s, x) => s + (Number(x.valor) || 0), 0);
     const quando = ls.map(x => x.importadoEm).concat(r ? [r.importadoEm] : []).filter(Boolean).sort().pop() || "";
     const quem = (ls.find(x => x.importadoEm === quando) || r || {}).importadoPor || "";
@@ -7183,13 +7183,22 @@ function miLerIndividual(linhas){
   const MES = "(janeiro|fevereiro|mar[cç]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)";
   L.forEach(l => {
     let m = /^UNIDADE:? (\S+(?: \S+)*?) Bloco (\S+)/i.exec(l);
-    if (m) { cur = {unidade:m[1].trim(), bloco:m[2].trim(), hist:[], hidrometro:"", local:"", fim:""}; out.push(cur); return; }
+    if (m) { cur = {unidade:m[1].trim(), bloco:m[2].trim(), hist:[], hidrometro:"", local:"", ini:"", fim:"", atual:null}; out.push(cur); return; }
     if (!cur) return;
-    m = new RegExp("^" + MES + " ([\\d.,]+)(?: (\\S+) (.+?) (\\d{2}/\\d{2}/\\d{4}) [\\d.,]+ (\\d{2}/\\d{2}/\\d{4}) [\\d.,]+ [\\d.,]+ [\\d.,]+)?$", "i").exec(l);
+    // 1ª linha do histórico traz também o hidrômetro, a localização e as leituras do período atual
+    m = new RegExp("^" + MES + " ([\\d.,]+)(?: (\\S+) (.+?) (\\d{2}/\\d{2}/\\d{4}) ([\\d.,]+) (\\d{2}/\\d{2}/\\d{4}) ([\\d.,]+) ([\\d.,]+) ([\\d.,]+))?$", "i").exec(l);
     if (m) {
       cur.hist.push({mes: MI_MESES.indexOf(norm(m[1]).replace("ç", "c")) + 1, consumo: miNumBR(m[2])});
-      if (m[3]) { cur.hidrometro = m[3]; cur.local = m[4]; cur.fim = miBR(m[6]); }
+      if (m[3]) {
+        const n = v => { const x = miNumBR(v); return isNaN(x) ? "" : Math.round(x * 1000) / 1000; };
+        Object.assign(cur, {hidrometro:m[3], local:m[4], ini:miBR(m[5]), fim:miBR(m[7])});
+        cur.atual = {leituraAnt:n(m[6]), leituraAtual:n(m[8]), estimada:n(m[9]), consumo:n(m[10]), valor:""};
+      }
+      return;
     }
+    // valor da unidade no período ("Valor Total (R$) 397,53")
+    m = /Valor Total \(R\$\) ([\d.,]+)/i.exec(l);
+    if (m && cur.atual && cur.atual.valor === "") { const v = miNumBR(m[1]); if (!isNaN(v)) cur.atual.valor = Math.round(v * 100) / 100; }
   });
   const ok = out.filter(u => u.hist.length);
   if (!ok.length) return null;
@@ -7241,7 +7250,7 @@ function miImportar(){
     if (pl) { const s = pl.r.unidades.reduce((a, x) => a + x.consumo, 0); li.push(`<li><b>Planilha:</b> ${pl.r.unidades.length} unidades · ${mdF(s, 2)} m³ · leitura de ${fData(pl.r.ini)} a ${fData(pl.r.fim)}</li>`); }
     if (gl && gl.r.unidades.length) li.push(`<li><b>Relatório Global — unidades:</b> ${gl.r.unidades.length} unidades · ${mdF(gl.r.unidades.reduce((a, x) => a + x.consumo, 0), 2)} m³ · leitura de ${fData(gl.r.dataIni)} a ${fData(gl.r.dataFim)}${pl ? " (vale a planilha)" : ""}</li>`);
     if (gl) li.push(`<li><b>Relatório Global:</b> ${esc(gl.r.concessionaria || "concessionária")} ${mdF(gl.r.concM3, 1)} m³${gl.r.concValor !== "" ? " · " + fBRL(gl.r.concValor) : ""} (${fData(gl.r.concIni)} a ${fData(gl.r.concFim)}) · soma da Exista ${gl.r.somaExista !== "" ? mdF(gl.r.somaExista, 1) + " m³" : "—"}</li>`);
-    if (ind) li.push(`<li><b>Demonstrativo Individual:</b> ${ind.r.unidades.length} unidades · ${ind.r.unidades.filter(u => u.hidrometro).length ? "hidrômetro e " : ""}${Math.max(...ind.r.unidades.map(u => u.hist.length))} meses anteriores de consumo</li>`);
+    if (ind) li.push(`<li><b>Demonstrativo Individual:</b> ${ind.r.unidades.length} unidades${!pl && !(gl && gl.r.unidades.length) ? ` · consumo do período de ${ind.r.unidades.filter(u => u.atual && u.atual.consumo !== "").length} (${mdF(ind.r.unidades.reduce((s, u) => s + (u.atual && u.atual.consumo !== "" ? u.atual.consumo : 0), 0), 2)} m³)` : ""} · ${ind.r.unidades.filter(u => u.hidrometro).length ? "hidrômetro e " : ""}${Math.max(...ind.r.unidades.map(u => u.hist.length))} meses anteriores de consumo</li>`);
     const per = [pl, gl, ind].filter(Boolean).map(x => x.r.periodo).filter(Boolean);
     const conflito = new Set(per).size > 1;
     if (conflito) li.push(`<li class="err">Os arquivos são de meses diferentes (${[...new Set(per)].map(miRotPer).join(", ")}). Escolha os do mesmo mês.</li>`);
@@ -7251,8 +7260,9 @@ function miImportar(){
     if (conflito || !(pl || gl || ind) || !periodo) return;
     // o demonstrativo completa a planilha com o hidrômetro e a localização de cada unidade
     const info = new Map(ind ? ind.r.unidades.map(u => [miChaveU(u), u]) : []);
-    // as unidades vêm da planilha; sem ela, da tabela do Relatório Global
-    const base = pl ? pl.r.unidades : gl ? gl.r.unidades : [];
+    // as unidades vêm da planilha; sem ela, da tabela do Relatório Global; sem os dois, do próprio demonstrativo individual
+    const doInd = ind ? ind.r.unidades.filter(u => u.atual && u.atual.consumo !== "").map(u => Object.assign({origem:"Demonstrativo Individual", periodo, bloco:u.bloco, unidade:u.unidade, dataIni:u.ini, dataFim:u.fim}, u.atual)) : [];
+    const base = pl ? pl.r.unidades : gl && gl.r.unidades.length ? gl.r.unidades : doInd;
     const unidades = base.map(x => { const u = info.get(miChaveU(x)); return u ? Object.assign({}, x, {hidrometro:u.hidrometro, local:u.local}) : x; });
     lido = {periodo, unidades, historico: ind ? ind.r.unidades.flatMap(u => miHistDe(u, periodo)) : [], resumo: gl ? Object.assign({}, gl.r, {unidades:undefined}) : null};
     const jaOk = $("#mi-ja-ok");
