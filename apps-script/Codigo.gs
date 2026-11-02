@@ -192,6 +192,14 @@ const ABAS = {
       ['obs', 'Observação'], ['registradoEm', 'Registrado em'], ['registradoPor', 'Registrado por'], ['atualizadoEm', 'Corrigido em'], ['atualizadoPor', 'Corrigido por']],
     num: ['consumo', 'valor']
   },
+  // registro dos arquivos importados (impressão digital SHA-256): avisa quando o mesmo arquivo vai ser importado de novo
+  arq: {
+    nome: 'Arquivos importados',
+    criar: true,
+    cols: [['id', 'ID'], ['tipo', 'Importação'], ['hash', 'Impressão digital (SHA-256)'], ['nomeArq', 'Arquivo'], ['tamanho', 'Tamanho (bytes)'],
+      ['importadoEm', 'Importado em'], ['importadoPor', 'Importado por'], ['resumo', 'Resultado']],
+    num: ['tamanho']
+  },
   // medição individual de água por unidade (relatório mensal da Exista) e o resumo de cada período (conta da concessionária)
   mi: {
     nome: 'Medição individual',
@@ -377,7 +385,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-02 Pier Gestão 2.0 — gráficos da medição individual';
+const VERSAO = '2026-11-02 Pier Gestão 2.0 — alerta de arquivo já importado';
 
 function doGet() {
   TABS = {};
@@ -462,6 +470,7 @@ function doPost(e) {
       if (req.op && req.op !== 'status' && req.op !== 'previa') auditar(conta, 'Lembretes de pendências', r.msg || '');
       return json(Object.assign(base, r));
     }
+    if (req.acao === 'arqVerificar') return json(Object.assign(base, { iguais: arqVerificar(req.hashes) }));
     if (req.acao === 'medicoes') { medExigir(conta, false); return json(Object.assign(base, medLista())); }
     if (req.acao === 'miLista') { algum(['med_ver', 'med_lancar', 'un_ver', 'un_editar']); return json(Object.assign(base, miLista())); }
     if (req.acao === 'rondaPontoConsultar') { rondaExigir(conta, false); const p = rondaQrPontos().find(p => p.token === texto(req.codigo,80) && rondaQrAtivo(p)); if (!p) throw falha('QR inválido, inativo ou substituído.'); return json(Object.assign(base, {pontoQr: rondaQrLista(conta).pontosQr.find(x => x.id === p.id)})); }
@@ -547,6 +556,7 @@ function doPost(e) {
         case 'pendExcluir': pode('pendencias'); msg = pendExcluir(req.id); extra.pendencias = true; break;
         default: throw falha('Ação desconhecida.');
       }
+      if (Array.isArray(req.arquivos) && req.arquivos.length) arqRegistrar(req.acao, req.arquivos, conta, typeof msg === 'string' ? msg : '');
       SpreadsheetApp.flush();
       if (escritaEstoque) atualizarRetrato(); terminou = true;
       if (!AUDIT_FEITO) auditar(conta, ACOES_AUDIT[req.acao] || req.acao, resumoAuditoria(req, msg));
@@ -2614,6 +2624,26 @@ function medContas(r, conta) {
 }
 // planilha lida no navegador: leituras (data, medidor, leitura) e/ou contas (mês, medidor, consumo, valor).
 // Grava as linhas certas, pula as repetidas e devolve as com erro.
+// ---------- arquivos importados: o mesmo arquivo (mesma impressão digital) não entra duas vezes sem aviso ----------
+const ARQ_TIPOS = { unImportar: 'Cadastro de unidades', medImportar: 'Planilha de medições', espImportar: 'PDF de reservas', fornImportar: 'Planilha de fornecedores',
+  prestImportar: 'Planilha de prestadores', importarContagem: 'Contagem de estoque', miImportar: 'Medição individual (Exista)', cotSalvar: 'Mapa de cotação' };
+const arqHashOk = h => /^[0-9a-f]{64}$/.test(String(h || ''));
+function arqVerificar(hashes) {
+  const hs = (Array.isArray(hashes) ? hashes : []).map(h => String(h).toLowerCase()).filter(arqHashOk).slice(0, 20);
+  if (!hs.length) return [];
+  return linhasOnde(tabela('arq'), ['hash'], x => hs.indexOf(String(x.hash).toLowerCase()) >= 0)
+    .map(x => ({ hash: x.hash, tipo: x.tipo, nome: x.nomeArq, tamanho: x.tamanho, quando: x.importadoEm, por: x.importadoPor, resumo: x.resumo }))
+    .sort((a, b) => String(b.quando).localeCompare(String(a.quando)));
+}
+function arqRegistrar(acao, arquivos, conta, msg) {
+  try {
+    const t = tabela('arq'), quando = agora();
+    const novos = arquivos.slice(0, 10).filter(a => a && arqHashOk(String(a.hash).toLowerCase())).map(a => ({ id: novoId('AQ'), tipo: ARQ_TIPOS[acao] || acao,
+      hash: String(a.hash).toLowerCase(), nomeArq: texto(a.nome, 120), tamanho: Number(a.tamanho) > 0 ? Number(a.tamanho) : '', importadoEm: quando, importadoPor: conta.nome, resumo: texto(msg, 200) }));
+    if (novos.length) anexarLinhas(t, novos);
+  } catch (e) { Logger.log('Registro do arquivo importado não gravado: ' + e.message); }
+}
+
 // ---------- medição individual (Exista) ----------
 // Cada linha: uma unidade num período (AAAA-MM = mês da leitura atual). O histórico do demonstrativo individual entra só com o consumo
 // e nunca sobrepõe um período importado da planilha. O resumo guarda a conta da concessionária do período (conferência).

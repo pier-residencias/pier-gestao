@@ -1150,6 +1150,7 @@ td.num.atras{color:var(--crit);font-weight:700}
 .mi-hbar{width:22px;background:#93b4f0;border-radius:4px 4px 0 0}.mi-hb.atual .mi-hbar{background:#2563eb}
 .mi-hv{font-size:.72rem}.mi-hm{font-size:.7rem;color:var(--muted);white-space:nowrap}
 .mi-vistas{margin-bottom:14px}
+.arq-dup .sub{display:block;font-size:.8rem;opacity:.85}
 .mi-graf{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));gap:14px}
 .mi-gcard{margin:0;min-width:0}.mi-gfull{grid-column:1/-1}.mi-gsub{margin:-4px 0 8px}
 .mi-gbox{overflow-x:auto;color:var(--fg)}.mi-gbox svg{display:block;max-width:100%;height:auto}
