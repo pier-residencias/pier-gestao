@@ -1,19 +1,21 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Pier Gestão · Pier Residências</title>
+<title>Pier Gestão 2.0</title>
 <link rel="manifest" href="./manifest.json">
-<meta name="theme-color" content="#3a7ba0">
+<meta name="theme-color" content="#0c1117">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%233a7ba0'/%3E%3Ctext x='16' y='23' font-family='Georgia,serif' font-size='20' text-anchor='middle' fill='white'%3EP%3C/text%3E%3Cpath d='M5 26c7-3 15-3 22-1' stroke='white' stroke-width='1.6' fill='none'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap"></noscript>
-<link rel="stylesheet" href="estilo.css?v=20261029lembhtml">
+<link rel="stylesheet" href="estilo.css?v=20261102producao">
+<link rel="stylesheet" href="visual-2.css?v=20261102producao">
 </head>
 <body>
+
 <div class="login" id="login" hidden>
   <form class="card" id="f-login" novalidate autocomplete="on">
     <div class="stripe" aria-hidden="true"></div>
@@ -34,7 +36,7 @@
           <div class="actions"><button type="button" class="btn" id="r-enviar">Enviar código por e-mail</button></div>
           <div class="l-redef-passo" id="r-passo2" hidden>
             <div class="field"><label for="r-codigo">Código do e-mail</label><input class="input num" id="r-codigo" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 números"></div>
-            <div class="field"><label for="r-nova">Nova senha</label><input class="input" id="r-nova" type="password" autocomplete="new-password"><span class="hint">Pelo menos 6 caracteres. Não use o seu usuário nem a mesma tecla repetida.</span></div>
+            <div class="field"><label for="r-nova">Nova senha</label><input class="input" id="r-nova" type="password" autocomplete="new-password"><span class="hint">Pelo menos 10 caracteres. Não use o seu usuário nem a mesma tecla repetida.</span></div>
             <div class="field"><label for="r-conf">Repita a nova senha</label><input class="input" id="r-conf" type="password" autocomplete="new-password"></div>
             <div class="actions"><button type="button" class="btn primary" id="r-ok">Redefinir senha e entrar</button></div>
           </div>
@@ -46,14 +48,14 @@
 <div class="stripe" aria-hidden="true"></div>
 <!-- menu lateral: grupos que abrem e fecham e, no fim, a troca de setor (no celular abre pelo botão ☰) -->
 <aside class="side" id="side" aria-label="Menu" hidden>
-  <div class="side-topo"><img class="side-logo" src="img/logo.png" alt="Pier Residências" width="900" height="272"><button type="button" class="side-x" id="side-x" aria-label="Fechar o menu">×</button></div>
-  <nav class="side-nav" id="side-nav" aria-label="Seções do sistema"></nav>
+  <div class="side-topo"><div class="side-identidade"><img class="side-logo-oficial" src="img/logo-sem-fundo.png" alt="Pier Residências"><span>GESTÃO INTERNA · 2.0</span></div><button type="button" class="side-x" id="side-x" aria-label="Ocultar menu" title="Ocultar menu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v16H3zM9 4v16M16 9l-3 3 3 3"/></svg></button></div>
+  <label class="side-busca"><span>Buscar ferramenta</span><input id="menu-busca" type="search" placeholder="Ex.: medições, estoque…" autocomplete="off"></label><nav class="side-nav" id="side-nav" aria-label="Seções do sistema"></nav>
   <div class="side-setor" id="side-setor"></div>
 </aside>
 <div class="side-fundo" id="side-fundo" hidden></div>
 <header class="top">
   <div class="wrap">
-    <button type="button" class="menu-btn" id="menu-btn" aria-controls="side" aria-expanded="false" aria-label="Abrir o menu" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    <button type="button" class="menu-btn" id="menu-btn" aria-controls="side" aria-expanded="false" aria-label="Abrir o menu" hidden><span class="menu-simbolo" aria-hidden="true">☰</span><span class="menu-texto">Menu</span></button>
     <div class="brand">
       <picture>
         <source srcset="img/logo-claro.png" media="(prefers-color-scheme: dark)">
@@ -61,16 +63,18 @@
       </picture>
       <span class="sep" aria-hidden="true"></span>
       <div>
-        <h1>Pier Gestão</h1>
-        <p>Sistema de gestão do Pier Residências</p>
+        <span class="brand-overline">CENTRAL DE OPERAÇÕES</span><h1>Pier Gestão <span class="brand-version">2.0</span></h1>
+        <p id="pagina-contexto">Condomínio Residencial Pier</p>
       </div>
     </div>
-    <div class="me" id="me"></div>
+    <div class="top-actions"><button class="btn tema-btn" type="button" id="tema-alternar" aria-label="Ativar tema claro">☼ <span>Tema claro</span></button><div class="me" id="me"></div></div>
   </div>
 </header>
 <nav class="tabs" aria-label="Seções">
   <div class="wrap">
    <div class="tabscroll" role="tablist">
+    <button role="tab" data-tab="contagem" aria-selected="false">Contagem <span class="badge" id="b-cont" hidden>0</span></button>
+    <button role="tab" data-tab="aprovacoes" aria-selected="false">Aprovações <span class="badge" id="b-aprov" hidden>0</span></button>
     <button role="tab" data-tab="painel" aria-selected="true">Painel</button>
     <button role="tab" data-tab="demandas" aria-selected="false">Demandas <span class="badge" id="b-dem">0</span></button>
     <button role="tab" data-tab="os" aria-selected="false">OS <span class="badge" id="b-os">0</span></button>
@@ -100,18 +104,58 @@
 </nav>
 
 <main class="wrap">
+  <section id="t-contagem" hidden>
+    <div class="sec-head"><h2 class="sec">Contagem de estoque<span class="setor-nome"></span></h2><span class="muted">Conte o que está guardado e digite a quantidade. Se for igual ao sistema, fica registrado como conferido. Se for diferente, explique o motivo: a Administração aprova antes de o estoque mudar.</span></div>
+    <div id="invct-avisos"></div>
+    <div class="toolbar">
+      <input class="input" id="invct-busca" placeholder="Buscar item, código ou local" type="search">
+      <select class="input" id="invct-local" aria-label="Local"></select>
+      <select class="input" id="invct-cat" aria-label="Categoria"></select>
+    </div>
+    <div class="tablebox invct-tab"><table>
+      <thead><tr><th>Item</th><th class="n">No sistema</th><th>Contei</th><th>Resultado</th><th>Justificativa</th></tr></thead>
+      <tbody id="invct-body"></tbody>
+    </table></div>
+    <div class="invct-barra"><span id="invct-resumo" class="muted"></span><button class="btn" type="button" id="invct-limpar" hidden>Limpar</button><button class="btn primary" type="button" id="invct-enviar" disabled>Enviar contagem</button></div>
+    <h3 class="sub-sec">Minhas contagens</h3>
+    <div class="tablebox"><table>
+      <thead><tr><th>Nº</th><th>Item</th><th class="n">Sistema → contado</th><th>Situação</th><th class="hide-s">Contado em</th><th class="hide-m">Decisão</th><th></th></tr></thead>
+      <tbody id="invct-minhas"></tbody>
+    </table></div>
+  </section>  <section id="t-aprovacoes" hidden>
+    <div class="sec-head"><h2 class="sec">Aprovações de estoque</h2><span class="muted">O saldo só muda depois de aprovado. Quem contou não aprova a própria contagem. Se o item teve movimentação depois da contagem, ela vai para Reconferir.</span></div>
+    <div class="invap-stats" id="invap-stats"></div>
+    <div id="invap-integ"></div>
+    <div id="invap-ultimos"></div>
+    <div class="invap-bulk" id="invap-bulk"></div>
+    <div class="invap-lista" id="invap-lista"></div>
+    <h3 class="sub-sec">Histórico de decisões</h3>
+    <div class="chips" id="invap-filtro" style="margin-bottom:12px">
+      <button class="chip" data-f="Aprovada" aria-pressed="true">Aprovadas</button>
+      <button class="chip" data-f="Rejeitada" aria-pressed="false">Rejeitadas</button>
+      <button class="chip" data-f="Reconferir" aria-pressed="false">Reconferir</button>
+      <button class="chip" data-f="Cancelada" aria-pressed="false">Canceladas</button>
+      <button class="chip" data-f="" aria-pressed="false">Todas</button>
+    </div>
+    <div class="tablebox"><table>
+      <thead><tr><th>Nº</th><th>Item</th><th class="n">Sistema → contado</th><th>Situação</th><th class="hide-s">Contou</th><th class="hide-s">Decidiu</th><th class="hide-m">Motivo</th></tr></thead>
+      <tbody id="invap-hist"></tbody>
+    </table></div>
+  </section>
+
+
   <div id="notices"></div>
   <div id="aviso-dem"></div>
 
   <!-- PAINEL -->
   <section id="t-painel" class="stack">
     <div class="kpis">
-      <button class="kpi" data-go="itens"><span class="lbl">Itens cadastrados</span><span class="val num" id="k-itens">0</span><span class="sub" id="k-itens-sub">nenhum item ainda</span></button>
+      <button class="kpi kpi-operacao" data-go="itens"><span class="kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7 12 3l8 4v10l-8 4-8-4V7Zm0 0 8 4 8-4M12 11v10"/></svg></span><span class="lbl">Itens cadastrados</span><span class="val num" id="k-itens">0</span><span class="sub" id="k-itens-sub">nenhum item ainda</span><span class="kpi-link">Ver materiais<span aria-hidden="true">↗</span></span></button>
       <button class="kpi" id="k-dem-box" data-go="demandas"><span class="lbl">Demandas em aberto</span><span class="val num" id="k-dem">0</span><span class="sub" id="k-dem-sub">nenhuma atrasada</span></button>
-      <button class="kpi" id="k-os-box" data-go="os"><span class="lbl">OS em aberto</span><span class="val num" id="k-os">0</span><span class="sub" id="k-os-sub">nenhuma atrasada</span></button>
-      <button class="kpi" id="k-baixo-box" data-go="itens" data-filter="baixo"><span class="lbl">Para repor</span><span class="val num" id="k-baixo">0</span><span class="sub" id="k-baixo-sub">tudo em ordem</span></button>
+      <button class="kpi kpi-operacao" id="k-os-box" data-go="os"><span class="kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H6v16h12V5h-3M9 3h6v4H9zM9 12h6M9 16h4"/></svg></span><span class="lbl">OS em aberto</span><span class="val num" id="k-os">0</span><span class="sub" id="k-os-sub">nenhuma atrasada</span><span class="kpi-link">Ver ordens de serviço<span aria-hidden="true">↗</span></span></button>
+      <button class="kpi kpi-operacao" id="k-baixo-box" data-go="itens" data-filter="baixo"><span class="kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 21h20L12 3Zm0 6v5m0 3v1"/></svg></span><span class="lbl">Para repor</span><span class="val num" id="k-baixo">0</span><span class="sub" id="k-baixo-sub">tudo em ordem</span><span class="kpi-link">Conferir reposição<span aria-hidden="true">↗</span></span></button>
       <button class="kpi" id="k-emp-box" data-go="emprestimos"><span class="lbl">Empréstimos abertos</span><span class="val num" id="k-emp">0</span><span class="sub" id="k-emp-sub">nenhum atrasado</span></button>
-      <button class="kpi" data-go="historico"><span class="lbl">Saídas no mês</span><span class="val num" id="k-saidas">0</span><span class="sub" id="k-saidas-sub">retiradas e trocas</span></button>
+      <button class="kpi kpi-operacao" data-go="historico"><span class="kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h10M10 12h11m-4-4 4 4-4 4"/></svg></span><span class="lbl">Saídas no mês</span><span class="val num" id="k-saidas">0</span><span class="sub" id="k-saidas-sub">retiradas e trocas</span><span class="kpi-link">Ver movimentações<span aria-hidden="true">↗</span></span></button>
     </div>
     <div class="grid2">
       <div class="panel">
@@ -192,6 +236,7 @@
       <button class="chip" data-f="aberto" aria-pressed="true">Em aberto</button>
       <button class="chip" data-f="minhas" aria-pressed="false">Comigo</button>
       <button class="chip" data-f="atrasadas" aria-pressed="false">Atrasadas</button>
+      <button class="chip" data-f="validacao" aria-pressed="false">Aguardando validação</button>
       <button class="chip" data-f="concluidas" aria-pressed="false">Concluídas</button>
       <button class="chip" data-f="canceladas" aria-pressed="false">Canceladas</button>
       <button class="chip" data-f="todas" aria-pressed="false">Todas</button>
@@ -354,6 +399,7 @@
         <button type="button" role="tab" data-v="hoje" aria-selected="true">Hoje</button>
         <button type="button" role="tab" data-v="rondas" aria-selected="false">Rondas</button>
         <button type="button" role="tab" data-v="pend" aria-selected="false">Pendências <span class="badge alert" id="rd-n-pend" hidden>0</span></button>
+        <button type="button" role="tab" data-v="qr" aria-selected="false">Pontos com QR</button>
         <button type="button" role="tab" data-v="fech" aria-selected="false">Fechamento semanal</button>
       </div>
       <div id="rd-corpo"><div class="empty">Carregando as rondas…</div></div>
@@ -642,7 +688,7 @@
     <div class="sec-head"><h2 class="sec">Usuários e permissões</h2><span class="muted">Quem entra no sistema e o que cada perfil pode fazer.</span></div>
     <div class="panel">
       <div class="sec-head" style="margin-bottom:10px"><h3>Colaboradores</h3><button class="btn primary small" id="q-novo-u">Novo colaborador</button></div>
-      <div class="tablebox flat"><table><thead><tr><th>Nome</th><th>Usuário</th><th>Perfil</th><th>Situação</th><th class="hide-m">WhatsApp</th><th class="hide-s">Acesso</th><th></th></tr></thead><tbody id="q-usuarios"></tbody></table></div>
+      <div class="tablebox flat"><table><thead><tr><th>Nome</th><th>Usuário</th><th>Perfil</th><th>Situação</th><th class="hide-m">Telefone</th><th class="hide-s">Acesso</th><th></th></tr></thead><tbody id="q-usuarios"></tbody></table></div>
     </div>
     <div class="panel">
       <div class="sec-head" style="margin-bottom:10px"><h3>Perfis e permissões</h3><button class="btn small" id="q-novo-p">Novo perfil</button></div>
@@ -682,7 +728,8 @@
 
   <!-- INÍCIO (Administração): saudação, o que precisa de atenção, atalhos e últimas alterações -->
   <section id="t-inicio" hidden>
-    <div class="in-topo"><div><h2 class="in-ola" id="in-ola">Olá!</h2><p class="muted" id="in-data"></p></div></div>
+<div id="pier-central" class="pier-central"></div>
+    <div class="in-topo"><div><span class="brand-overline">VISÃO GERAL · ADMINISTRAÇÃO</span><h2 class="in-ola" id="in-ola">Olá!</h2><p class="muted" id="in-data"></p></div></div>
     <div id="in-pend-box">
       <h3 class="in-h">Precisa da sua atenção</h3>
       <div class="in-cards" id="in-atencao"><div class="empty">Carregando pendências…</div></div>
@@ -729,13 +776,24 @@
     <div id="pd-body"><div class="empty">Carregando pendências…</div></div>
     <datalist id="pd-resps"><option value="Auxiliar"></option><option value="Fornecedor"></option><option value="Gerência"></option><option value="Jardinagem"></option><option value="Limpeza"></option><option value="Manutenção"></option><option value="Piscina"></option><option value="Síndico"></option><option value="Supervisor"></option></datalist>
   </section>
+<section id="t-correspondencias" class="stack" hidden>
+ <div class="corr-hero"><div><p class="overline">ADMINISTRAÇÃO · RECEBIMENTOS</p><h2>Correspondências</h2><p>Receba, localize e acompanhe cada retirada.</p></div><div class="corr-acoes"><a class="btn" href="https://drop.armariosinteligentes.com/dashdrop" target="_blank" rel="noopener noreferrer">Abrir DROP ↗</a><button class="btn primary" id="corr-nova">Registrar recebimento</button></div></div>
+ <p class="hint">Controle manual. Os registros desta tela não são sincronizados com o armário inteligente.</p>
+ <div id="corr-resumo" class="corr-resumo"></div>
+ <div class="panel stack"><div class="corr-filtros"><label>Buscar<input class="input" id="corr-busca" type="search" placeholder="Unidade, destinatário, rastreio…"></label><label>Situação<select class="input" id="corr-status"><option value="Aguardando retirada">Aguardando retirada</option><option value="Entregue">Entregues</option><option value="Cancelada">Canceladas</option><option value="">Todas</option></select></label><button class="btn" id="corr-atualizar">Atualizar</button></div><p class="hint" id="corr-msg" role="status" aria-live="polite"></p><div id="corr-lista" class="corr-lista"></div></div>
+</section>
 </main>
 
 <div class="overlay" id="modal" hidden><div class="modal" role="dialog" aria-modal="true" id="modal-box"></div></div>
 <div class="toast" id="toast" role="status" hidden></div>
 
+
+
+<script src="tema.js"></script>
 <script src="config.js"></script>
-<script src="nfe.js?v=20261029lembhtml"></script>
-<script src="app.js?v=20261029lembhtml"></script>
+<script src="nfe.js?v=20261101os5"></script>
+<script src="vendor/qrcode.js?v=2.0.4"></script>
+<script src="app.js?v=20261102producao"></script>
+
 </body>
 </html>

@@ -1,10 +1,10 @@
 {
   "background_color": "#ffffff",
   "display": "standalone",
-  "name": "Pier Gestão",
+  "name": "Pier Gestão 2.0 — Testes",
   "orientation": "any",
   "scope": "./",
-  "short_name": "Pier Gestão",
+  "short_name": "Pier 2.0 Testes",
   "start_url": "./",
   "theme_color": "#17324d",
   "icons": [
@@ -21,7 +21,7 @@
       "purpose": "any"
     }
   ],
-  "id": "./",
-  "description": "Sistema de gestão administrativa, manutenção e estoque do Condomínio Residencial Pier.",
+  "id": "./pier-gestao-2-0-homologacao",
+  "description": "Ambiente de homologação do Pier Gestão 2.0. Use somente dados fictícios.",
   "lang": "pt-BR"
 }
