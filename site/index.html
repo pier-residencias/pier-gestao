@@ -1,0 +1,799 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Pier Gestão 2.0</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#0c1117">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%233a7ba0'/%3E%3Ctext x='16' y='23' font-family='Georgia,serif' font-size='20' text-anchor='middle' fill='white'%3EP%3C/text%3E%3Cpath d='M5 26c7-3 15-3 22-1' stroke='white' stroke-width='1.6' fill='none'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap"></noscript>
+<link rel="stylesheet" href="estilo.css?v=20261102producao">
+<link rel="stylesheet" href="visual-2.css?v=20261102producao">
+</head>
+<body>
+
+<div class="login" id="login" hidden>
+  <form class="card" id="f-login" novalidate autocomplete="on">
+    <div class="stripe" aria-hidden="true"></div>
+    <div class="inner">
+      <picture>
+        <source srcset="img/logo-claro.png" media="(prefers-color-scheme: dark)">
+        <img class="logo-login" src="img/logo.png" alt="Pier Residências" width="900" height="272">
+      </picture>
+      <h2>Pier Gestão</h2>
+      <p>Escolha o setor e entre com o seu usuário e a sua senha.</p>
+      <div class="field"><label for="l-setor">Setor</label><select class="input" id="l-setor"><option>Manutenção</option><option>Limpeza</option><option>Administração</option></select></div>
+      <div class="field"><label for="l-usuario">Usuário</label><input class="input" id="l-usuario" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Ex.: funcionario1"></div>
+      <div class="field"><label for="l-senha">Senha</label><input class="input" id="l-senha" type="password" autocomplete="current-password"></div>
+      <div class="actions"><button class="btn primary" type="submit" id="l-entrar">Entrar</button><span class="hint" id="l-msg"></span></div>
+      <div class="l-esqueci"><button type="button" class="link" id="l-esqueci" aria-expanded="false" aria-controls="l-esqueci-box">Esqueci minha senha</button>
+        <div class="l-redef" id="l-esqueci-box" hidden>
+          <p class="hint">Digite o seu usuário acima e peça um código: ele chega no e-mail cadastrado no seu login. Sem e-mail cadastrado? Fale com a Administração do Pier.</p>
+          <div class="actions"><button type="button" class="btn" id="r-enviar">Enviar código por e-mail</button></div>
+          <div class="l-redef-passo" id="r-passo2" hidden>
+            <div class="field"><label for="r-codigo">Código do e-mail</label><input class="input num" id="r-codigo" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 números"></div>
+            <div class="field"><label for="r-nova">Nova senha</label><input class="input" id="r-nova" type="password" autocomplete="new-password"><span class="hint">Pelo menos 10 caracteres. Não use o seu usuário nem a mesma tecla repetida.</span></div>
+            <div class="field"><label for="r-conf">Repita a nova senha</label><input class="input" id="r-conf" type="password" autocomplete="new-password"></div>
+            <div class="actions"><button type="button" class="btn primary" id="r-ok">Redefinir senha e entrar</button></div>
+          </div>
+          <span class="hint" id="r-msg" role="status"></span>
+        </div></div>
+    </div>
+  </form>
+</div>
+<div class="stripe" aria-hidden="true"></div>
+<!-- menu lateral: grupos que abrem e fecham e, no fim, a troca de setor (no celular abre pelo botão ☰) -->
+<aside class="side" id="side" aria-label="Menu" hidden>
+  <div class="side-topo"><div class="side-identidade"><img class="side-logo-oficial" src="img/logo-sem-fundo.png" alt="Pier Residências"><span>GESTÃO INTERNA · 2.0</span></div><button type="button" class="side-x" id="side-x" aria-label="Ocultar menu" title="Ocultar menu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v16H3zM9 4v16M16 9l-3 3 3 3"/></svg></button></div>
+  <label class="side-busca"><span>Buscar ferramenta</span><input id="menu-busca" type="search" placeholder="Ex.: medições, estoque…" autocomplete="off"></label><nav class="side-nav" id="side-nav" aria-label="Seções do sistema"></nav>
+  <div class="side-setor" id="side-setor"></div>
+</aside>
+<div class="side-fundo" id="side-fundo" hidden></div>
+<header class="top">
+  <div class="wrap">
+    <button type="button" class="menu-btn" id="menu-btn" aria-controls="side" aria-expanded="false" aria-label="Abrir o menu" hidden><span class="menu-simbolo" aria-hidden="true">☰</span><span class="menu-texto">Menu</span></button>
+    <div class="brand">
+      <picture>
+        <source srcset="img/logo-claro.png" media="(prefers-color-scheme: dark)">
+        <img class="logo" src="img/logo.png" alt="Pier Residências" width="900" height="272">
+      </picture>
+      <span class="sep" aria-hidden="true"></span>
+      <div>
+        <span class="brand-overline">CENTRAL DE OPERAÇÕES</span><h1>Pier Gestão <span class="brand-version">2.0</span></h1>
+        <p id="pagina-contexto">Condomínio Residencial Pier</p>
+      </div>
+    </div>
+    <div class="top-actions"><button class="btn tema-btn" type="button" id="tema-alternar" aria-label="Ativar tema claro">☼ <span>Tema claro</span></button><div class="me" id="me"></div></div>
+  </div>
+</header>
+<nav class="tabs" aria-label="Seções">
+  <div class="wrap">
+   <div class="tabscroll" role="tablist">
+    <button role="tab" data-tab="contagem" aria-selected="false">Contagem <span class="badge" id="b-cont" hidden>0</span></button>
+    <button role="tab" data-tab="aprovacoes" aria-selected="false">Aprovações <span class="badge" id="b-aprov" hidden>0</span></button>
+    <button role="tab" data-tab="painel" aria-selected="true">Painel</button>
+    <button role="tab" data-tab="demandas" aria-selected="false">Demandas <span class="badge" id="b-dem">0</span></button>
+    <button role="tab" data-tab="os" aria-selected="false">OS <span class="badge" id="b-os">0</span></button>
+    <button role="tab" data-tab="registrar" aria-selected="false">Registrar</button>
+    <button role="tab" data-tab="itens" aria-selected="false">Itens <span class="badge" id="b-itens">0</span></button>
+    <button role="tab" data-tab="historico" aria-selected="false">Histórico</button>
+    <button role="tab" data-tab="emprestimos" aria-selected="false">Empréstimos <span class="badge" id="b-emp">0</span></button>
+    <button role="tab" data-tab="dashboard" aria-selected="false">Dashboard</button>
+    <button role="tab" data-tab="usuarios" aria-selected="false">Usuários</button>
+    <span class="badge alert" id="b-prest" hidden>0</span>
+    <span class="badge" id="b-ronda" hidden>0</span>
+    <span class="badge alert" id="b-esp" hidden>0</span>
+   </div>
+    <button type="button" class="admbtn" id="tab-adm" aria-haspopup="true" aria-expanded="false" aria-controls="adm-menu" hidden aria-label="Administração"><span class="lbl-l">Administração</span><span class="lbl-c" aria-hidden="true">Adm.</span> <span class="badge alert" id="b-adm" hidden>0</span> <span class="car" aria-hidden="true">▾</span></button>
+  </div>
+  <div class="admmenu" id="adm-menu" role="menu" aria-label="Administração" hidden>
+    <div class="mh">Pendências e compras</div>
+    <button type="button" role="menuitem" data-adm-tab="inicio"><b>Home</b><span>O que precisa de atenção e atalhos</span></button>
+    <button type="button" role="menuitem" data-adm-tab="pdpainel"><b>Dashboard</b><span>Resumo em cartões e gráfico dos últimos 12 meses</span></button>
+    <button type="button" role="menuitem" data-adm-tab="pendencias"><b>Controle de pendências</b><span>Lista do síndico: situação, responsável e prazo</span></button>
+    <button type="button" role="menuitem" data-adm-tab="pendencias" data-adm-acao="nova"><b>Incluir pendência</b><span>Registrar uma pendência nova na lista</span></button>
+    <button type="button" role="menuitem" data-adm-tab="cotacoes"><b>Cotações</b><span>Mapas de cotação, fornecedores e aprovação</span></button>
+    <div class="mh" data-grupo="equipe">Equipe</div>
+    <button type="button" role="menuitem" data-adm-tab="usuarios"><b>Usuários e permissões</b><span>Logins, perfis e o que cada um pode fazer</span></button>
+    <button type="button" role="menuitem" data-adm-tab="acessos"><b>Histórico de acessos</b><span>Entradas, alterações, telas vistas e eventos de segurança</span></button>
+  </div>
+</nav>
+
+<main class="wrap">
+  <section id="t-contagem" hidden>
+    <div class="sec-head"><h2 class="sec">Contagem de estoque<span class="setor-nome"></span></h2><span class="muted">Conte o que está guardado e digite a quantidade. Se for igual ao sistema, fica registrado como conferido. Se for diferente, explique o motivo: a Administração aprova antes de o estoque mudar.</span></div>
+    <div id="invct-avisos"></div>
+    <div class="toolbar">
+      <input class="input" id="invct-busca" placeholder="Buscar item, código ou local" type="search">
+      <select class="input" id="invct-local" aria-label="Local"></select>
+      <select class="input" id="invct-cat" aria-label="Categoria"></select>
+    </div>
+    <div class="tablebox invct-tab"><table>
+      <thead><tr><th>Item</th><th class="n">No sistema</th><th>Contei</th><th>Resultado</th><th>Justificativa</th></tr></thead>
+      <tbody id="invct-body"></tbody>
+    </table></div>
+    <div class="invct-barra"><span id="invct-resumo" class="muted"></span><button class="btn" type="button" id="invct-limpar" hidden>Limpar</button><button class="btn primary" type="button" id="invct-enviar" disabled>Enviar contagem</button></div>
+    <h3 class="sub-sec">Minhas contagens</h3>
+    <div class="tablebox"><table>
+      <thead><tr><th>Nº</th><th>Item</th><th class="n">Sistema → contado</th><th>Situação</th><th class="hide-s">Contado em</th><th class="hide-m">Decisão</th><th></th></tr></thead>
+      <tbody id="invct-minhas"></tbody>
+    </table></div>
+  </section>  <section id="t-aprovacoes" hidden>
+    <div class="sec-head"><h2 class="sec">Aprovações de estoque</h2><span class="muted">O saldo só muda depois de aprovado. Quem contou não aprova a própria contagem. Se o item teve movimentação depois da contagem, ela vai para Reconferir.</span></div>
+    <div class="invap-stats" id="invap-stats"></div>
+    <div id="invap-integ"></div>
+    <div id="invap-ultimos"></div>
+    <div class="invap-bulk" id="invap-bulk"></div>
+    <div class="invap-lista" id="invap-lista"></div>
+    <h3 class="sub-sec">Histórico de decisões</h3>
+    <div class="chips" id="invap-filtro" style="margin-bottom:12px">
+      <button class="chip" data-f="Aprovada" aria-pressed="true">Aprovadas</button>
+      <button class="chip" data-f="Rejeitada" aria-pressed="false">Rejeitadas</button>
+      <button class="chip" data-f="Reconferir" aria-pressed="false">Reconferir</button>
+      <button class="chip" data-f="Cancelada" aria-pressed="false">Canceladas</button>
+      <button class="chip" data-f="" aria-pressed="false">Todas</button>
+    </div>
+    <div class="tablebox"><table>
+      <thead><tr><th>Nº</th><th>Item</th><th class="n">Sistema → contado</th><th>Situação</th><th class="hide-s">Contou</th><th class="hide-s">Decidiu</th><th class="hide-m">Motivo</th></tr></thead>
+      <tbody id="invap-hist"></tbody>
+    </table></div>
+  </section>
+
+
+  <div id="notices"></div>
+  <div id="aviso-dem"></div>
+
+  <!-- PAINEL -->
+  <section id="t-painel" class="stack">
+    <div class="kpis">
+      <button class="kpi kpi-operacao" data-go="itens"><span class="kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7 12 3l8 4v10l-8 4-8-4V7Zm0 0 8 4 8-4M12 11v10"/></svg></span><span class="lbl">Itens cadastrados</span><span class="val num" id="k-itens">0</span><span class="sub" id="k-itens-sub">nenhum item ainda</span><span class="kpi-link">Ver materiais<span aria-hidden="true">↗</span></span></button>
+      <button class="kpi" id="k-dem-box" data-go="demandas"><span class="lbl">Demandas em aberto</span><span class="val num" id="k-dem">0</span><span class="sub" id="k-dem-sub">nenhuma atrasada</span></button>
+      <button class="kpi kpi-operacao" id="k-os-box" data-go="os"><span class="kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H6v16h12V5h-3M9 3h6v4H9zM9 12h6M9 16h4"/></svg></span><span class="lbl">OS em aberto</span><span class="val num" id="k-os">0</span><span class="sub" id="k-os-sub">nenhuma atrasada</span><span class="kpi-link">Ver ordens de serviço<span aria-hidden="true">↗</span></span></button>
+      <button class="kpi kpi-operacao" id="k-baixo-box" data-go="itens" data-filter="baixo"><span class="kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 21h20L12 3Zm0 6v5m0 3v1"/></svg></span><span class="lbl">Para repor</span><span class="val num" id="k-baixo">0</span><span class="sub" id="k-baixo-sub">tudo em ordem</span><span class="kpi-link">Conferir reposição<span aria-hidden="true">↗</span></span></button>
+      <button class="kpi" id="k-emp-box" data-go="emprestimos"><span class="lbl">Empréstimos abertos</span><span class="val num" id="k-emp">0</span><span class="sub" id="k-emp-sub">nenhum atrasado</span></button>
+      <button class="kpi kpi-operacao" data-go="historico"><span class="kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h10M10 12h11m-4-4 4 4-4 4"/></svg></span><span class="lbl">Saídas no mês</span><span class="val num" id="k-saidas">0</span><span class="sub" id="k-saidas-sub">retiradas e trocas</span><span class="kpi-link">Ver movimentações<span aria-hidden="true">↗</span></span></button>
+    </div>
+    <div class="grid2">
+      <div class="panel">
+        <h3>Últimas movimentações</h3>
+        <div class="rows" id="p-ultimas"></div>
+      </div>
+      <div class="stack">
+        <div class="panel" id="p-dem-box">
+          <h3 id="p-dem-tit">Demandas em aberto</h3>
+          <div class="rows" id="p-dem"></div>
+        </div>
+        <div class="panel" id="p-os-box">
+          <h3>Ordens de serviço em aberto</h3>
+          <div class="rows" id="p-os"></div>
+        </div>
+        <div class="panel">
+          <h3>Precisa comprar</h3>
+          <div class="rows" id="p-comprar"></div>
+        </div>
+        <div class="panel">
+          <h3>Para onde os itens foram no mês</h3>
+          <div class="bars" id="p-destinos"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- DEMANDAS -->
+  <section id="t-demandas" class="stack" hidden>
+    <div>
+      <div class="sec-head"><h2 class="sec">Demandas</h2><button class="btn primary" id="dm-nova" hidden>Nova demanda</button></div>
+      <div class="toolbar">
+        <input class="input" id="dm-busca" placeholder="Buscar por número, demanda, local ou pessoa" type="search">
+        <select class="input" id="dm-resp" aria-label="Responsável"><option value="">Todos os responsáveis</option></select>
+      </div>
+      <div class="chips" id="dm-filtros" style="margin-bottom:12px">
+        <button class="chip" data-f="aberto" aria-pressed="true">Em aberto</button>
+        <button class="chip" data-f="minhas" aria-pressed="false">Comigo</button>
+        <button class="chip" data-f="ciente" aria-pressed="false">Aguardando ciente</button>
+        <button class="chip" data-f="atrasadas" aria-pressed="false">Atrasadas</button>
+        <button class="chip" data-f="concluidas" aria-pressed="false">Concluídas</button>
+        <button class="chip" data-f="canceladas" aria-pressed="false">Canceladas</button>
+        <button class="chip" data-f="todas" aria-pressed="false">Todas</button>
+      </div>
+      <div class="tablebox"><table>
+        <thead><tr><th>Nº</th><th>Demanda</th><th class="hide-s">Responsável</th><th class="hide-s">Prioridade</th><th>Situação</th><th class="hide-s">Prazo</th></tr></thead>
+        <tbody id="dm-body"></tbody>
+      </table></div>
+      <p class="hint" style="margin-top:10px">A lista mostra as demandas em aberto e as encerradas nos últimos 90 dias. Todas ficam guardadas na aba Demandas da planilha.</p>
+    </div>
+    <div class="panel" id="pv-box" hidden>
+      <div class="sec-head" style="margin-bottom:6px"><h3>Preventivas</h3><button class="btn small" id="pv-nova">Nova preventiva</button></div>
+      <p class="cap">Tarefas que se repetem. Na data marcada, o sistema cria a demanda sozinho e ela aparece para o responsável.</p>
+      <div class="tablebox flat"><table>
+        <thead><tr><th>Nº</th><th>Tarefa</th><th>Repete</th><th class="hide-s">Responsável</th><th>Próxima</th></tr></thead>
+        <tbody id="pv-body"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <!-- ORDENS DE SERVIÇO -->
+  <section id="t-os" hidden>
+    <div class="un-head"><div><h2 class="sec">Ordens de serviço</h2><p class="muted">Acompanhe as OS abertas, em andamento, agendadas e concluídas.</p></div>
+      <div class="un-ferr"><button class="btn primary" id="o-nova" hidden>+ Abrir OS</button></div></div>
+    <div class="panel os-busca">
+      <div class="os-busca-l"><input class="input" id="o-busca" placeholder="Número, serviço, equipamento ou local…" type="search" aria-label="Pesquisar OS">
+        <button class="btn" type="button" id="o-filtrar" aria-expanded="false" aria-controls="o-fpainel">Filtros <span class="badge" id="o-fn" hidden></span></button></div>
+      <div class="os-tipos" id="o-tipos" role="group" aria-label="Tipo de OS"></div>
+      <div class="os-fpainel" id="o-fpainel" hidden>
+        <label class="md-lbl">Grupo de atividades <select class="input" id="o-cat"><option value="">Todos</option></select></label>
+        <label class="md-lbl">Prioridade <select class="input" id="o-prio"><option value="">Todas</option><option>Urgente</option><option>Alta</option><option>Normal</option><option>Baixa</option></select></label>
+        <label class="md-lbl">Responsável <select class="input" id="o-resp"><option value="">Todos</option></select></label>
+        <button class="link" type="button" id="o-limpar">Limpar filtros</button>
+      </div>
+    </div>
+    <div class="chips os-st" id="o-filtros">
+      <button class="chip" data-f="aberto" aria-pressed="true">Em aberto</button>
+      <button class="chip" data-f="minhas" aria-pressed="false">Comigo</button>
+      <button class="chip" data-f="atrasadas" aria-pressed="false">Atrasadas</button>
+      <button class="chip" data-f="validacao" aria-pressed="false">Aguardando validação</button>
+      <button class="chip" data-f="concluidas" aria-pressed="false">Concluídas</button>
+      <button class="chip" data-f="canceladas" aria-pressed="false">Canceladas</button>
+      <button class="chip" data-f="todas" aria-pressed="false">Todas</button>
+    </div>
+    <div id="o-body" class="os-lista"></div>
+    <p class="hint" style="margin-top:10px">A lista mostra as OS em aberto e as encerradas nos últimos 90 dias. As mais antigas ficam na aba OS da planilha e entram no dashboard pelo período.</p>
+    <datalist id="dl-local"></datalist>
+    <datalist id="dl-equip"></datalist>
+  </section>
+
+  <!-- INDICADORES DA MANUTENÇÃO (só quem tem "Ver dashboard"): dashboard, lista, kanban e agenda das OS e demandas -->
+  <section id="t-indicadores" hidden>
+    <div class="ind-head">
+      <div><h2 class="ind-h"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l5.5-6 4 4L21 6"/><path d="M15 6h6v6"/></svg>Indicadores</h2>
+        <p class="muted">Números, gráficos e prazos das OS e demandas. Filtre por período, tipo, categoria e executante — clique para aprofundar.</p><p class="hint" id="ind-resumo"></p></div>
+      <div class="ind-acoes"><button class="btn" type="button" id="ind-atualizar">↻ Atualizar</button><button class="btn" type="button" id="ind-apres">Modo apresentação</button></div>
+    </div>
+    <div class="ind-vistas" id="ind-vistas" role="tablist" aria-label="Visão">
+      <button type="button" role="tab" data-v="dash" aria-selected="true">Dashboard</button>
+      <button type="button" role="tab" data-v="lista" aria-selected="false">Lista de OS <span class="badge" id="ind-n-lista">0</span></button>
+      <button type="button" role="tab" data-v="kanban" aria-selected="false">Kanban <span class="badge" id="ind-n-kanban">0</span></button>
+      <button type="button" role="tab" data-v="agenda" aria-selected="false">Agenda</button>
+    </div>
+    <div class="ind-filtros">
+      <div class="ind-fgrid">
+        <label class="field"><span>De</span><input class="input" type="date" id="ind-de"></label>
+        <label class="field"><span>Até</span><input class="input" type="date" id="ind-ate"></label>
+        <label class="field"><span>Tipo</span><select class="input" id="ind-tipo"><option value="">Todos</option><option>OS</option><option>Demanda</option><option>Preventiva</option></select></label>
+        <label class="field"><span>Categoria</span><select class="input" id="ind-cat"><option value="">Todas</option></select></label>
+        <label class="field"><span>Executante</span><select class="input" id="ind-exec"><option value="">Todos</option></select></label>
+        <label class="field"><span>Solicitante</span><select class="input" id="ind-sol"><option value="">Todos</option></select></label>
+        <label class="field"><span>Local</span><select class="input" id="ind-local"><option value="">Todos</option></select></label>
+        <label class="field"><span>Equipamento</span><select class="input" id="ind-equip"><option value="">Todos</option></select></label>
+      </div>
+      <div class="ind-fbar">
+        <button class="btn primary" type="button" id="ind-aplicar">Aplicar período</button>
+        <div class="chips" id="ind-presets" role="group" aria-label="Período rápido"><button class="chip" type="button" data-p="hoje" aria-pressed="false">Hoje</button><button class="chip" type="button" data-p="7" aria-pressed="false">7 dias</button><button class="chip" type="button" data-p="30" aria-pressed="false">30 dias</button><button class="chip" type="button" data-p="mes" aria-pressed="true">Este mês</button></div>
+        <button class="link" type="button" id="ind-limpar">Limpar filtros</button>
+      </div>
+      <p class="hint">Tipo, categoria, executante, solicitante, local e equipamento mudam os números na hora; para outro período, escolha as datas e toque em Aplicar. Clique nos cartões e nas barras para ver a lista.</p>
+    </div>
+    <div id="ind-dash">
+      <div class="ind-kpis" id="ind-kpis"><div class="empty">Carregando os indicadores…</div></div>
+      <div class="panel ind-p-tempo"><div class="ind-ptop"><h3 id="ind-t-tempo">Abertas e finalizadas</h3><span class="ind-leg"><span><i class="ab"></i>Abertas</span><span><i class="fi"></i>Finalizadas</span></span></div><div id="ind-g-tempo" class="ind-graf"></div></div>
+      <div class="grid-dash">
+        <div class="panel"><h3>Por categoria</h3><p class="cap">Grupo de atividades das OS abertas no período</p><div id="ind-g-cat" class="hbars"></div></div>
+        <div class="panel"><h3>Por executante</h3><p class="cap">Quem atendeu ou está com a OS</p><div id="ind-g-exec" class="hbars"></div></div>
+        <div class="panel"><h3>Por local</h3><p class="cap">Os 10 locais com mais OS</p><div id="ind-g-local" class="hbars"></div></div>
+        <div class="panel"><h3>Prazo das finalizadas</h3><p class="cap">Concluídas até o prazo ou depois dele</p><div id="ind-g-prazo" class="hbars"></div></div>
+        <div class="panel"><h3>Por prioridade</h3><p class="cap">Urgente, alta, normal e baixa</p><div id="ind-g-prio" class="hbars"></div></div>
+        <div class="panel"><h3>Por tipo</h3><p class="cap">OS, demandas e preventivas</p><div id="ind-g-tipo" class="hbars"></div></div>
+        <div class="panel" id="ind-p-equip" hidden><h3>Por equipamento</h3><p class="cap">Os 10 equipamentos com mais OS</p><div id="ind-g-equip" class="hbars"></div></div>
+      </div>
+    </div>
+    <div id="ind-lista" hidden>
+      <div class="ind-drill" id="ind-drill"></div>
+      <div class="tablebox"><table><thead><tr><th>Nº</th><th>Tipo</th><th>Serviço</th><th class="hide-s">Local</th><th class="hide-m">Executante</th><th>Situação</th><th class="hide-s">Abertura</th><th class="hide-s">Prazo / fim</th></tr></thead><tbody id="ind-l-body"></tbody></table></div>
+    </div>
+    <div id="ind-kanban" hidden></div>
+    <div id="ind-agenda" hidden></div>
+  </section>
+
+  <!-- UNIDADES (setor Administração; dados pessoais dos moradores) -->
+  <section id="t-unidades" hidden>
+    <div class="un-head"><div><h2 class="sec">Lista de unidades</h2><p class="muted">Pesquisa: número da unidade (ex.: 603 em todos os blocos) ou nome de condômino.</p></div>
+      <div class="un-ferr"><div class="ind-vistas" id="ul-vistas" role="tablist" aria-label="Mostrar"><button type="button" role="tab" data-v="unidades" aria-selected="true">Unidades</button><button type="button" role="tab" data-v="animais" aria-selected="false">Animais</button><button type="button" role="tab" data-v="veiculos" aria-selected="false">Veículos</button></div>
+        <input class="input" id="ul-q" type="search" placeholder="Número, nome ou placa…" aria-label="Pesquisar"><button class="btn" type="button" id="ul-exportar">Exportar</button></div></div>
+    <div class="pp-cards un-cards" id="ul-cards"></div>
+    <div class="toolbar"><select class="input" id="ul-bloco" aria-label="Bloco"><option value="">Todos os blocos</option></select><span class="hint" id="ul-conta"></span></div>
+    <div id="ul-corpo"><div class="empty">Carregando as unidades…</div></div>
+    <p class="hint" style="margin-top:10px">Dados pessoais de uso interno da Administração. Abrir a lista, a ficha de uma unidade, exportar e imprimir ficam registrados no histórico de acessos.</p>
+  </section>
+
+  <section id="t-uncadastro" hidden>
+    <div id="uc-lista-box">
+      <div class="sec-head"><h2 class="sec">Atualização cadastral</h2><span class="muted">Confira o cadastro de cada unidade com o morador: ficha para imprimir, atualização e controle do que está em dia (últimos 12 meses).</span></div>
+      <div class="pp-cards un-cards" id="uc-cards"></div>
+      <div class="toolbar"><input class="input" id="uc-q" type="search" placeholder="Número da unidade ou nome" aria-label="Pesquisar"><select class="input" id="uc-bloco" aria-label="Bloco"><option value="">Todos os blocos</option></select></div>
+      <div id="uc-corpo"><div class="empty">Carregando as unidades…</div></div>
+    </div>
+    <div id="uc-editor" hidden></div>
+  </section>
+
+  <section id="t-unconfig" hidden>
+    <div class="un-head"><div><h2 class="sec">Configurações de unidades</h2><p class="muted">Defina blocos, andares e unidades do condomínio.</p></div>
+      <div class="un-ferr"><button class="btn" type="button" id="cf-importar">Importar Excel</button><input type="file" id="cf-arq" accept=".xlsx" hidden><button class="btn primary" type="button" id="cf-salvar" disabled>Salvar todas as alterações</button></div></div>
+    <p class="hint" id="cf-msg"></p>
+    <div class="panel cf-ocup"><h3>Marcar unidades ocupadas</h3><p class="muted">Define <b>Ocupada</b> em todas as unidades que têm ao menos uma pessoa com <b>Morador? = Sim</b>.</p><button class="btn cf-verde" type="button" id="cf-ocupadas">Marcar unidades com moradores ativos como ocupadas</button></div>
+    <div id="cf-corpo"><div class="empty">Carregando as unidades…</div></div>
+    <p class="hint" style="margin-top:10px">"Importar Excel" lê a planilha de cadastro no modelo do Pier (BLOCO, APTº, PROPRIETÁRIO, CONTATOS, IDENTIDADES, SITUAÇÃO, CADASTROS DA UNIDADE, PARENTESCO, MORADOR?, CADASTRO FACIAL, ACESSO BARCO?, CONTATOS, PETS e VEÍCULOS) e mostra um resumo antes de gravar.</p>
+  </section>
+
+  <!-- RONDA (setor Administração): vistorias preventivas no modelo do Checklist Consolidado -->
+  <section id="t-medlanc" hidden>
+    <div class="un-head"><div><h2 class="sec">Sinalizar consumo</h2><p class="muted">Leituras dos relógios (lançamentos diários) e contas da concessionária (lançamentos mensais).</p></div>
+      <div class="un-ferr"><button class="btn" type="button" id="ml-importar">Importar do Excel</button><button class="btn" type="button" id="ml-modelo">Baixar modelo</button><button class="btn primary" type="button" id="ml-novo">+ Novo lançamento</button><input type="file" id="ml-arq" accept=".xlsx" hidden></div></div>
+    <div class="ind-vistas md-abas" id="ml-vistas" role="tablist" aria-label="Lançamentos"><button type="button" role="tab" data-v="dia" aria-selected="true">Lançamentos diários</button><button type="button" role="tab" data-v="mes" aria-selected="false">Lançamentos mensais</button></div>
+    <div class="toolbar md-filtros"><label class="md-lbl">Medidor <select class="input" id="ml-med"><option value="">Todos</option></select></label>
+      <label class="md-lbl">Período <select class="input" id="ml-per"><option value="7">Últimos 7 dias</option><option value="30" selected>Últimos 30 dias</option><option value="90">Últimos 90 dias</option><option value="365">Último ano</option><option value="todos">Tudo</option></select></label><span class="hint" id="ml-conta"></span></div>
+    <div id="ml-corpo"><div class="empty">Carregando as medições…</div></div>
+  </section>
+
+  <section id="t-medidores" hidden>
+    <div class="un-head"><div><h2 class="sec">Meus medidores</h2><p class="muted">Medidores da <b>área comum do condomínio</b> (não são das unidades/residências). <span id="md-conta"></span></p></div>
+      <div class="un-ferr"><button class="btn primary" type="button" id="md-novo">+ Novo medidor</button></div></div>
+    <div id="md-corpo"><div class="empty">Carregando os medidores…</div></div>
+  </section>
+
+  <section id="t-medrel" hidden>
+    <div class="un-head"><div><h2 class="sec">Relatórios de consumo</h2><p class="muted">Água, energia e gás pelas leituras dos medidores, com o valor das contas. <span id="mr-de"></span></p></div></div>
+    <div class="panel md-relbar"><label class="md-lbl">Período <select class="input" id="mr-per"><option value="7">Últimos 7 dias</option><option value="30" selected>Últimos 30 dias</option><option value="90">Últimos 90 dias</option><option value="mes">Este mês</option><option value="mesant">Mês passado</option><option value="12m">Últimos 12 meses</option><option value="ano">Este ano</option></select></label>
+      <label class="md-lbl">Tipo <select class="input" id="mr-tipo"><option value="dia">Dados diários</option><option value="mes">Dados mensais</option></select></label>
+      <span class="md-relbar-a"><button class="btn md-xls" type="button" id="mr-excel">Excel</button><button class="btn md-pdf" type="button" id="mr-pdf">PDF</button></span></div>
+    <div id="mr-corpo"><div class="empty">Carregando os relatórios…</div></div>
+  </section>
+
+  <section id="t-medind" hidden>
+    <div class="un-head"><div><h2 class="sec">Medição individual</h2><p class="muted">Consumo de água de cada unidade pelos relatórios da Exista, com alertas de consumo alto e a conferência com a conta da concessionária.</p></div>
+      <div class="actions"><button class="btn primary" type="button" id="mi-importar">Importar relatórios da Exista</button></div></div>
+    <div class="panel md-relbar"><label class="md-lbl">Período <select class="input" id="mi-per"></select></label>
+      <label class="md-lbl">Bloco <select class="input" id="mi-bloco"></select></label>
+      <label class="md-lbl">Unidade <input class="input" id="mi-q" type="search" placeholder="Ex.: 101"></label>
+      <label class="md-lbl">Mostrar <select class="input" id="mi-filtro"><option value="">Todas as unidades</option><option value="alertas">Só os alertas</option></select></label>
+      <label class="md-lbl">Ordenar <select class="input" id="mi-ord"><option value="">Bloco e unidade</option><option value="consumo">Maior consumo</option><option value="variacao">Maior aumento</option></select></label></div>
+    <div id="mi-corpo"><div class="empty">Carregando…</div></div>
+  </section>
+
+  <section id="t-esreservas" hidden>
+    <div class="un-head"><div><h2 class="sec">Reservas</h2><p class="muted">As reservas feitas no site da administradora entram sozinhas pelos e-mails (a cada 15 minutos). Confira, confirme e faça o checklist.</p></div>
+      <div class="un-ferr"><button class="btn" type="button" id="er-colar">Colar e-mail</button><button class="btn" type="button" id="er-ler">Ler e-mails agora</button><button class="btn" type="button" id="er-pdf">Importar PDF da BCF</button><input type="file" id="er-arq" accept=".pdf,application/pdf" hidden><button class="btn primary" type="button" id="er-nova">+ Nova reserva</button></div></div>
+    <div class="ind-vistas" id="er-vistas" role="tablist" aria-label="Reservas"><button type="button" role="tab" data-v="proximas" aria-selected="true">Próximas <span class="badge" hidden></span></button><button type="button" role="tab" data-v="pendentes" aria-selected="false">A confirmar <span class="badge" hidden></span></button><button type="button" role="tab" data-v="passadas" aria-selected="false">Anteriores</button><button type="button" role="tab" data-v="todas" aria-selected="false">Todas</button></div>
+    <div class="toolbar md-filtros"><select class="input" id="er-esp" aria-label="Espaço"><option value="">Todos os espaços</option></select><input class="input" id="er-q" type="search" placeholder="Solicitação, bloco ou unidade" aria-label="Pesquisar"><span class="hint" id="er-conta"></span></div>
+    <div id="er-corpo"><div class="empty">Carregando…</div></div>
+  </section>
+
+  <section id="t-esvistorias" hidden>
+    <div class="un-head"><div><h2 class="sec">Checklist dos espaços</h2><p class="muted">Vistoria de entrega (antes do evento) e de devolução (depois), item a item.</p></div>
+      <div class="un-ferr"><button class="btn" type="button" id="ev-avulsa">+ Vistoria avulsa</button></div></div>
+    <div id="ev-corpo"><div class="empty">Carregando…</div></div>
+  </section>
+
+  <section id="t-esespacos" hidden>
+    <div class="un-head"><div><h2 class="sec">Espaços</h2><p class="muted">Espaços que podem ser reservados, com regras e itens do checklist.</p></div>
+      <div class="un-ferr"><button class="btn primary" type="button" id="ee-novo">+ Novo espaço</button></div></div>
+    <div id="ee-corpo"><div class="empty">Carregando…</div></div>
+  </section>
+
+  <section id="t-fornecedores" hidden>
+    <div class="un-head"><div><h2 class="sec">Fornecedores</h2><p class="muted">Cadastro dos fornecedores de materiais e serviços, com o histórico nas cotações.</p></div>
+      <div class="un-ferr"><button class="btn" type="button" id="fo-imp">Importar planilha</button><button class="btn" type="button" id="fo-exp">Exportar planilha</button><input type="file" id="fo-arq" accept=".xlsx" hidden><button class="btn" type="button" id="fo-cot">Trazer das cotações</button><button class="btn primary" type="button" id="fo-novo">+ Novo fornecedor</button></div></div>
+    <div class="toolbar md-filtros"><input class="input" id="fo-q" type="search" placeholder="Empresa, contato ou CNPJ" aria-label="Pesquisar"><select class="input" id="fo-cat" aria-label="Categoria"><option value="">Todas as categorias</option></select>
+      <label class="md-chk"><input type="checkbox" id="fo-inat"> Mostrar inativos</label><span class="hint" id="fo-conta"></span></div>
+    <div id="fo-corpo"><div class="empty">Carregando…</div></div>
+  </section>
+
+  <section id="t-rondas" hidden>
+    <div id="rd-lista-box">
+      <div class="sec-head"><h2 class="sec">Ronda</h2><span class="muted">Vistorias preventivas do condomínio: ficha semanal por bloco, ficha diária das áreas comuns, checklist-mestre A a I, pendências e fechamento semanal.</span></div>
+      <div class="ind-vistas" id="rd-vistas" role="tablist" aria-label="Ronda">
+        <button type="button" role="tab" data-v="hoje" aria-selected="true">Hoje</button>
+        <button type="button" role="tab" data-v="rondas" aria-selected="false">Rondas</button>
+        <button type="button" role="tab" data-v="pend" aria-selected="false">Pendências <span class="badge alert" id="rd-n-pend" hidden>0</span></button>
+        <button type="button" role="tab" data-v="qr" aria-selected="false">Pontos com QR</button>
+        <button type="button" role="tab" data-v="fech" aria-selected="false">Fechamento semanal</button>
+      </div>
+      <div id="rd-corpo"><div class="empty">Carregando as rondas…</div></div>
+    </div>
+    <div id="rd-editor" hidden></div>
+  </section>
+
+  <!-- PRESTADORES DE SERVIÇO (só no setor Manutenção) -->
+  <section id="t-prestadores" hidden>
+    <div class="sec-head"><h2 class="sec">Prestadores de serviço</h2><span class="muted">Empresas que fazem manutenção preventiva no condomínio: contatos, contratos, visitas e documentos.</span><span class="pr-acoes"><button class="btn" type="button" id="pr-baixar" hidden>Baixar planilha</button><button class="btn" type="button" id="pr-importar" hidden>Importar planilha</button><input type="file" id="pr-imp-arq" accept=".xlsx" hidden><button class="btn primary" type="button" id="pr-novo" hidden>+ Novo prestador</button></span></div>
+    <p class="hint" id="pr-dica-plan">Para cadastrar ou atualizar vários de uma vez: <b>Baixar planilha</b>, preencha no Excel (uma linha por prestador; célula em branco mantém o que já está) e use <b>Importar planilha</b>. Antes de gravar, o sistema mostra o que vai entrar.</p>
+    <div class="notice warn" id="pr-aviso" hidden>O cadastro de prestadores precisa do Apps Script novo (colar o código e implantar uma nova versão).</div>
+    <div class="pd-stats" id="pr-resumo"></div>
+    <div class="toolbar"><input class="input" id="pr-busca" type="search" placeholder="Buscar por empresa, serviço, contato, telefone ou CNPJ"><select class="input" id="pr-serv" aria-label="Serviço"><option value="">Todos os serviços</option></select></div>
+    <div class="pr-cards" id="pr-cards"></div>
+  </section>
+
+  <!-- CATEGORIAS DE MATERIAIS -->
+  <section id="t-categorias" hidden>
+    <div class="sec-head"><h2 class="sec">Categorias de materiais<span class="setor-nome"></span></h2><span class="muted" id="cat-resumo"></span></div>
+    <p class="hint">Toque numa categoria para ver os materiais dela.</p>
+    <div class="cat-cards" id="cat-cards"></div>
+  </section>
+
+  <!-- EQUIPE: pessoas ativas, contato e o que cada uma tem em aberto -->
+  <section id="t-equipe" hidden>
+    <div class="sec-head"><h2 class="sec">Equipe</h2><span class="muted" id="eq-resumo"></span></div>
+    <div class="toolbar"><input class="input" id="eq-busca" type="search" placeholder="Buscar por nome ou telefone"></div>
+    <div class="tablebox"><table><thead><tr><th>Pessoa</th><th class="hide-s">Telefone</th><th class="num">OS em aberto</th><th class="num">Demandas em aberto</th><th class="num">Atrasadas</th></tr></thead><tbody id="eq-body"></tbody></table></div>
+    <p class="hint" style="margin-top:10px">Para criar logins, trocar perfis ou desativar alguém, use Administração → Usuários.</p>
+  </section>
+
+  <!-- MINHA EQUIPE: o que cada pessoa está fazendo agora -->
+  <section id="t-minhaequipe" hidden>
+    <div class="sec-head"><h2 class="sec">Minha equipe</h2><span class="muted" id="me-resumo"></span></div>
+    <p class="hint">O que cada pessoa tem em aberto agora (OS e demandas), com as atrasadas primeiro. Toque numa tarefa para abrir.</p>
+    <div class="me-quadro" id="me-quadro"></div>
+  </section>
+
+  <!-- REGISTRAR -->
+  <section id="t-registrar" hidden>
+    <div class="sec-head"><h2 class="sec">Registrar movimentação<span class="setor-nome"></span></h2><span class="muted">O estoque do item é atualizado na hora.</span></div>
+    <div class="seg" id="seg">
+      <button data-tipo="saida" aria-pressed="true"><b>Saída</b><span>Item retirado para uso</span></button>
+      <button data-tipo="entrada" aria-pressed="false"><b>Entrada</b><span>Compra ou recebimento</span></button>
+      <button data-tipo="troca" aria-pressed="false"><b>Troca</b><span>Peça nova no lugar da velha</span></button>
+      <button data-tipo="emprestimo" aria-pressed="false"><b>Empréstimo</b><span>Ferramenta que volta</span></button>
+    </div>
+    <div class="panel resumo-nota" id="m-resumo" hidden></div>
+    <form class="panel form" id="f-mov" autocomplete="off" novalidate>
+      <div class="field full">
+        <label for="m-busca">Item <span class="req">*</span></label>
+        <div class="combo">
+          <input class="input" id="m-busca" placeholder="Busque pelo nome ou código" role="combobox" aria-expanded="false" aria-controls="m-lista">
+          <div class="combo-list" id="m-lista" role="listbox" hidden></div>
+        </div>
+        <div class="picked" id="m-picked" hidden></div>
+        <span class="hint">Item não está na lista? <button type="button" class="link" id="m-novo">Cadastrar novo item</button></span>
+      </div>
+      <div class="field">
+        <label for="m-qtd">Quantidade <span class="req">*</span></label>
+        <input class="input num" id="m-qtd" inputmode="decimal" placeholder="1">
+      </div>
+      <div class="field">
+        <label for="m-data">Data</label>
+        <input class="input" id="m-data" type="date">
+      </div>
+
+      <!-- saída / troca / empréstimo -->
+      <div class="field" data-for="saida troca emprestimo">
+        <label for="m-resp" id="m-resp-lbl">Quem retirou <span class="req">*</span></label>
+        <input class="input" id="m-resp" placeholder="Nome do funcionário" list="dl-resp">
+      </div>
+      <div class="field" data-for="saida troca emprestimo">
+        <label for="m-destino" id="m-destino-lbl">Destino (setor, local ou equipamento) <span class="req">*</span></label>
+        <input class="input" id="m-destino" placeholder="Ex.: Cozinha, Bomba 2, Bloco B" list="dl-dest">
+        <div class="locais-rapidos chips" id="m-locais" hidden></div>
+      </div>
+      <div class="field" data-for="saida troca" id="m-osref-box">
+        <label for="m-osref">Ordem de serviço</label>
+        <select class="input" id="m-osref"><option value="">Sem OS</option></select>
+        <span class="hint" id="m-osref-hint"></span>
+      </div>
+      <div class="field" data-for="saida troca">
+        <label for="m-os">Motivo</label>
+        <input class="input" id="m-os" placeholder="Ex.: vazamento na pia da cozinha">
+      </div>
+      <div class="field" data-for="troca">
+        <label for="m-velho">O que foi feito com a peça retirada <span class="req">*</span></label>
+        <select class="input" id="m-velho">
+          <option value="">Selecione</option>
+          <option>Descartada</option>
+          <option>Enviada para conserto</option>
+          <option>Guardada para reaproveitar</option>
+          <option>Devolvida ao fornecedor (garantia)</option>
+          <option>Sucata / reciclagem</option>
+        </select>
+      </div>
+      <div class="field" data-for="emprestimo">
+        <label for="m-prev">Previsão de devolução</label>
+        <input class="input" id="m-prev" type="date">
+      </div>
+
+      <!-- entrada -->
+      <div class="field" data-for="entrada">
+        <label for="m-forn">Fornecedor</label>
+        <input class="input" id="m-forn" placeholder="Nome da loja ou empresa" list="dl-forn">
+      </div>
+      <div class="field" data-for="entrada">
+        <label for="m-nf">Nota fiscal</label>
+        <input class="input" id="m-nf" placeholder="Nº da NF">
+      </div>
+      <div class="field" data-for="entrada">
+        <label for="m-valor">Valor unitário (R$)</label>
+        <input class="input num" id="m-valor" inputmode="decimal" placeholder="0,00">
+      </div>
+      <div class="field" data-for="entrada">
+        <label for="m-recebeu">Quem recebeu</label>
+        <input class="input" id="m-recebeu" placeholder="Nome" list="dl-resp">
+      </div>
+      <div class="field full" data-for="entrada">
+        <label for="m-nf-arq">Foto da nota fiscal</label>
+        <div class="nf-anexo" id="m-nf-box">
+          <label class="btn nf-btn"><input type="file" id="m-nf-arq" accept="image/*,application/pdf" multiple>Anexar foto ou PDF da nota</label>
+          <div class="nf-lista" id="m-nf-lista"></div>
+        </div>
+        <span class="hint" id="m-nf-hint">Até 4 arquivos por nota. O sistema lê os itens do <b>PDF da nota</b> ou da <b>foto</b>. Na foto, deixe a nota reta, de perto e com boa luz. O PDF que a loja envia é sempre o mais preciso.</span>
+        <button type="button" class="link small-link" id="m-nf-mem" hidden></button>
+      </div>
+
+      <div class="field full">
+        <label for="m-obs">Observação</label>
+        <textarea class="input" id="m-obs" placeholder="Opcional"></textarea>
+      </div>
+      <div class="full actions">
+        <button class="btn primary" type="submit" id="m-enviar">Registrar saída</button>
+        <span class="hint" id="m-msg"></span>
+      </div>
+    </form>
+    <datalist id="dl-resp"></datalist><datalist id="dl-dest"></datalist><datalist id="dl-forn"></datalist><datalist id="dl-cat"></datalist>
+  </section>
+
+  <!-- ITENS -->
+  <section id="t-itens" hidden>
+    <div class="sec-head"><h2 class="sec">Itens do estoque<span class="setor-nome"></span></h2><span class="muted" id="i-count"></span></div>
+    <div class="toolbar">
+      <input class="input" id="i-busca" placeholder="Buscar por nome, código ou local" type="search">
+      <select class="input" id="i-cat" aria-label="Categoria"><option value="">Todas as categorias</option></select>
+      <div class="chips" id="i-status">
+        <button class="chip" data-s="" aria-pressed="true">Todos</button>
+        <button class="chip" data-s="baixo" aria-pressed="false">Para repor</button>
+        <button class="chip" data-s="zero" aria-pressed="false">Zerados</button>
+      </div>
+      <button class="btn" id="i-importar" hidden>Importar inventário</button>
+      <button class="btn primary" id="i-novo">Novo item</button>
+    </div>
+    <div class="toolbar per-filtro" id="i-per">
+      <label class="per-lbl" for="i-per-tipo">Filtrar por data</label>
+      <select class="input" id="i-per-tipo">
+        <option value="">Todas as datas</option>
+        <option value="cad">Cadastrados em</option>
+        <option value="ent">Com entrada (compra) em</option>
+        <option value="sai">Com saída ou troca em</option>
+        <option value="mov">Com qualquer movimento em</option>
+      </select>
+      <div class="chips" id="i-per-modo" hidden><button class="chip" data-m="mes" aria-pressed="true">Mês</button><button class="chip" data-m="dia" aria-pressed="false">Dia</button></div>
+      <input class="input" type="month" id="i-per-mes" aria-label="Mês" hidden>
+      <input class="input" type="date" id="i-per-dia" aria-label="Dia" hidden>
+      <button class="link" type="button" id="i-per-limpar" hidden>limpar filtro</button>
+    </div>
+    <div class="tablebox"><table>
+      <thead><tr><th>Código</th><th>Item</th><th id="i-th-per" hidden>No período</th><th class="hide-m">Categoria</th><th class="hide-s">Local</th><th class="n">Estoque</th><th class="n hide-s">Mín.</th><th>Situação</th><th></th></tr></thead>
+      <tbody id="i-body"></tbody>
+    </table></div>
+  </section>
+
+  <!-- HISTÓRICO -->
+  <section id="t-historico" hidden>
+    <div class="sec-head"><h2 class="sec">Histórico<span class="setor-nome"></span></h2><span class="muted">Tudo que entrou e saiu, com quem registrou.</span></div>
+    <div class="toolbar">
+      <input class="input" id="h-mes" type="month" aria-label="Mês" style="flex:0 1 170px">
+      <input class="input" id="h-busca" placeholder="Buscar item, pessoa, destino, OS…" type="search">
+      <button class="btn" id="h-csv" hidden>Exportar planilha (CSV)</button>
+    </div>
+    <div class="chips" id="h-tipos" style="margin-bottom:12px">
+      <button class="chip" data-t="" aria-pressed="true">Todos</button>
+      <button class="chip" data-t="saida" aria-pressed="false">Saídas</button>
+      <button class="chip" data-t="entrada" aria-pressed="false">Entradas</button>
+      <button class="chip" data-t="troca" aria-pressed="false">Trocas</button>
+      <button class="chip" data-t="emprestimo" aria-pressed="false">Empréstimos</button>
+      <button class="chip" data-t="devolucao" aria-pressed="false">Devoluções</button>
+      <button class="chip" data-t="ajuste" aria-pressed="false">Ajustes</button>
+    </div>
+    <div class="summary" id="h-sum"></div>
+    <div class="tablebox"><table>
+      <thead><tr><th>Data</th><th>Tipo</th><th>Item</th><th class="n">Qtd</th><th>Destino / origem</th><th class="hide-s">Responsável</th><th class="hide-m">Registrado por</th><th></th></tr></thead>
+      <tbody id="h-body"></tbody>
+    </table></div>
+  </section>
+
+  <!-- EMPRÉSTIMOS -->
+  <section id="t-emprestimos" hidden>
+    <div class="sec-head"><h2 class="sec">Empréstimos em aberto</h2><span class="muted">Ferramentas fora do almoxarifado que precisam voltar.</span></div>
+    <div class="tablebox"><table>
+      <thead><tr><th>Item</th><th class="n">Qtd</th><th>Com quem</th><th class="hide-s">Onde</th><th>Saiu em</th><th>Devolver até</th><th></th></tr></thead>
+      <tbody id="e-body"></tbody>
+    </table></div>
+  </section>
+
+
+  <!-- DASHBOARD -->
+  <section id="t-dashboard" class="stack" hidden>
+    <div class="sec-head"><h2 class="sec">Dashboard da administração<span class="setor-nome"></span></h2><span class="muted" id="d-resumo"></span></div>
+    <div class="toolbar dash-filtros">
+      <div class="chips" id="d-presets" role="group" aria-label="Período">
+        <button class="chip" data-p="mes" aria-pressed="true">Este mês</button>
+        <button class="chip" data-p="mesPassado" aria-pressed="false">Mês passado</button>
+        <button class="chip" data-p="3m" aria-pressed="false">Últimos 3 meses</button>
+        <button class="chip" data-p="6m" aria-pressed="false">Últimos 6 meses</button>
+        <button class="chip" data-p="ano" aria-pressed="false">Este ano</button>
+        <button class="chip" data-p="pers" aria-pressed="false">Escolher datas</button>
+      </div>
+      <div class="actions" id="d-pers" hidden>
+        <label class="hint" for="d-de">De</label><input class="input" type="date" id="d-de" style="width:auto">
+        <label class="hint" for="d-ate">até</label><input class="input" type="date" id="d-ate" style="width:auto">
+      </div>
+    </div>
+    <div class="kpis kpis6" id="d-kpis"></div>
+    <div class="panel">
+      <div class="sec-head" style="margin-bottom:6px"><h3 id="d-meses-tit">Retiradas e entradas por mês</h3>
+        <div class="legend"><span><i class="sw" style="background:var(--s1)"></i>Retiradas (saídas e trocas)</span><span><i class="sw" style="background:var(--s2)"></i>Entradas</span></div></div>
+      <div id="d-meses" class="chart"></div>
+    </div>
+    <div class="grid-dash">
+      <div class="panel"><h3>Itens mais retirados</h3><p class="cap">Unidades que saíram, somando saídas e trocas</p><div id="d-itens" class="hbars"></div></div>
+      <div class="panel"><h3>Para onde os itens foram</h3><p class="cap">Retiradas por setor, local ou equipamento</p><div id="d-destinos" class="hbars"></div></div>
+      <div class="panel"><h3>Retiradas por colaborador</h3><p class="cap">Quem retirou ou pegou emprestado</p><div id="d-colab" class="hbars"></div></div>
+      <div class="panel"><h3>Consumo por categoria</h3><p class="cap">Unidades retiradas em cada categoria</p><div id="d-cat" class="hbars"></div></div>
+      <div class="panel"><h3>Compras por fornecedor</h3><p class="cap">Valor das entradas com preço informado</p><div id="d-forn" class="hbars"></div></div>
+      <div class="panel"><h3>Peças retiradas nas trocas</h3><p class="cap">O que foi feito com a peça velha</p><div id="d-trocas" class="hbars"></div></div>
+      <div class="panel"><h3>Lançamentos por usuário</h3><p class="cap">Quem registrou as movimentações no sistema</p><div id="d-usuarios" class="hbars"></div></div>
+      <div class="panel"><h3>Empréstimos em aberto</h3><p class="cap">Ferramentas fora do almoxarifado agora</p>
+        <div class="tablebox flat"><table><thead><tr><th>Ferramenta</th><th>Com quem</th><th class="n">Fora há</th><th>Devolver até</th></tr></thead><tbody id="d-emp"></tbody></table></div></div>
+    </div>
+
+    <div class="dash-bloco" id="d-dem-bloco">
+      <div class="sec-head"><h2 class="sec sub-sec">Demandas</h2><span class="muted">Criadas ou encerradas no período, mais as que estão em aberto agora</span></div>
+      <div class="kpis kpis6" id="d-dem-kpis"></div>
+      <div class="grid-dash">
+        <div class="panel"><h3>Em aberto por responsável</h3><p class="cap">Demandas pendentes ou em andamento agora</p><div id="d-dem-resp" class="hbars"></div></div>
+        <div class="panel"><h3>Concluídas por colaborador</h3><p class="cap">Demandas encerradas no período</p><div id="d-dem-colab" class="hbars"></div></div>
+      </div>
+      <div class="panel"><h3>Demandas atrasadas agora</h3><p class="cap">Em aberto e com o prazo vencido</p>
+        <div class="tablebox flat"><table><thead><tr><th>Nº</th><th>Demanda</th><th>Responsável</th><th>Ciente</th><th class="n">Atraso</th></tr></thead><tbody id="d-dem-atras"></tbody></table></div></div>
+    </div>
+
+    <div class="dash-bloco" id="d-os-bloco">
+      <div class="sec-head"><h2 class="sec sub-sec">Ordens de serviço</h2><span class="muted">Abertas ou encerradas no período, mais as que estão em aberto agora</span></div>
+      <div class="kpis kpis6" id="d-os-kpis"></div>
+      <div class="grid-dash">
+        <div class="panel"><h3>OS por categoria</h3><p class="cap">Abertas no período</p><div id="d-os-cat" class="hbars"></div></div>
+        <div class="panel"><h3>OS por local</h3><p class="cap">Abertas no período</p><div id="d-os-local" class="hbars"></div></div>
+        <div class="panel"><h3>Concluídas por colaborador</h3><p class="cap">OS encerradas no período, por responsável</p><div id="d-os-colab" class="hbars"></div></div>
+        <div class="panel"><h3>Custo de material por OS</h3><p class="cap">Pelo último preço de compra de cada item</p><div id="d-os-custo" class="hbars"></div></div>
+      </div>
+      <div class="panel"><h3>OS atrasadas agora</h3><p class="cap">Em aberto e com o prazo vencido</p>
+        <div class="tablebox flat"><table><thead><tr><th>OS</th><th>Serviço</th><th>Responsável</th><th class="n">Atraso</th></tr></thead><tbody id="d-os-atras"></tbody></table></div></div>
+    </div>
+    <div class="sec-head"><h2 class="sec sub-sec">Estoque</h2></div>
+    <div class="grid2">
+      <div class="panel"><h3>Estoque crítico</h3><p class="cap">Itens zerados ou no mínimo hoje</p>
+        <div class="tablebox flat"><table><thead><tr><th>Item</th><th class="n">Estoque / mín.</th><th>Situação</th></tr></thead><tbody id="d-crit"></tbody></table></div></div>
+      <div class="panel"><h3>Itens parados</h3><p class="cap">Com estoque e sem nenhum movimento no período</p>
+        <div class="tablebox flat"><table><thead><tr><th>Item</th><th class="n">Estoque</th><th>Último movimento</th></tr></thead><tbody id="d-parados"></tbody></table></div></div>
+    </div>
+    <div class="panel">
+      <div class="sec-head" style="margin-bottom:6px"><h3>Consumo detalhado por item</h3><button class="btn small" id="d-csv" hidden>Exportar planilha (CSV)</button></div>
+      <p class="cap">Todos os itens que tiveram movimento no período, do mais retirado para o menos retirado</p>
+      <div class="tablebox flat"><table><thead><tr><th>Código</th><th>Item</th><th class="n">Saídas</th><th class="n">Trocas</th><th class="n">Empréstimos</th><th class="n">Entradas</th><th class="n">Compras</th><th class="n">Estoque hoje</th></tr></thead><tbody id="d-det"></tbody></table></div>
+      <button class="link" id="d-mais" type="button" hidden style="margin-top:10px"></button>
+    </div>
+  </section>
+
+  <!-- USUÁRIOS -->
+  <section id="t-usuarios" class="stack" hidden>
+    <div class="sec-head"><h2 class="sec">Usuários e permissões</h2><span class="muted">Quem entra no sistema e o que cada perfil pode fazer.</span></div>
+    <div class="panel">
+      <div class="sec-head" style="margin-bottom:10px"><h3>Colaboradores</h3><button class="btn primary small" id="q-novo-u">Novo colaborador</button></div>
+      <div class="tablebox flat"><table><thead><tr><th>Nome</th><th>Usuário</th><th>Perfil</th><th>Situação</th><th class="hide-m">Telefone</th><th class="hide-s">Acesso</th><th></th></tr></thead><tbody id="q-usuarios"></tbody></table></div>
+    </div>
+    <div class="panel">
+      <div class="sec-head" style="margin-bottom:10px"><h3>Perfis e permissões</h3><button class="btn small" id="q-novo-p">Novo perfil</button></div>
+      <p class="cap">Cada colaborador recebe um perfil. O perfil Administração sempre tem acesso a tudo.</p>
+      <div class="tablebox flat"><table class="matriz" id="q-matriz"></table></div>
+    </div>
+  </section>
+
+  <!-- HISTÓRICO DE ACESSOS (menu Administração, só perfil Administração) -->
+  <!-- COTAÇÕES (menu Administração) -->
+  <section id="t-cotacoes" hidden>
+    <div id="ct-lista-box">
+      <div class="sec-head"><h2 class="sec">Cotações</h2><span class="muted">Mapas de cotação no modelo do Pier: fornecedores, preços, recomendação e aprovação do gerente e do síndico.</span><span class="ct-acoes"><button class="btn" type="button" id="ct-importar">Importar planilha</button><input type="file" id="ct-imp-arq" accept=".xlsx,.xls" hidden><button class="btn primary" type="button" id="ct-nova">+ Nova cotação</button></span></div>
+      <div class="pd-stats" id="ct-resumo"></div>
+      <div class="toolbar"><input class="input" id="ct-q" type="search" placeholder="Buscar cotação, fornecedor ou pendência"><select class="input" id="ct-fs" aria-label="Filtrar por situação"></select></div>
+      <div class="tablebox"><table><thead><tr><th>Nº</th><th>Finalidade</th><th class="hide-s">Fornec.</th><th class="hide-m">Recomendado</th><th>Valor</th><th>Situação</th><th class="hide-s">Data</th></tr></thead><tbody id="ct-body"><tr><td colspan="7"><div class="empty">Carregando…</div></td></tr></tbody></table></div>
+    </div>
+    <div id="ct-editor" hidden></div>
+  </section>
+
+  <section id="t-acessos" hidden>
+    <div class="sec-head"><h2 class="sec">Histórico de acessos</h2><span class="muted" id="ac-desc">Cada entrada no sistema, com data, hora, setor escolhido e aparelho. Tentativas com senha errada aparecem em vermelho.</span></div>
+    <div class="ac-modo" id="ac-modo" role="group" aria-label="O que mostrar"><button type="button" data-m="entradas" aria-pressed="true">Entradas no sistema</button><button type="button" data-m="alteracoes" aria-pressed="false">Alterações</button><button type="button" data-m="vistas" aria-pressed="false">Telas vistas</button><button type="button" data-m="seguranca" aria-pressed="false">Segurança</button></div>
+    <div class="ac-resumo" id="ac-resumo"></div>
+    <div class="toolbar">
+      <select class="input" id="ac-pessoa" aria-label="Pessoa"><option value="">Todas as pessoas</option></select>
+      <select class="input" id="ac-periodo" aria-label="Período"><option value="7">Últimos 7 dias</option><option value="30" selected>Últimos 30 dias</option><option value="90">Últimos 90 dias</option><option value="0">Tudo</option></select>
+      <select class="input" id="ac-tipo" aria-label="Tipo"><option value="">Todos os tipos</option><option value="login">Entrou com senha</option><option value="retorno">Voltou ao sistema</option><option value="falha">Senha errada</option><option value="bloqueado">Login bloqueado</option></select>
+      <input class="input" id="ac-busca" type="search" placeholder="Buscar ação ou detalhe" hidden>
+      <button class="btn" type="button" id="ac-atualizar">Atualizar</button>
+    </div>
+    <div class="tablebox"><table>
+      <thead id="ac-head"><tr><th>Data e hora</th><th>Pessoa</th><th class="hide-s">Perfil</th><th>Entrou por</th><th class="hide-m">Aparelho</th><th>Tipo</th></tr></thead>
+      <tbody id="ac-body"><tr><td colspan="6"><div class="empty">Carregando…</div></td></tr></tbody>
+    </table></div>
+  </section>
+
+  <!-- INÍCIO (Administração): saudação, o que precisa de atenção, atalhos e últimas alterações -->
+  <section id="t-inicio" hidden>
+<div id="pier-central" class="pier-central"></div>
+    <div class="in-topo"><div><span class="brand-overline">VISÃO GERAL · ADMINISTRAÇÃO</span><h2 class="in-ola" id="in-ola">Olá!</h2><p class="muted" id="in-data"></p></div></div>
+    <div id="in-pend-box">
+      <h3 class="in-h">Precisa da sua atenção</h3>
+      <div class="in-cards" id="in-atencao"><div class="empty">Carregando pendências…</div></div>
+    </div>
+    <div class="in-grid">
+      <div class="in-bloco"><h3 class="in-h">Atalhos</h3><div class="in-atalhos" id="in-atalhos"></div></div>
+      <div class="in-bloco" id="in-ult-box"><h3 class="in-h">Últimas pendências alteradas</h3><ul class="in-ult" id="in-ult"></ul></div>
+    </div>
+  </section>
+
+  <!-- PAINEL DE PENDÊNCIAS (menu Administração): números do controle em cartões e gráfico dos últimos 12 meses -->
+  <section id="t-pdpainel" hidden>
+    <div class="sec-head"><h2 class="sec">Dashboard</h2><span class="muted">Resumo do Controle de pendências. Toque num cartão para ver a lista já filtrada.</span><button class="btn" type="button" id="pp-abrir">Abrir o controle</button></div>
+    <div class="pp-box">
+      <h3 class="pp-tit"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg>Pendências</h3>
+      <div class="pp-cards" id="pp-cards"><div class="empty">Carregando pendências…</div></div>
+      <div class="pp-grafbox">
+        <h4>Pendências – últimos 12 meses</h4>
+        <div class="pp-leg" id="pp-leg"></div>
+        <div class="pp-graf" id="pp-graf"></div>
+        <details class="pp-num"><summary>Ver os números do gráfico</summary><div id="pp-tab"></div></details>
+      </div>
+    </div>
+  </section>
+
+  <!-- PENDÊNCIAS (menu Administração) -->
+  <section id="t-pendencias" hidden>
+    <div class="sec-head"><h2 class="sec">Controle de pendências</h2><span class="muted">Lista do síndico. Cada alteração vai direto para a aba Pendencias da planilha.</span><button class="btn primary" type="button" id="pd-nova">+ Incluir pendência</button></div>
+    <div class="pd-stats" id="pd-stats"></div>
+    <div class="pd-prog"><span class="track"><i id="pd-bar"></i></span><span id="pd-prog">Carregando…</span></div>
+    <div class="notice warn" id="pd-aviso" hidden>Para usar criticidade, tarefas constantes, subitens, prazo bloqueado e data de conclusão, a planilha precisa do código novo do Apps Script (colar, executar <b>autorizar</b> e implantar uma nova versão).</div>
+    <div class="notice" id="pd-aviso2" hidden>Aprovação do gerente e do síndico, atualização de prazo, prazo inicial alterável pelo síndico e aviso por e-mail entram quando o Apps Script novo for instalado (colar o código, executar <b>autorizar</b> e implantar uma nova versão).</div>
+    <div class="toolbar">
+      <input class="input" id="pd-q" type="search" placeholder="Buscar pendência, observação ou responsável">
+      <select class="input" id="pd-fs" aria-label="Filtrar por situação"></select>
+      <select class="input" id="pd-fc" aria-label="Filtrar por criticidade"></select>
+      <select class="input" id="pd-fr" aria-label="Filtrar por responsável"></select>
+      <select class="input" id="pd-ord" aria-label="Ordenar a lista"></select>
+      <label class="pd-chk"><input type="checkbox" id="pd-hide"> Ocultar concluídas e canceladas</label>
+      <button class="btn" type="button" id="pd-recolher" aria-pressed="false">Recolher todas</button>
+      <button class="btn primary" type="button" id="pd-mail">Gerar texto para e-mail</button>
+      <button class="btn" type="button" id="pd-lemb" hidden>Lembretes por e-mail</button>
+    </div>
+    <div id="pd-body"><div class="empty">Carregando pendências…</div></div>
+    <datalist id="pd-resps"><option value="Auxiliar"></option><option value="Fornecedor"></option><option value="Gerência"></option><option value="Jardinagem"></option><option value="Limpeza"></option><option value="Manutenção"></option><option value="Piscina"></option><option value="Síndico"></option><option value="Supervisor"></option></datalist>
+  </section>
+<section id="t-correspondencias" class="stack" hidden>
+ <div class="corr-hero"><div><p class="overline">ADMINISTRAÇÃO · RECEBIMENTOS</p><h2>Correspondências</h2><p>Receba, localize e acompanhe cada retirada.</p></div><div class="corr-acoes"><a class="btn" href="https://drop.armariosinteligentes.com/dashdrop" target="_blank" rel="noopener noreferrer">Abrir DROP ↗</a><button class="btn primary" id="corr-nova">Registrar recebimento</button></div></div>
+ <p class="hint">Controle manual. Os registros desta tela não são sincronizados com o armário inteligente.</p>
+ <div id="corr-resumo" class="corr-resumo"></div>
+ <div class="panel stack"><div class="corr-filtros"><label>Buscar<input class="input" id="corr-busca" type="search" placeholder="Unidade, destinatário, rastreio…"></label><label>Situação<select class="input" id="corr-status"><option value="Aguardando retirada">Aguardando retirada</option><option value="Entregue">Entregues</option><option value="Cancelada">Canceladas</option><option value="">Todas</option></select></label><button class="btn" id="corr-atualizar">Atualizar</button></div><p class="hint" id="corr-msg" role="status" aria-live="polite"></p><div id="corr-lista" class="corr-lista"></div></div>
+</section>
+</main>
+
+<div class="overlay" id="modal" hidden><div class="modal" role="dialog" aria-modal="true" id="modal-box"></div></div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+
+
+<script src="tema.js"></script>
+<script src="config.js"></script>
+<script src="nfe.js?v=20261101os5"></script>
+<script src="vendor/qrcode.js?v=2.0.4"></script>
+<script src="app.js?v=20261102producao"></script>
+
+</body>
+</html>
