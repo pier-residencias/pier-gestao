@@ -113,11 +113,48 @@ async function conferirAmbiente(){
   })().catch(e => { ambienteConfirmado = null; throw e; });
   return ambienteConfirmado;
 }
+// ---- arquivo já importado: impressão digital (SHA-256) conferida antes de importar ----
+const ARQ_PEND = {};
+async function arqHash(f){
+  const b = await crypto.subtle.digest("SHA-256", await f.arrayBuffer());
+  return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, "0")).join("");
+}
+// devolve true para seguir; com "box", o aviso aparece dentro dele (janelas que já estão abertas)
+async function arqConferir(acao, files, box){
+  files = (files || []).filter(Boolean); delete ARQ_PEND[acao];
+  if (!files.length || !(window.crypto && crypto.subtle)) return true;
+  let lista, iguais = [];
+  try { lista = await Promise.all(files.map(async f => ({hash: await arqHash(f), nome: f.name, tamanho: f.size}))); } catch(e){ return true; }
+  try { iguais = (await api("arqVerificar", {hashes: lista.map(x => x.hash)})).iguais || []; } catch(e){ if (!/desconhecida/i.test(e.message || "")) toast("Não deu para conferir se o arquivo já foi importado: " + e.message, true); }
+  if (!iguais.length) { ARQ_PEND[acao] = lista; return true; }
+  const porHash = new Map(); iguais.forEach(x => { if (!porHash.has(x.hash)) porHash.set(x.hash, x); });
+  const itens = lista.filter(a => porHash.has(a.hash)).map(a => { const x = porHash.get(a.hash);
+    return `<li><b>${esc(a.nome)}</b> já foi importado em <b>${esc(fDataHora(x.quando))}</b>${x.por ? ` por ${esc(x.por)}` : ""} (${esc(x.tipo)}${x.nome && x.nome !== a.nome ? `, com o nome "${esc(x.nome)}"` : ""}).${x.resumo ? `<span class="sub">Resultado: ${esc(x.resumo)}</span>` : ""}</li>`; }).join("");
+  const html = `<div class="notice crit arq-dup" role="alert"><p style="margin:0 0 6px"><b>Arquivo já importado</b></p><ul class="mi-li">${itens}</ul>
+    <p style="margin:8px 0">Importar de novo pode duplicar lançamentos e deixar os relatórios errados. Só continue se tiver certeza (por exemplo, se a importação anterior foi excluída).</p>
+    <div class="actions"><button class="btn primary" type="button" data-arq="nao">Cancelar a importação</button><button class="btn" type="button" data-arq="sim">Importar mesmo assim</button></div></div>`;
+  return new Promise(ok => {
+    const fim = sim => { if (sim) ARQ_PEND[acao] = lista; ok(sim); };
+    if (box) {
+      box.innerHTML = html;
+      box.querySelector('[data-arq="nao"]').onclick = () => { box.innerHTML = `<p class="hint">Importação cancelada: o arquivo já tinha sido importado.</p>`; fim(false); };
+      box.querySelector('[data-arq="sim"]').onclick = () => { box.innerHTML = ""; fim(true); };
+      box.querySelector('[data-arq="nao"]').focus();
+    } else {
+      $("#modal-box").innerHTML = `<h3>Atenção: arquivo duplicado</h3>${html}`;
+      $("#modal").hidden = false;
+      $('#modal-box [data-arq="nao"]').onclick = () => { fecharModal(); toast("Importação cancelada: o arquivo já tinha sido importado."); fim(false); };
+      $('#modal-box [data-arq="sim"]').onclick = () => { fecharModal(); fim(true); };
+      $('#modal-box [data-arq="nao"]').focus();
+    }
+  });
+}
 async function api(acao, extra, opc){
   if (!API) throw {paraUsuario:true, message:"O endereço da planilha ainda não foi configurado (arquivo config.js)."};
   await conferirAmbiente();
   const meses = [...new Set([mesDe(), S.histMes].concat(S.iPer.tipo && S.iPer.tipo !== "cad" ? [perMes()] : []))];
   const corpo = Object.assign({acao, token:S.token, meses}, extra||{});
+  if (ARQ_PEND[acao] && acao !== "arqVerificar") corpo.arquivos = ARQ_PEND[acao]; // o servidor registra o arquivo junto da importação
   let r;
   try {
     r = await buscarJsonPier(API, {method:"POST", body:JSON.stringify(corpo), redirect:"follow"});
@@ -128,6 +165,7 @@ async function api(acao, extra, opc){
     if ((r.codigo === "senha" || r.codigo === "sessao") && !(acao === "entrar" && extra && extra.senha !== undefined)) { encerrarLocal(r.erro || "Sua sessão terminou. Entre de novo."); }
     throw {paraUsuario:true, message:r.erro || "Não foi possível concluir.", codigo:r.codigo};
   }
+  if (corpo.arquivos) delete ARQ_PEND[acao];
   if (r.token) { S.token = r.token; guardar(); }
   if (r.perfil) S.perfil = r.perfil;
   if (r.perms) { S.perms = r.perms; aplicarPermissoes(); }
@@ -3293,6 +3331,8 @@ function abrirImportacao(){
   };
   $("#imp-arq").addEventListener("change", async () => {
     const f = $("#imp-arq").files[0]; if (!f) return;
+    $("#imp-prev").innerHTML = `<div class="empty"><span class="spin" aria-hidden="true"></span> Conferindo se o arquivo já foi importado…</div>`;
+    if (!(await arqConferir("importarContagem", [f], $("#imp-prev")))) { $("#imp-arq").value = ""; return; }
     const msg = $("#imp-msg"); msg.className = "hint"; msg.innerHTML = `<span class="spin" aria-hidden="true"></span> Lendo a planilha…`;
     $("#imp-ok").disabled = true; $("#imp-prev").innerHTML = "";
     try {
@@ -5120,7 +5160,7 @@ async function ctImportar(file){
 if (TEM_ADM && $("#t-cotacoes")) {
   $("#ct-nova").addEventListener("click", () => ctNova());
   $("#ct-importar").addEventListener("click", () => $("#ct-imp-arq").click());
-  $("#ct-imp-arq").addEventListener("change", e => { const f = e.target.files[0]; e.target.value = ""; ctImportar(f); });
+  $("#ct-imp-arq").addEventListener("change", async e => { const f = e.target.files[0]; e.target.value = ""; if (f && !(await arqConferir("cotSalvar", [f]))) return; ctImportar(f); });
   $("#ct-q").addEventListener("input", e => { CT.q = e.target.value; renderCot(); });
   $("#ct-fs").addEventListener("change", e => { CT.st = e.target.value; renderCot(); });
   $("#ct-resumo").addEventListener("click", e => { const b = e.target.closest("[data-ctst]"); if (!b) return; CT.st = CT.st === b.dataset.ctst ? "" : b.dataset.ctst; renderCot(); });
@@ -5777,7 +5817,7 @@ if ($("#t-prestadores")) {
   $("#pr-novo").addEventListener("click", () => prForm(null));
   $("#pr-baixar").addEventListener("click", prBaixarPlanilha);
   $("#pr-importar").addEventListener("click", () => $("#pr-imp-arq").click());
-  $("#pr-imp-arq").addEventListener("change", e => { const f = e.target.files[0]; e.target.value = ""; prImportar(f); });
+  $("#pr-imp-arq").addEventListener("change", async e => { const f = e.target.files[0]; e.target.value = ""; if (f && !(await arqConferir("prestImportar", [f]))) return; prImportar(f); });
   $("#pr-busca").addEventListener("input", e => { PR.q = e.target.value; renderPrest(); });
   $("#pr-serv").addEventListener("change", e => { PR.serv = e.target.value; renderPrest(); });
   $("#pr-resumo").addEventListener("click", e => { const b = e.target.closest("[data-f]"); if (!b) return; PR.f = PR.f === b.dataset.f && b.dataset.f !== "ativos" ? "ativos" : b.dataset.f; renderPrest(); });
@@ -6698,7 +6738,7 @@ if ($("#t-unidades")) {
   $("#uc-bloco").addEventListener("change", ev => { UN.bloco = ev.target.value; renderUnCad(); });
   $("#cf-salvar").addEventListener("click", ev => cfSalvar(ev.target));
   $("#cf-importar").addEventListener("click", () => $("#cf-arq").click());
-  $("#cf-arq").addEventListener("change", ev => { const f = ev.target.files[0]; ev.target.value = ""; unImportar(f); });
+  $("#cf-arq").addEventListener("change", async ev => { const f = ev.target.files[0]; ev.target.value = ""; if (f && !(await arqConferir("unImportar", [f]))) return; unImportar(f); });
   $("#cf-ocupadas").addEventListener("click", ev => enviar(ev.target, $("#cf-msg"), "unOcupadas", {}, async () => { $("#cf-msg").textContent = ""; CF = null; await carregarUnidades(true); }));
   document.addEventListener("click", ev => {
     const a = ev.target.closest("[data-un]"); if (a && a.closest("#t-unidades, #t-uncadastro")) { unFicha(a.dataset.un); return; }
@@ -7189,6 +7229,8 @@ function miImportar(){
   $("#mi-arqs").onchange = async () => {
     const fs = [...$("#mi-arqs").files]; lido = null; $("#mi-ok").disabled = true;
     if (!fs.length) { $("#mi-prev").innerHTML = ""; return; }
+    $("#mi-prev").innerHTML = `<div class="empty"><span class="spin" aria-hidden="true"></span> Conferindo se ${fs.length === 1 ? "o arquivo já foi importado" : "os arquivos já foram importados"}…</div>`;
+    if (!(await arqConferir("miImportar", fs, $("#mi-prev")))) { $("#mi-arqs").value = ""; return; }
     $("#mi-prev").innerHTML = `<div class="empty"><span class="spin" aria-hidden="true"></span> Lendo ${fs.length} arquivo${fs.length === 1 ? "" : "s"}…</div>`;
     const res = [];
     for (const f of fs) { try { res.push(Object.assign({nome:f.name}, await miLerArquivo(f))); } catch(e){ res.push({nome:f.name, tipo:"?", erro:"Não consegui ler este arquivo."}); } }
@@ -7204,7 +7246,8 @@ function miImportar(){
     const conflito = new Set(per).size > 1;
     if (conflito) li.push(`<li class="err">Os arquivos são de meses diferentes (${[...new Set(per)].map(miRotPer).join(", ")}). Escolha os do mesmo mês.</li>`);
     const jaTem = periodo && MI.d && MI.d.mi.some(x => x.periodo === periodo && x.origem !== "Histórico Exista");
-    $("#mi-prev").innerHTML = `<div class="notice ${conflito || !(pl || gl || ind) ? "crit" : ""}" style="margin:0 0 12px"><p style="margin:0 0 6px"><b>Período: ${periodo ? esc(miRotPer(periodo)) : "—"}</b>${jaTem ? " · já importado antes: as unidades serão atualizadas" : ""}</p><ul class="mi-li">${li.join("")}</ul></div>`;
+    $("#mi-prev").innerHTML = `<div class="notice ${conflito || !(pl || gl || ind) ? "crit" : ""}" style="margin:0 0 12px"><p style="margin:0 0 6px"><b>Período: ${periodo ? esc(miRotPer(periodo)) : "—"}</b></p><ul class="mi-li">${li.join("")}</ul></div>${jaTem && !conflito ? (() => { const q = MI.d.mi.filter(x => x.periodo === periodo && x.origem !== "Histórico Exista"), em = q.map(x => x.importadoEm).filter(Boolean).sort().pop(), por = (q.find(x => x.importadoEm === em) || {}).importadoPor;
+      return `<div class="notice crit arq-dup" role="alert" style="margin:0 0 12px"><p style="margin:0 0 6px"><b>Este período já foi importado</b>: ${q.length} unidade${q.length === 1 ? "" : "s"} de ${esc(miRotPer(periodo))}${em ? ` em ${esc(fDataHora(em))}${por ? " por " + esc(por) : ""}` : ""}.</p><p style="margin:0 0 8px">Importar de novo <b>não duplica</b>: as unidades que já existem são substituídas pelos valores deste arquivo. Se o arquivo anterior estava errado, isso corrige; se for o mesmo relatório, não precisa importar.</p><label class="pd-chk"><input type="checkbox" id="mi-ja-ok"> Entendi: substituir os dados de ${esc(miRotPer(periodo))}</label></div>`; })() : ""}`;
     if (conflito || !(pl || gl || ind) || !periodo) return;
     // o demonstrativo completa a planilha com o hidrômetro e a localização de cada unidade
     const info = new Map(ind ? ind.r.unidades.map(u => [miChaveU(u), u]) : []);
@@ -7212,7 +7255,9 @@ function miImportar(){
     const base = pl ? pl.r.unidades : gl ? gl.r.unidades : [];
     const unidades = base.map(x => { const u = info.get(miChaveU(x)); return u ? Object.assign({}, x, {hidrometro:u.hidrometro, local:u.local}) : x; });
     lido = {periodo, unidades, historico: ind ? ind.r.unidades.flatMap(u => miHistDe(u, periodo)) : [], resumo: gl ? Object.assign({}, gl.r, {unidades:undefined}) : null};
-    $("#mi-ok").disabled = false;
+    const jaOk = $("#mi-ja-ok");
+    $("#mi-ok").disabled = !!jaOk;
+    if (jaOk) jaOk.onchange = () => { $("#mi-ok").disabled = !jaOk.checked; };
   };
   $("#mi-ok").onclick = () => { if (!lido) return; enviar($("#mi-ok"), $("#mi-msg"), "miImportar", lido, r => { miAplicar(r); MI.per = lido.periodo; fecharModal(); toast(r.msg); renderMI(); }); };
 }
@@ -7929,7 +7974,7 @@ if ($("#t-medlanc")) {
   $("#ml-per").addEventListener("change", ev => { MD.fPer = ev.target.value; renderMedLanc(); });
   $("#ml-novo").addEventListener("click", () => MD.vista === "mes" ? mdNovaConta({medidor:MD.fMed}) : mdNovaLeitura({medidor:MD.fMed}));
   $("#ml-importar").addEventListener("click", () => $("#ml-arq").click());
-  $("#ml-arq").addEventListener("change", ev => { const f = ev.target.files[0]; ev.target.value = ""; mdImportar(f); });
+  $("#ml-arq").addEventListener("change", async ev => { const f = ev.target.files[0]; ev.target.value = ""; if (f && !(await arqConferir("medImportar", [f]))) return; mdImportar(f); });
   $("#ml-modelo").addEventListener("click", mdModelo);
   $("#md-novo").addEventListener("click", () => mdEditarMedidor(null));
   $("#mr-per").addEventListener("change", ev => { MD.rPer = ev.target.value; renderMedRel(); });
@@ -8206,7 +8251,7 @@ async function esImportarPDF(file){
 }
 if ($("#t-esreservas")) {
   $("#er-pdf").addEventListener("click", () => $("#er-arq").click());
-  $("#er-arq").addEventListener("change", ev => { const f = ev.target.files[0]; ev.target.value = ""; esImportarPDF(f); });
+  $("#er-arq").addEventListener("change", async ev => { const f = ev.target.files[0]; ev.target.value = ""; if (f && !(await arqConferir("espImportar", [f]))) return; esImportarPDF(f); });
 }
 
 // ---------- fornecedores (Pendências e compras; só Administração) ----------
@@ -8314,7 +8359,7 @@ async function foImportar(file){
 if ($("#t-fornecedores")) {
   $("#fo-exp").addEventListener("click", foExportar);
   $("#fo-imp").addEventListener("click", () => $("#fo-arq").click());
-  $("#fo-arq").addEventListener("change", ev => { const f = ev.target.files[0]; ev.target.value = ""; foImportar(f); });
+  $("#fo-arq").addEventListener("change", async ev => { const f = ev.target.files[0]; ev.target.value = ""; if (f && !(await arqConferir("fornImportar", [f]))) return; foImportar(f); });
   $("#fo-novo").addEventListener("click", () => FO.lista && foEditar(null));
   $("#fo-cot").addEventListener("click", ev => enviar(ev.target, null, "fornDasCotacoes", {}, r => { foAplicar(r); renderForn(); }));
   $("#fo-q").addEventListener("input", ev => { FO.q = ev.target.value; renderForn(); });
