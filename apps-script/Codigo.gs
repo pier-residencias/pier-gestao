@@ -377,7 +377,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-02 Pier Gestão 2.0 — central e correspondências';
+const VERSAO = '2026-11-02 Pier Gestão 2.0 — medição individual corrigida';
 
 function doGet() {
   TABS = {};
@@ -2447,7 +2447,8 @@ function medExigir(conta, lancar) {
   if (lancar ? !p.med_lancar : !(p.med_ver || p.med_lancar)) { const e = falha(lancar ? 'Seu perfil não tem permissão para lançar medições.' : 'Seu perfil não tem permissão para ver as medições.'); e.negado = true; throw e; }
 }
 // padrão brasileiro: "1.420" = 1420 (ponto de milhar); "1.050,5" e "1050,5" = 1050,5
-const medNum = v => (v === '' || v === null || v === undefined) ? NaN : /^\d{1,3}(\.\d{3})+$/.test(String(v).trim()) ? Number(String(v).trim().replace(/\./g, '')) : numero(v);
+// número que já chega como número (do site) não passa pela regra do ponto de milhar
+const medNum = v => (v === '' || v === null || v === undefined) ? NaN : typeof v === 'number' ? v : /^\d{1,3}(\.\d{3})+$/.test(String(v).trim()) ? Number(String(v).trim().replace(/\./g, '')) : numero(v);
 const medDataBR = s => String(s || '').split('-').reverse().join('/');
 const medFmt = n => (Math.round(Number(n) * 1000) / 1000).toLocaleString('pt-BR');
 function medLista() {
@@ -2625,7 +2626,8 @@ const miChave = (p, b, u) => String(p) + '|' + String(b).trim().toLowerCase() + 
 const miPer = s => /^\d{4}-\d{2}$/.test(String(s || ''));
 function miNumOpc(v, rot) {
   if (v === '' || v === null || v === undefined) return '';
-  const n = medNum(v);
+  // número que já vem como número (lido da planilha) não passa pela regra do ponto de milhar ("312.389" não é 312389)
+  const n = typeof v === 'number' ? v : medNum(v);
   if (!isFinite(n) || n < 0) throw falha('Valor inválido em ' + rot + '.');
   return Math.round(n * 1000) / 1000;
 }
@@ -2645,7 +2647,7 @@ function miImportar(r, conta) {
     const o = { periodo, bloco, unidade, dataIni: dataOk(x.dataIni) ? x.dataIni : '', dataFim: dataOk(x.dataFim) ? x.dataFim : '',
       leituraAnt: miNumOpc(x.leituraAnt, 'leitura anterior'), leituraAtual: miNumOpc(x.leituraAtual, 'leitura atual'), estimada: miNumOpc(x.estimada, 'leitura estimada'),
       consumo, valor: x.valor === '' || x.valor == null ? '' : Math.round(miNumOpc(x.valor, 'valor') * 100) / 100,
-      origem: 'Planilha Exista', importadoEm: quando, importadoPor: conta.nome };
+      origem: x.origem === 'Relatório Global' ? 'Relatório Global' : 'Planilha Exista', importadoEm: quando, importadoPor: conta.nome };
     if (x.hidrometro) o.hidrometro = texto(x.hidrometro, 30);
     if (x.local) o.local = texto(x.local, 60);
     const k = miChave(periodo, bloco, unidade), atual = porChave.get(k);
