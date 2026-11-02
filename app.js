@@ -6756,6 +6756,14 @@ const MI_ALTO = 40;            // a Exista destaca as unidades com 40 m³ ou mai
 const MI_MESES = ["janeiro","fevereiro","marco","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
 const miPode = () => can("med_ver") || can("med_lancar") || can("un_ver") || can("un_editar");
 const miRotPer = p => { const [a, m] = String(p).split("-"); return (MI_MESES[+m - 1] ? MI_MESES[+m - 1].replace("marco", "março") : m) + "/" + a; };
+// período como a Exista chama (leitura de um mês para o outro), com as datas: "setembro/outubro 2026 · leitura 04/09 a 06/10"
+function miRotPerLongo(p){
+  const ls = MI.d ? MI.d.mi.filter(x => x.periodo === p && x.dataIni && x.dataFim) : [];
+  const ini = ls.map(x => x.dataIni).sort()[0], fim = ls.map(x => x.dataFim).sort().pop();
+  if (!ini || !fim) return miRotPer(p);
+  const mes = d => (MI_MESES[+d.slice(5, 7) - 1] || "").replace("marco", "março");
+  return (mes(ini) === mes(fim) ? mes(fim) : mes(ini) + "/" + mes(fim)) + " " + fim.slice(0, 4) + " · leitura " + fData(ini).slice(0, 5) + " a " + fData(fim).slice(0, 5);
+}
 const miBlocoRot = b => String(b) === "0" || !String(b).trim() ? "—" : String(b);
 const miChaveU = x => String(x.bloco).trim().toLowerCase() + "|" + String(x.unidade).trim().toLowerCase();
 const miNumBR = v => { if (typeof v === "number") return v; const s = String(v ?? "").trim(); if (!s) return NaN; return Number(s.includes(",") ? s.replace(/\./g, "").replace(",", ".") : s); };
@@ -6779,7 +6787,7 @@ function miAnalise(x){
   return {media, varia, alto, subiu, alerta: alto || subiu};
 }
 // período da tela: o escolhido ou o mais recente que veio da planilha
-function miPeriodos(){ return [...new Set(MI.d.mi.filter(x => x.origem !== "Histórico Exista").map(x => x.periodo))].sort().reverse(); }
+function miPeriodos(){ return [...new Set(MI.d.mi.filter(x => x.origem !== "Histórico Exista").map(x => x.periodo).concat(MI.d.mir.map(x => x.periodo)))].filter(Boolean).sort().reverse(); }
 function renderMI(){
   const sec = $("#t-medind"); if (!sec || sec.hidden) return;
   const box = $("#mi-corpo"); $("#mi-importar").hidden = !can("med_lancar");
@@ -6787,7 +6795,7 @@ function renderMI(){
   if (!MI.d) { box.innerHTML = `<div class="empty"><span class="spin" aria-hidden="true"></span> Carregando…</div>`; return; }
   const pers = miPeriodos();
   const sp = $("#mi-per");
-  sp.innerHTML = pers.length ? pers.map(p => `<option value="${p}">${esc(miRotPer(p))}</option>`).join("") : `<option value="">—</option>`;
+  sp.innerHTML = pers.length ? pers.map(p => `<option value="${p}">${esc(miRotPerLongo(p))}</option>`).join("") : `<option value="">—</option>`;
   if (!pers.includes(MI.per)) MI.per = pers[0] || "";
   sp.value = MI.per;
   if (!pers.length) { box.innerHTML = `<div class="empty">Nenhum relatório da Exista importado ainda.${can("med_lancar") ? ` Clique em <b>Importar relatórios da Exista</b> e escolha a planilha (Excel) do mês; o Relatório Global e o Individual (PDF) são opcionais.` : ""}</div>`; return; }
@@ -6828,26 +6836,30 @@ function renderMI(){
 function miConferencia(soma){
   const r = MI.d.mir.find(x => x.periodo === MI.per);
   if (!r || r.concM3 === "" || r.concM3 === undefined) return `<section class="panel mi-conf"><h3 class="mi-h">Conferência com a concessionária</h3><p class="muted">Importe também o <b>Relatório Global</b> (PDF) da Exista deste mês para comparar a soma das unidades com a conta da concessionária.</p></section>`;
-  const conc = Number(r.concM3), ex = r.somaExista !== "" ? Number(r.somaExista) : soma;
-  let comum = null, cobre = "";
+  const conc = Number(r.concM3), ex = r.somaExista !== "" && r.somaExista !== undefined ? Number(r.somaExista) : soma;
+  // hidrômetros de água da Central (guaritas): medem a entrada do condomínio; somados no mesmo período da conta
+  let geral = null, cobre = "";
   if (MD.d && r.concIni && r.concFim) {
     const meds = MD.d.medidores.filter(m => m.tipo === "Água" && m.ativo !== "Não");
     if (meds.length) {
       const dias = mdDiasEntre(r.concIni, r.concFim); let s = 0, n = 0;
       meds.forEach(m => { const f = mdSomaFaixa(m, mdSomaDia(r.concIni, 1), r.concFim); s += f.s * mdFator(m, "m³"); n = Math.max(n, f.n); });
-      comum = s; cobre = n < dias ? ` (leituras em ${n} de ${dias} dias)` : "";
+      if (n) { geral = s; cobre = n < dias ? ` · leituras em ${n} de ${dias} dias` : ""; }
     }
   }
-  const dif = conc - ex - (comum || 0), pct = conc ? dif / conc * 100 : 0;
-  const leitura = Math.abs(pct) < 3 ? `<span class="pill s-ok">Bate com a conta</span> diferença pequena (até 3%).`
-    : dif > 0 ? `<span class="pill s-baixo">Sobra água não medida</span> a concessionária cobrou mais do que a soma das unidades${comum !== null ? " e da área comum" : ""}: pode ser área comum sem medidor, vazamento ou unidade sem leitura.`
-    : `<span class="pill s-baixo">Medição acima da conta</span> as unidades somaram mais do que a conta. Os períodos de leitura da Exista e da concessionária são diferentes; confira se a diferença se repete nos próximos meses.`;
+  const pc = v => (v > 0 ? "+" : "") + mdF(v, 1);
+  const difEx = ex - conc, pEx = conc ? difEx / conc * 100 : 0;
+  const difG = geral !== null ? geral - conc : null, pG = geral !== null && conc ? difG / conc * 100 : 0;
+  const leituraEx = Math.abs(pEx) < 3 ? `<span class="pill s-ok">Exista bate com a conta</span> a soma das unidades ficou a menos de 3% da conta.`
+    : difEx < 0 ? `<span class="pill s-baixo">Água não medida nas unidades</span> a conta foi ${mdF(-difEx, 1)} m³ maior que a soma das unidades: consumo da área comum, vazamento ou unidade sem leitura.`
+    : `<span class="pill s-baixo">Unidades acima da conta</span> as unidades somaram ${mdF(difEx, 1)} m³ a mais. Os períodos de leitura da Exista e da concessionária são diferentes; confira se a diferença se repete nos próximos meses.`;
+  const leituraG = geral === null ? "" : Math.abs(pG) < 3 ? ` <span class="pill s-ok">Hidrômetros da Central batem com a conta</span>`
+    : ` <span class="pill s-baixo">Hidrômetros da Central ${difG > 0 ? "acima" : "abaixo"} da conta (${pc(pG)}%)</span> confira as leituras dos hidrômetros e a leitura da concessionária.`;
   return `<section class="panel mi-conf"><h3 class="mi-h">Conferência com a ${esc(r.concessionaria || "concessionária")}</h3>
-    <dl class="mi-dl"><div><dt>Conta da ${esc(r.concessionaria || "concessionária")}</dt><dd><b>${mdF(conc, 1)} m³</b>${r.concValor !== "" ? ` · ${fBRL(r.concValor)}` : ""}<span class="sub">${r.concIni ? `${fData(r.concIni)} a ${fData(r.concFim)}` : ""}${r.valorM3 !== "" ? ` · ${fBRL(r.valorM3)}/m³` : ""}${r.vencimento ? ` · vence ${fData(r.vencimento)}` : ""}</span></dd></div>
-      <div><dt>Soma da Exista (unidades)</dt><dd><b>${mdF(ex, 1)} m³</b><span class="sub">${r.dataIni ? `${fData(r.dataIni)} a ${fData(r.dataFim)}` : ""}</span></dd></div>
-      <div><dt>Área comum (hidrômetros de água da Central)</dt><dd>${comum !== null ? `<b>${mdF(comum, 1)} m³</b><span class="sub">no período da conta${cobre}</span>` : `<span class="muted">sem leituras no período da conta</span>`}</dd></div>
-      <div><dt>Diferença</dt><dd><b class="${Math.abs(pct) >= 3 ? "md-sobe" : ""}">${dif > 0 ? "+" : ""}${mdF(dif, 1)} m³ (${pct > 0 ? "+" : ""}${mdF(pct, 1)}%)</b></dd></div></dl>
-    <p class="hint">${leitura}</p></section>`;
+    <dl class="mi-dl"><div><dt>Conta da ${esc(r.concessionaria || "concessionária")}</dt><dd><b>${mdF(conc, 1)} m³</b>${r.concValor !== "" && r.concValor !== undefined ? ` · ${fBRL(r.concValor)}` : ""}<span class="sub">${r.concIni ? `${fData(r.concIni)} a ${fData(r.concFim)}` : ""}${r.valorM3 !== "" && r.valorM3 !== undefined ? ` · ${fBRL(r.valorM3)}/m³` : ""}${r.vencimento ? ` · vence ${fData(r.vencimento)}` : ""}</span></dd></div>
+      <div><dt>Hidrômetros de água da Central</dt><dd>${geral !== null ? `<b>${mdF(geral, 1)} m³</b> <span class="${Math.abs(pG) >= 3 ? "md-sobe" : "muted"}">(${pc(difG)} m³ · ${pc(pG)}%)</span><span class="sub">mesmo período da conta${cobre}</span>` : `<span class="muted">sem leituras no período da conta</span>`}</dd></div>
+      <div><dt>Soma da Exista (unidades)</dt><dd><b>${mdF(ex, 1)} m³</b> <span class="${Math.abs(pEx) >= 3 ? "md-sobe" : "muted"}">(${pc(difEx)} m³ · ${pc(pEx)}%)</span><span class="sub">${r.dataIni ? `${fData(r.dataIni)} a ${fData(r.dataFim)}` : ""}</span></dd></div></dl>
+    <p class="hint">${leituraEx}${leituraG}</p><p class="hint">As diferenças entre parênteses são em relação à conta da ${esc(r.concessionaria || "concessionária")}.</p></section>`;
 }
 function miAbrirUnidade(id){
   const x = MI.d.mi.find(y => y.id === id); if (!x) return;
@@ -6915,8 +6927,18 @@ function miLerGlobal(linhas){
     concM3: num(/Consumo total da concession[aá]ria m³ ([\d.,]+)/i), concValor: num(/Valor total da concession[aá]ria R\$ ([\d.,]+)/i),
     valorM3: num(/Valor por m³[^\n]*?R\$\/m³ ([\d.,]+)/i), somaExista: num(/Soma do consumo medido pela EXISTA m³ ([\d.,]+)/i)
   };
-  r.periodo = r.dataFim.slice(0, 7);
-  return r.periodo && r.concM3 !== "" ? r : null;
+  // o Relatório Global também traz a tabela das unidades (ÁGUA | unidade | bloco | data | período | ano | leituras | consumo | R$ valor)
+  r.unidades = [];
+  const linhaU = /^[ÁA]GUA (\S+(?: \S+)*?) (\d{1,3}) (\d{2}\/\d{2}\/\d{4}) \S+ \d{4} ([\d.,]+) ([\d.,]+) ([\d.,]+) ([\d.,]+)(?: R\$ ?([\d.,]+))?/i;
+  L.forEach(l => {
+    const m = linhaU.exec(l); if (!m) return;
+    const n = v => { const x = miNumBR(v); return isNaN(x) ? "" : Math.round(x * 1000) / 1000; };
+    const consumo = n(m[7]); if (consumo === "") return;
+    r.unidades.push({origem:"Relatório Global", bloco:m[2], unidade:m[1], dataIni:r.dataIni, dataFim:miBR(m[3]) || r.dataFim, leituraAnt:n(m[4]), leituraAtual:n(m[5]), estimada:n(m[6]), consumo, valor: m[8] ? n(m[8]) : ""});
+  });
+  r.periodo = (r.unidades.map(x => x.dataFim).filter(Boolean).sort().pop() || r.dataFim).slice(0, 7);
+  r.unidades.forEach(x => { x.periodo = r.periodo; });
+  return r.periodo && (r.concM3 !== "" || r.unidades.length) ? r : null;
 }
 // Demonstrativo Individual (PDF): hidrômetro, localização e o histórico de consumo dos meses anteriores de cada unidade
 function miLerIndividual(linhas){
@@ -6979,6 +7001,7 @@ function miImportar(){
     const li = [];
     res.filter(x => x.erro).forEach(x => li.push(`<li class="err">${esc(x.nome)}: ${esc(x.erro)}</li>`));
     if (pl) { const s = pl.r.unidades.reduce((a, x) => a + x.consumo, 0); li.push(`<li><b>Planilha:</b> ${pl.r.unidades.length} unidades · ${mdF(s, 2)} m³ · leitura de ${fData(pl.r.ini)} a ${fData(pl.r.fim)}</li>`); }
+    if (gl && gl.r.unidades.length) li.push(`<li><b>Relatório Global — unidades:</b> ${gl.r.unidades.length} unidades · ${mdF(gl.r.unidades.reduce((a, x) => a + x.consumo, 0), 2)} m³ · leitura de ${fData(gl.r.dataIni)} a ${fData(gl.r.dataFim)}${pl ? " (vale a planilha)" : ""}</li>`);
     if (gl) li.push(`<li><b>Relatório Global:</b> ${esc(gl.r.concessionaria || "concessionária")} ${mdF(gl.r.concM3, 1)} m³${gl.r.concValor !== "" ? " · " + fBRL(gl.r.concValor) : ""} (${fData(gl.r.concIni)} a ${fData(gl.r.concFim)}) · soma da Exista ${gl.r.somaExista !== "" ? mdF(gl.r.somaExista, 1) + " m³" : "—"}</li>`);
     if (ind) li.push(`<li><b>Demonstrativo Individual:</b> ${ind.r.unidades.length} unidades · ${ind.r.unidades.filter(u => u.hidrometro).length ? "hidrômetro e " : ""}${Math.max(...ind.r.unidades.map(u => u.hist.length))} meses anteriores de consumo</li>`);
     const per = [pl, gl, ind].filter(Boolean).map(x => x.r.periodo).filter(Boolean);
@@ -6989,8 +7012,10 @@ function miImportar(){
     if (conflito || !(pl || gl || ind) || !periodo) return;
     // o demonstrativo completa a planilha com o hidrômetro e a localização de cada unidade
     const info = new Map(ind ? ind.r.unidades.map(u => [miChaveU(u), u]) : []);
-    const unidades = pl ? pl.r.unidades.map(x => { const u = info.get(miChaveU(x)); return u ? Object.assign({}, x, {hidrometro:u.hidrometro, local:u.local}) : x; }) : [];
-    lido = {periodo, unidades, historico: ind ? ind.r.unidades.flatMap(u => miHistDe(u, periodo)) : [], resumo: gl ? gl.r : null};
+    // as unidades vêm da planilha; sem ela, da tabela do Relatório Global
+    const base = pl ? pl.r.unidades : gl ? gl.r.unidades : [];
+    const unidades = base.map(x => { const u = info.get(miChaveU(x)); return u ? Object.assign({}, x, {hidrometro:u.hidrometro, local:u.local}) : x; });
+    lido = {periodo, unidades, historico: ind ? ind.r.unidades.flatMap(u => miHistDe(u, periodo)) : [], resumo: gl ? Object.assign({}, gl.r, {unidades:undefined}) : null};
     $("#mi-ok").disabled = false;
   };
   $("#mi-ok").onclick = () => { if (!lido) return; enviar($("#mi-ok"), $("#mi-msg"), "miImportar", lido, r => { miAplicar(r); MI.per = lido.periodo; fecharModal(); toast(r.msg); renderMI(); }); };
