@@ -17,6 +17,7 @@
  */
 
 const ABAS = {
+  correspondencias: {nome:'Correspondencias', cols:[['id','ID'],['operacaoId','Operação'],['bloco','Bloco'],['unidade','Unidade'],['destinatario','Destinatário'],['tipo','Tipo'],['transportadora','Transportadora'],['rastreio','Rastreio'],['local','Local de guarda'],['obs','Observação'],['status','Situação'],['recebidoEm','Recebido em'],['recebidoPor','Recebido por'],['retiradoEm','Retirado em'],['retiradoPor','Retirado por'],['entreguePor','Entregue por'],['canceladoEm','Cancelado em'],['canceladoPor','Cancelado por'],['motivo','Motivo do cancelamento'],['versao','Versão']], num:['versao'], criar:true},
   itens: {
     nome: 'Itens',
     cols: [
@@ -38,10 +39,25 @@ const ABAS = {
       ['valorUnit', 'Valor unitário'], ['previsao', 'Devolver até'], ['estadoDevolucao', 'Estado na devolução'],
       ['obs', 'Observação'], ['registradoPor', 'Registrado por'], ['criadoEm', 'Criado em'],
       ['estornado', 'Estornado'], ['estornoDe', 'Estorno de'], ['emprestimoId', 'ID do empréstimo'],
-      ['os', 'OS'], ['nfFotos', 'Foto da NF']
+      ['os', 'OS'], ['nfFotos', 'Foto da NF'], ['contagem','Contagem'], ['operacao','Operação'], ['saldoAnterior','Saldo anterior'], ['saldoFinal','Saldo final'], ['aprovadoPor','Aprovado por']
     ],
-    num: ['qtd', 'delta', 'valorUnit'],
-    opcionais: ['os', 'nfFotos']
+    num: ['qtd', 'delta', 'valorUnit', 'saldoAnterior', 'saldoFinal'],
+    opcionais: ['os', 'nfFotos', 'contagem', 'operacao', 'saldoAnterior', 'saldoFinal', 'aprovadoPor']
+  },
+  cont: {
+    nome: 'Contagens',
+    criar: true,
+    cols: [
+      ['id', 'ID'], ['numero', 'Nº'], ['lote', 'Lote'], ['origem', 'Origem'], ['itemId', 'ID do item'], ['itemCodigo', 'Código'],
+      ['itemNome', 'Item'], ['setor', 'Setor'], ['unidade', 'Unidade'], ['saldoContagem', 'Saldo na contagem'],
+      ['ultimaMov', 'Última movimentação na contagem'], ['qtdContada', 'Quantidade contada'], ['diferenca', 'Diferença'],
+      ['justificativa', 'Justificativa'], ['contadoPor', 'Contado por (usuário)'], ['contadoPorNome', 'Contado por'],
+      ['contadoEm', 'Contado em'], ['status', 'Situação'], ['versao', 'Versão'], ['decididoPor', 'Decidido por (usuário)'],
+      ['decididoPorNome', 'Decidido por'], ['decididoEm', 'Decidido em'], ['motivoDecisao', 'Motivo da decisão'],
+      ['qtdFinal', 'Quantidade final'], ['movId', 'Movimentação'], ['operacao', 'Operação'], ['etapa', 'Etapa'],
+      ['extra', 'Dados da importação'], ['contadoPorId', 'Contado por (ID da conta)'], ['decididoPorId', 'Decidido por (ID da conta)']
+    ],
+    num: ['saldoContagem', 'qtdContada', 'diferenca', 'versao', 'qtdFinal']
   },
   emp: {
     nome: 'Emprestimos',
@@ -66,7 +82,9 @@ const ABAS = {
       ['fotosAntes', 'Fotos antes'], ['fotosDepois', 'Fotos depois'], ['andamento', 'Andamento'],
       ['atualizadoEm', 'Atualizado em'],
       ['setor', 'Setor'], ['pendencia', 'Pendência de origem'], ['equipamento', 'Equipamento'],
-      ['tipo', 'Tipo de OS'], ['atividade', 'Atividade'], ['agendadaPara', 'Agendada para'], ['periodo', 'Período agendado'], ['unidadeSolic', 'Unidade solicitante']
+      ['tipo', 'Tipo de OS'], ['atividade', 'Atividade'], ['agendadaPara', 'Agendada para'], ['periodo', 'Período agendado'], ['unidadeSolic', 'Unidade solicitante'],
+      ['tecnicaEm', 'Conclusão técnica em'], ['tecnicaPor', 'Conclusão técnica por'],
+      ['validadaEm', 'Validada em'], ['validadaPor', 'Validada por']
     ],
     num: []
   },
@@ -204,6 +222,14 @@ const ABAS = {
     ],
     num: []
   },
+  rondaPontos: {
+    nome: 'Ronda - Pontos QR', criar: true,
+    cols: [['id','ID'],['nome','Ponto'],['local','Local da OS'],['token','Código QR'],['ativo','Ativo'],['dias','Dias da semana'],['limite','Horário limite'],['desde','Vigente desde'],['atualizadoEm','Atualizado em'],['atualizadoPor','Atualizado por']], num: []
+  },
+  rondaVisitas: {
+    nome: 'Ronda - Visitas QR', criar: true,
+    cols: [['id','ID'],['pontoId','ID do ponto'],['pontoNome','Ponto'],['data','Data'],['quando','Data e hora'],['usuario','Usuário'],['contaId','ID da conta'],['nome','Responsável'],['resultado','Resultado'],['obs','Observação'],['operacao','Operação']], num: []
+  },
   // prestadores de serviço da manutenção (contratos, visitas e documentos); documentos e visitas em JSON
   // fornecedores de materiais e serviços (Pendências e compras)
   forn: {
@@ -338,32 +364,40 @@ function prefixoSetor(setor) { const x = SETORES.find(s => s[0] === setor); retu
 const DEM_STATUS = { pendente: 'Pendente', andamento: 'Em andamento', concluida: 'Concluída', cancelada: 'Cancelada' };
 const PREV_UNIDADES = ['dias', 'semanas', 'meses'];
 
-const OS_STATUS = { aberta: 'Aberta', andamento: 'Em andamento', concluida: 'Concluída', cancelada: 'Cancelada' };
+const OS_STATUS = { aberta: 'Aberta', andamento: 'Em andamento', validacao: 'Aguardando validação', concluida: 'Concluída', cancelada: 'Cancelada' };
 const OS_PRIORIDADES = ['Urgente', 'Alta', 'Normal', 'Baixa'];
 const OS_MAX_FOTOS = 8;
 const NF_MAX_ARQUIVOS = 4;
 
 const TIPOS = {
   entrada: 'Entrada', saida: 'Saída', troca: 'Troca', emprestimo: 'Empréstimo',
-  devolucao: 'Devolução', ajuste: 'Ajuste', estorno: 'Estorno'
+  devolucao: 'Devolução', ajuste: 'Ajuste', estorno: 'Estorno', conferencia: 'Conferência'
 };
 const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; return m; }, {});
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-10-29 e-mail dos lembretes com logo';
+const VERSAO = '2026-11-02 Pier Gestão 2.0 — central e correspondências';
 
 function doGet() {
   TABS = {};
-  return json({ ok: true, app: 'Pier Gestão', versao: VERSAO });
+  return json({ ok: true, app: 'Pier Gestão', versao: VERSAO, ambiente: PropertiesService.getScriptProperties().getProperty('PIER_AMBIENTE') || 'nao_configurado' });
 }
 
 function doPost(e) {
-  AUDIT_DET = '';
+  AUDIT_DET = ''; AUDIT_FEITO = false; SALDO_OK = {};
   TABS = {};
   let req;
-  try { req = JSON.parse(e.postData.contents); }
+  try {
+    req = JSON.parse(e.postData.contents);
+    if (!req || typeof req !== 'object' || Array.isArray(req) ||
+        typeof req.acao !== 'string' || !/^[A-Za-z][A-Za-z0-9]{0,49}$/.test(req.acao)) {
+      return json({ ok: false, erro: 'Pedido inválido.' });
+    }
+  }
   catch (err) { return json({ ok: false, erro: 'Pedido inválido.' }); }
+  try { exigirPlanilhaProducaoPier20(); } catch (e) { return json({ok:false,erro:e.message}); }
+  if (req.acao === 'ambiente') return json({ok:true, ambiente:PropertiesService.getScriptProperties().getProperty('PIER_AMBIENTE') || 'nao_configurado'});
   let conta = null;
   try {
     let token = '';
@@ -373,14 +407,15 @@ function doPost(e) {
     if (req.acao === 'entrar' && req.senha !== undefined) {
       // entrada com usuário e senha: confere bloqueio por tentativas, a senha (com hash) e abre uma sessão
       const usuarioDig = String(req.usuario || '').trim().toLowerCase();
-      const bloq = loginBloqueado(usuarioDig);
+      const login = verificarEntrada(usuarioDig, req.senha);
+      const bloq = login.bloqueado;
       if (bloq) {
         registrarAcesso(null, usuarioDig, Object.assign({}, req.registro || {}, { motivo: 'bloqueado' }));
         return json({ ok: false, codigo: 'bloqueado', erro: 'Muitas tentativas com senha errada. Este login está bloqueado por mais ' + bloq + ' min. Tente depois ou peça para a administração liberar.' });
       }
-      conta = autenticar(usuarioDig, req.senha);
+      conta = login.conta;
       if (!conta) {
-        const travou = registrarFalhaLogin(usuarioDig);
+        const travou = login.travou;
         registrarAcesso(null, usuarioDig, Object.assign({}, req.registro || {}, { motivo: 'falha' }));
         if (travou) {
           auditar({ usuario: usuarioDig, nome: '', perfil: '' }, 'Login bloqueado', SEG.tentativas + ' senhas erradas seguidas; bloqueado por ' + SEG.bloqueioMin + ' min.', 'Negado');
@@ -388,7 +423,6 @@ function doPost(e) {
         }
         return json({ ok: false, codigo: 'senha', erro: travou ? 'Senha errada de novo. Por segurança, este login ficou bloqueado por ' + SEG.bloqueioMin + ' min.' : 'Usuário ou senha incorretos.' });
       }
-      limparFalhasLogin(usuarioDig);
       token = abrirSessao(conta, req.registro);
     } else {
       conta = contaDaSessao(req.token);
@@ -416,6 +450,7 @@ function doPost(e) {
     if (req.acao === 'dados') return json(Object.assign(base, { dados: dados(req.meses, conta) }));
     if (req.acao === 'relatorio') { pode('dashboard'); return json(Object.assign(base, { relatorio: relatorio(req.de, req.ate, conta) })); }
     if (req.acao === 'usuarios') { pode('usuarios'); return json(Object.assign(base, { equipe: equipe() })); }
+    if (req.acao === 'correspondencias') { corrExigir(conta); return json(Object.assign(base, {correspondencias:linhas(tabela('correspondencias')).map(corrPublica)})); }
     if (req.acao === 'fornecedores') { pode('pendencias'); return json(Object.assign(base, fornLista())); }
     if (req.acao === 'cotLista') { pode('pendencias'); return json(Object.assign(base, cotLista())); }
     if (req.acao === 'cotVerArquivo') { pode('pendencias'); const f = cotVerArquivo(req); auditar(conta, 'Abriu arquivo de cotação', f.nome); delete f.nome; return json(Object.assign(base, { arquivo: f })); }
@@ -429,20 +464,31 @@ function doPost(e) {
     }
     if (req.acao === 'medicoes') { medExigir(conta, false); return json(Object.assign(base, medLista())); }
     if (req.acao === 'miLista') { algum(['med_ver', 'med_lancar', 'un_ver', 'un_editar']); return json(Object.assign(base, miLista())); }
+    if (req.acao === 'rondaPontoConsultar') { rondaExigir(conta, false); const p = rondaQrPontos().find(p => p.token === texto(req.codigo,80) && rondaQrAtivo(p)); if (!p) throw falha('QR inválido, inativo ou substituído.'); return json(Object.assign(base, {pontoQr: rondaQrLista(conta).pontosQr.find(x => x.id === p.id)})); }
+    if (req.acao === 'rondaPontos') return json(Object.assign(base, rondaQrLista(conta)));
     if (req.acao === 'rondas') { rondaExigir(conta, false); return json(Object.assign(base, rondaLista())); }
     if (req.acao === 'rondaFotoVer') { rondaExigir(conta, false); const f = rondaFotoVer(req); delete f.nome; return json(Object.assign(base, { foto: f })); }
     if (req.acao === 'prestVerDoc') { prestExigir(conta, false); const f = prestVerDoc(req); auditar(conta, 'Abriu documento de prestador', f.nome); delete f.nome; return json(Object.assign(base, { arquivo: f })); }
-    if (req.acao === 'cotIA') { pode('pendencias'); return json(Object.assign(base, cotIA(req, conta))); }
     if (req.acao === 'pendencias') { pode('pendencias'); return json(Object.assign(base, { pendencias: pendLista(), pendVersao: PEND_VERSAO })); }
     if (req.acao === 'nfVer') { algum(['historico_ver', 'registrar_entrada', 'dashboard']); const f = verArquivo(req.fotoId, pastaNF()); auditar(conta, 'Abriu nota fiscal', f.nome); delete f.nome; return json(Object.assign(base, { foto: f })); }
     if (req.acao === 'nfEnviar') { pode('registrar_entrada'); return json(Object.assign(base, { arquivo: nfEnviar(req, conta) })); }
-    if (req.acao === 'osFotoVer') { algum(['os_ver', 'os_abrir', 'os_atender', 'os_gerenciar']); const f = verFoto(req.fotoId); delete f.nome; return json(Object.assign(base, { foto: f })); }
+    if (req.acao === 'osFotoVer') { algum(['os_ver', 'os_abrir', 'os_atender', 'os_gerenciar']); const f = osFotoVerAutorizada(req.fotoId, conta); delete f.nome; return json(Object.assign(base, { foto: f })); }
 
     const lock = LockService.getScriptLock();
     if (!lock.tryLock(20000)) throw falha('O sistema está ocupado com outro registro. Tente de novo em alguns segundos.');
-    let msg, extra = {};
+    const escritaEstoque = ['registrar','devolver','salvarItem','excluirItem','estornar','importarContagem','contagemEnviar','contagemDecidir','contagemCancelar','itemLiberar'].includes(req.acao);
+    let msg, extra = {}, terminou = false;
     try {
+      if (escritaEstoque) {
+        const rec = reconciliarContagens();
+        conferirImportacaoInterrompida();
+        conferirSaldos(rec.itens, SISTEMA);
+      }
       switch (req.acao) {
+        case 'contagemEnviar': msg = contagemEnviar(req, conta); break;
+        case 'contagemDecidir': { const d = contagemDecidir(req, conta); msg = d.texto; extra.resultados = d.resultados; break; }
+        case 'contagemCancelar': msg = contagemCancelar(req, conta); break;
+        case 'itemLiberar': msg = itemLiberar(req, conta); break;
         case 'registrar': pode('registrar_' + String((req.mov || {}).tipo)); msg = registrar(req.mov || {}, nome, conta); break;
         case 'osAbrir': pode('os_abrir'); msg = osAbrir(req.os || {}, conta); extra.osNumero = msg.numero; extra.osId = msg.id; msg = msg.texto; break;
         case 'osAtualizar': msg = osAtualizar(req, conta); break;
@@ -464,6 +510,7 @@ function doPost(e) {
         case 'excluirPerfil': pode('usuarios'); msg = excluirPerfil(req.nome); extra.equipe = equipe(); break;
         case 'trocarSenha': msg = trocarMinhaSenha(req, conta); extra.semDados = true; break;
         case 'pendSalvar': pode('pendencias'); msg = pendSalvar(req.pend || {}, conta); extra.pendencias = true; break;
+        case 'correspondenciaSalvar': corrExigir(conta); msg = corrSalvar(req, conta); extra.semDados = true; break;
         case 'fornSalvar': pode('pendencias'); msg = fornSalvar(req, conta); extra.forn = true; extra.semDados = true; break;
         case 'fornImportar': pode('pendencias'); msg = fornImportar(req, conta); extra.forn = true; extra.semDados = true; break;
         case 'fornDasCotacoes': pode('pendencias'); msg = fornDasCotacoes(conta); extra.forn = true; extra.semDados = true; break;
@@ -489,6 +536,8 @@ function doPost(e) {
         case 'medImportar': medExigir(conta, true); msg = medImportar(req, conta); extra.med = true; extra.semDados = true; break;
         case 'miImportar': medExigir(conta, true); msg = miImportar(req, conta); extra.mi = true; extra.semDados = true; break;
         case 'miExcluir': medExigir(conta, true); msg = miExcluir(req, conta); extra.mi = true; extra.semDados = true; break;
+        case 'rondaPontoSalvar': msg = rondaQrSalvar(req, conta); extra.semDados = true; break;
+        case 'rondaVisitar': msg = rondaQrVisitar(req, conta); extra.semDados = true; break;
         case 'rondaSalvar': rondaExigir(conta, true); msg = rondaSalvar(req, conta); extra.ronda = msg.ronda; msg = msg.texto; extra.semDados = true; break;
         case 'rondaFoto': rondaExigir(conta, true); msg = rondaFoto(req, conta); extra.ronda = msg.ronda; msg = msg.texto; extra.semDados = true; break;
         case 'rondaFotoRemover': rondaExigir(conta, true); msg = rondaFotoRemover(req, conta); extra.ronda = msg.ronda; msg = msg.texto; extra.semDados = true; break;
@@ -498,21 +547,31 @@ function doPost(e) {
         default: throw falha('Ação desconhecida.');
       }
       SpreadsheetApp.flush();
-      auditar(conta, ACOES_AUDIT[req.acao] || req.acao, resumoAuditoria(req, msg));
+      if (escritaEstoque) atualizarRetrato(); terminou = true;
+      if (!AUDIT_FEITO) auditar(conta, ACOES_AUDIT[req.acao] || req.acao, resumoAuditoria(req, msg));
     } finally {
+      if (escritaEstoque && !terminou && Object.keys(SALDO_OK).length) { try { atualizarRetrato(SALDO_OK); } catch (e2) {} }
       lock.releaseLock();
     }
     if (extra.pendencias) return json(Object.assign(base, { msg, pendencias: pendLista(), pendVersao: PEND_VERSAO }));
     if (extra.equipe) return json(Object.assign(base, { msg }, extra));
-    if (extra.semDados) return json(Object.assign(base, { msg }, extra.cot ? { cot: extra.cot } : {}, extra.ronda ? { ronda: extra.ronda } : {}, extra.med ? medLista() : {}, extra.esp ? espLista() : {}, extra.forn ? fornLista() : {}, extra.mi ? miLista() : {}, extra.lida ? { lida: extra.lida } : {}));
+    if (extra.semDados) return json(Object.assign(base, { msg }, extra.avisos ? { avisos: extra.avisos } : {}, extra.cot ? { cot: extra.cot } : {}, extra.ronda ? { ronda: extra.ronda } : {}, extra.med ? medLista() : {}, extra.esp ? espLista() : {}, extra.forn ? fornLista() : {}, extra.mi ? miLista() : {}, extra.lida ? { lida: extra.lida } : {}));
     return json(Object.assign(base, { msg, dados: dados(req.meses, conta) }, extra));
   } catch (err) {
-    // tentativas sem permissão ficam no histórico de auditoria
-    if (conta && (err.negado || /não tem permissão/i.test(String(err.message)))) {
-      auditar(conta, ACOES_AUDIT[req.acao] || String(req.acao || ''), String(err.message), 'Negado');
-      alertaSeguranca('negado', conta.usuario, 'Tentativa sem permissão: ' + (ACOES_AUDIT[req.acao] || String(req.acao || '')) + ' — ' + String(err.message), '', conta.nome);
+    // Falhas dos serviços de auditoria não podem impedir uma resposta segura.
+    if (conta && err && (err.negado || /não tem permissão/i.test(String(err.message)))) {
+      try {
+        auditar(conta, ACOES_AUDIT[req.acao] || req.acao, String(err.message), 'Negado');
+        alertaSeguranca('negado', conta.usuario, 'Tentativa sem permissão: ' + req.acao, '', conta.nome);
+      } catch (auditoriaErro) {
+        console.error('Pier Gestão: falha ao registrar acesso negado.');
+      }
     }
-    return json({ ok: false, erro: err.paraUsuario ? err.message : 'Erro no servidor: ' + err.message });
+    if (err && err.paraUsuario) return json(Object.assign({ ok: false, erro: err.message }, err.codigo ? {codigo:err.codigo} : {}));
+    const referencia = Utilities.getUuid().slice(0, 8);
+    console.error('Pier Gestão: erro interno [' + referencia + '] na ação ' + req.acao, err);
+    return json({ ok: false, referencia,
+      erro: 'Não foi possível concluir a operação. Informe o código ' + referencia + ' à Administração.' });
   }
 }
 
@@ -522,7 +581,7 @@ function registrar(m, nome, conta) {
   const tipo = m.tipo;
   if (['entrada', 'saida', 'troca', 'emprestimo'].indexOf(tipo) < 0) throw falha('Tipo de movimentação inválido.');
   const qtd = numero(m.qtd);
-  if (!(qtd > 0)) throw falha('Informe uma quantidade maior que zero.');
+  if (!Number.isFinite(qtd) || !(qtd > 0)) throw falha('Informe uma quantidade maior que zero.');
   if (tipo !== 'entrada') {
     if (!texto(m.responsavel)) throw falha('Informe quem retirou.');
     if (!texto(m.destino)) throw falha('Informe o destino.');
@@ -548,6 +607,7 @@ function registrar(m, nome, conta) {
   const it = linhas(ti).find(x => x.id === m.itemId);
   if (!it) throw falha('Item não encontrado. Atualize a página.');
   exigirSetor(conta, setorDe(it));
+  exigirItemLivre(it.id, it.nome);
   const atual = Number(it.qtd) || 0;
   const delta = tipo === 'entrada' ? qtd : -qtd;
   if (atual + delta < 0) throw falha('Estoque insuficiente: há ' + fmt(atual) + ' ' + it.unidade + ' de ' + it.nome + '.');
@@ -573,6 +633,7 @@ function registrar(m, nome, conta) {
     });
   }
   gravar(tabela('movs'), mov);
+  SALDO_OK[it.id] = true;
   if (osNum) osRegistrarAndamento(osNum, nome, 'Material: ' + fmt(qtd) + ' ' + it.unidade + ' de ' + it.nome + ' (' + TIPOS[tipo].toLowerCase() + ')');
   return TIPOS[tipo] + (tipo === 'emprestimo' ? ' registrado: ' : ' registrada: ') + fmt(qtd) + ' ' + it.unidade + ' de ' + it.nome + (osNum ? ' · ' + osNum : '') + (nfLinks ? ' · nota fiscal anexada' : '') + '.';
 }
@@ -581,6 +642,7 @@ function devolver(r, nome, conta) {
   const te = tabela('emp');
   const e = linhas(te).find(x => x.id === r.emprestimoId);
   if (!e) throw falha('Este empréstimo já foi encerrado. Atualize a página.');
+  exigirItemLivre(e.itemId);
   const itE = linhas(tabela('itens')).find(x => x.id === e.itemId);
   if (itE) exigirSetor(conta, setorDe(itE));
   const estado = texto(r.estado, 40) || 'Em bom estado';
@@ -596,6 +658,7 @@ function devolver(r, nome, conta) {
     emprestimoId: e.id
   });
   te.sh.deleteRow(e._row);
+  if (it) SALDO_OK[it.id] = true;
   return perdida ? 'Perda registrada.' : 'Devolução registrada.';
 }
 
@@ -606,7 +669,7 @@ function salvarItem(r, nome, conta) {
   const nomeItem = texto(v.nome, 120);
   if (!nomeItem) throw falha('Informe o nome do item.');
   const anterior = v.id ? todos.find(x => x.id === v.id) : null;
-  if (anterior) exigirSetor(conta, setorDe(anterior));
+  if (anterior) { exigirSetor(conta, setorDe(anterior)); exigirItemLivre(anterior.id, anterior.nome); }
   const setor = texto(v.setor) ? setorDe({ setor: v.setor }) : (anterior ? setorDe(anterior) : setoresDe(conta)[0]);
   exigirSetor(conta, setor);
   let codigo = texto(v.codigo, 30);
@@ -614,22 +677,27 @@ function salvarItem(r, nome, conta) {
   const dup = todos.find(x => x.codigo === codigo && x.id !== v.id);
   if (dup) throw falha('O código ' + codigo + ' já é usado por "' + dup.nome + '".');
   const qtd = numero(v.qtd || 0), minimo = numero(v.minimo || 0);
-  if (!(qtd >= 0)) throw falha('Quantidade inválida.');
-  if (!(minimo >= 0)) throw falha('Estoque mínimo inválido.');
+  if (!Number.isFinite(qtd) || !(qtd >= 0)) throw falha('Quantidade inválida.');
+  if (!Number.isFinite(minimo) || !(minimo >= 0)) throw falha('Estoque mínimo inválido.');
   const base = {
     codigo, nome: nomeItem, categoria: texto(v.categoria, 60), tipoItem: texto(v.tipoItem, 40),
     unidade: texto(v.unidade, 15) || 'un', local: texto(v.local, 60), minimo, obs: texto(v.obs, 300), atualizadoEm: agora(),
     setor
   };
 
+  // o saldo nunca muda pelo cadastro: item novo nasce com 0 e a quantidade informada vira solicitação de ajuste
   if (!v.id) {
     const id = novoId('I');
-    gravar(ti, Object.assign({ id, qtd, criadoEm: agora() }, base));
+    gravar(ti, Object.assign({ id, qtd: 0, criadoEm: agora() }, base));
     if (qtd > 0) {
-      gravar(tabela('movs'), {
-        id: novoId('M'), data: hoje(), tipo: TIPOS.ajuste, itemId: id, itemCodigo: codigo, itemNome: nomeItem,
-        qtd, unidade: base.unidade, delta: qtd, motivo: 'Cadastro com estoque inicial', registradoPor: nome, criadoEm: agora()
-      });
+      if (!podeContar(conta)) return 'Item cadastrado: ' + nomeItem + ', com estoque 0. Para registrar a quantidade, peça uma contagem a quem tem essa permissão.';
+      const tc = tabela('cont');
+      const c = novaSolicitacao({ id, codigo, nome: nomeItem, unidade: base.unidade, setor, qtd: 0 }, qtd,
+        texto(r.motivo, 300) || 'Quantidade inicial informada no cadastro do item', conta,
+        { numero: proximoNumeroContagem(linhas(tc)), origem: 'Estoque inicial', ultimaMov: '', extra: { novo: true } });
+      gravarVarias(tc, [c]);
+      auditarContagem(conta, 'Contagem enviada para aprovação', c, 'estoque inicial no cadastro');
+      return 'Item cadastrado: ' + nomeItem + ', com estoque 0. A quantidade inicial (' + fmt(qtd) + ') foi para aprovação: ' + c.numero + '.';
     }
     return 'Item cadastrado: ' + nomeItem + '.';
   }
@@ -637,28 +705,39 @@ function salvarItem(r, nome, conta) {
   const it = todos.find(x => x.id === v.id);
   if (!it) throw falha('Item não encontrado. Atualize a página.');
   const atual = Number(it.qtd) || 0;
-  if (qtd !== atual) {
-    const motivo = texto(r.motivo, 160);
-    if (!motivo) throw falha('Explique o motivo da mudança no estoque.');
-    base.qtd = qtd;
-    gravar(tabela('movs'), {
-      id: novoId('M'), data: hoje(), tipo: TIPOS.ajuste, itemId: it.id, itemCodigo: codigo, itemNome: nomeItem,
-      qtd: Math.abs(arred(qtd - atual)), unidade: base.unidade, delta: arred(qtd - atual),
-      motivo: motivo + ' (de ' + fmt(atual) + ' para ' + fmt(qtd) + ')', registradoPor: nome, criadoEm: agora()
-    });
+  let aviso = '';
+  if (v.qtd !== undefined && v.qtd !== '' && v.qtd !== null && qtd !== atual) {
+    // mudar a quantidade pela edição = contagem que vai para aprovação; o saldo continua o mesmo
+    exigirContagem(conta);
+    const tc = tabela('cont'), conts = linhas(tc);
+    const pend = contagemPendenteDoItem(conts, it.id);
+    if (pend) throw falha('Este item já tem um ajuste aguardando aprovação (' + pend.numero + ').');
+    const just = texto(r.motivo, 300);
+    if (!just) throw falha('Explique a diferença no estoque.');
+    const c = novaSolicitacao(it, qtd, just, conta, { numero: proximoNumeroContagem(conts), origem: 'Edição do item', ultimaMov: ultimasMovs()[it.id] || '' });
+    gravarVarias(tc, [c]);
+    auditarContagem(conta, 'Contagem enviada para aprovação', c, 'pela edição do item');
+    aviso = ' O ajuste de ' + fmt(atual) + ' para ' + fmt(qtd) + ' foi para aprovação: ' + c.numero + '.';
   }
   gravar(ti, base, it._row);
-  return 'Alterações salvas.';
+  return 'Alterações salvas.' + aviso;
 }
+
 
 function excluirItem(id, conta) {
   const ti = tabela('itens');
   const it = linhas(ti).find(x => x.id === id);
   if (!it) throw falha('Item não encontrado.');
   exigirSetor(conta, setorDe(it));
+  exigirItemLivre(it.id, it.nome);
+  if (arred(Number(it.qtd) || 0) !== 0) throw falha('Só dá para excluir um item com estoque zerado (hoje: ' + fmt(Number(it.qtd) || 0) + ' ' + it.unidade + '). Faça uma contagem com a quantidade real: depois da aprovação, se ficar zerado, o item pode ser excluído.');
+  const pend = contagemPendenteDoItem(linhas(tabela('cont')), it.id);
+  if (pend) throw falha('Este item tem um ajuste aguardando aprovação (' + pend.numero + '). Decida o ajuste antes de excluir.');
   ti.sh.deleteRow(it._row);
+  SALDO_OK[it.id] = true;
   return 'Item excluído. O histórico continua guardado.';
 }
+
 
 function estornar(r, nome, conta) {
   const motivo = texto(r.motivo, 160);
@@ -667,6 +746,8 @@ function estornar(r, nome, conta) {
   const m = linhas(tm).find(x => x.id === r.movId);
   if (!m) throw falha('Lançamento não encontrado.');
   if (m.estornado) throw falha('Este lançamento já foi estornado.');
+  if (m.tipo === 'ajuste' || m.tipo === 'conferencia') throw falha('Ajuste ou conferência não pode ser estornado. Faça uma nova contagem com justificativa.');
+  exigirItemLivre(m.itemId);
   if (m.tipo === 'estorno') throw falha('Um estorno não pode ser estornado.');
   const inv = -(Number(m.delta) || 0);
   const ti = tabela('itens');
@@ -688,12 +769,13 @@ function estornar(r, nome, conta) {
     const e = linhas(te).find(x => x.id === m.emprestimoId);
     if (e) te.sh.deleteRow(e._row);
   }
+  if (it) SALDO_OK[it.id] = true;
   return 'Lançamento estornado.';
 }
 
 // ---------- leitura ----------
 
-function dados(meses, conta) {
+function dadosBasePier(meses, conta) {
   const ms = (Array.isArray(meses) ? meses : []).filter(x => /^\d{4}-\d{2}$/.test(String(x)));
   const limpa = o => { const c = Object.assign({}, o); delete c._row; return c; };
   const p0 = (conta && conta.perms) || {};
@@ -729,7 +811,7 @@ function dadosOsDem(ms, conta, todas, limpa) {
     // OS em aberto, mais as encerradas nos últimos 90 dias e as abertas nos meses consultados
     const corte = Utilities.formatDate(new Date(Date.now() - 90 * 864e5), Session.getScriptTimeZone(), 'yyyy-MM-dd');
     const lista = linhas(tabela('os')).filter(o =>
-      o.status === OS_STATUS.aberta || o.status === OS_STATUS.andamento ||
+      o.status === OS_STATUS.aberta || o.status === OS_STATUS.andamento || o.status === OS_STATUS.validacao ||
       String(o.concluidaEm || o.atualizadoEm).slice(0, 10) >= corte ||
       ms.indexOf(String(o.abertaEm).slice(0, 7)) >= 0)
       .filter(o => setoresDe(conta).indexOf(osSetor(o)) >= 0)
@@ -793,6 +875,7 @@ function tabela(chave) {
   if (!sh && def.criar) {
     sh = ss.insertSheet(def.nome);
     const cab = def.cols.map(c => c[1]);
+    if (sh.getMaxColumns() < cab.length) sh.insertColumnsAfter(sh.getMaxColumns(), cab.length - sh.getMaxColumns());
     sh.getRange(1, 1, 1, cab.length).setValues([cab]).setFontWeight('bold').setBackground('#1F2A37').setFontColor('#FFFFFF');
     sh.setFrozenRows(1);
   }
@@ -803,6 +886,7 @@ function tabela(chave) {
   def.cols.forEach(([k, label]) => {
     if (head.indexOf(label) < 0 && (def.criar || (def.opcionais || []).indexOf(k) >= 0)) {
       ncol++;
+      if (sh.getMaxColumns() < ncol) sh.insertColumnsAfter(sh.getMaxColumns(), ncol - sh.getMaxColumns());
       sh.getRange(1, ncol).setValue(label).setFontWeight('bold').setBackground('#1F2A37').setFontColor('#FFFFFF');
       head.push(label);
     }
@@ -893,6 +977,7 @@ const USUARIOS_CAB = ['Usuário', 'Nome', 'Senha', 'Perfil', 'Ativo'];
 const PERFIL_TOTAL = 'Administração';
 // [chave, título da coluna na aba Perfis, descrição, grupo]
 const PERMISSOES = [
+  ['contagem_registrar','Registrar contagens','Contar materiais da manutenção e enviar diferenças para aprovação','Inventário'],
   ['painel', 'Ver painel', 'Ver o painel inicial', 'Consulta'],
   ['itens_ver', 'Ver itens', 'Ver a lista de itens e o estoque', 'Consulta'],
   ['historico_ver', 'Ver histórico', 'Ver o histórico de movimentações', 'Consulta'],
@@ -928,7 +1013,7 @@ const PERMISSOES = [
 ];
 const PADRAO_MANUTENCAO = ['painel', 'itens_ver', 'historico_ver', 'registrar_saida', 'registrar_entrada',
   'registrar_troca', 'registrar_emprestimo', 'devolver', 'itens_cadastrar', 'os_ver', 'os_abrir', 'os_atender', 'dem_ver', 'dem_executar',
-  'setor_manutencao'];
+  'setor_manutencao', 'contagem_registrar'];
 const PADRAO_LIMPEZA = ['painel', 'itens_ver', 'historico_ver', 'registrar_saida', 'registrar_entrada', 'itens_cadastrar', 'setor_limpeza'];
 
 function autenticar(usuario, senha) {
@@ -1073,7 +1158,7 @@ function redefinirComCodigo(r) {
 
 function contaDe(us) {
   const perms = lerPerfis()[us.perfil] || {};
-  return { usuario: us.usuario, nome: us.nome || us.usuario, perfil: us.perfil, perms };
+  return { id: us.uid || '', usuario: us.usuario, nome: us.nome || us.usuario, perfil: us.perfil, perms };
 }
 
 function lerUsuarios() {
@@ -1085,6 +1170,7 @@ function lerUsuarios() {
     c[label] = head.indexOf(label);
     if (c[label] < 0) throw falha('A coluna "' + label + '" não foi encontrada na aba Usuarios.');
   });
+  c['ID'] = head.indexOf(COL_ID_CONTA);
   c['Telefone'] = head.indexOf('Telefone');
   c['E-mail'] = head.indexOf('E-mail');
   c['Senha provisória'] = head.indexOf('Senha provisória');
@@ -1094,7 +1180,7 @@ function lerUsuarios() {
     const usuario = String(r[c['Usuário']]).trim().toLowerCase();
     if (!/^[a-z0-9._@-]{2,40}$/.test(usuario)) continue;
     lista.push({
-      row: i + 1, usuario, nome: texto(r[c['Nome']], 60), senha: String(r[c['Senha']]).trim(),
+      row: i + 1, uid: c['ID'] >= 0 ? String(r[c['ID']] || '').trim() : '', usuario, nome: texto(r[c['Nome']], 60), senha: String(r[c['Senha']]).trim(),
       perfil: String(r[c['Perfil']]).trim(), ativo: String(r[c['Ativo']]).trim().toLowerCase().indexOf('n') !== 0,
       telefone: c['Telefone'] >= 0 ? String(r[c['Telefone']]).replace(/\D/g, '') : '',
       email: c['E-mail'] >= 0 ? String(r[c['E-mail']]).trim().toLowerCase() : '',
@@ -1164,6 +1250,7 @@ function salvarUsuario(r, conta) {
     U = lerUsuarios();
   }
   if (garantirColunaProvisoria()) U = lerUsuarios();
+  U = garantirColunaIdConta(U);
   const outro = U.lista.find(x => x.usuario === usuario && x.usuario !== original);
   if (outro) throw falha('O usuário "' + usuario + '" já existe.');
   const anterior = original ? U.lista.find(x => x.usuario === original) : null;
@@ -1184,6 +1271,7 @@ function salvarUsuario(r, conta) {
   }
   linha[U.c['Perfil']] = perfil; linha[U.c['Ativo']] = ativo ? 'Sim' : 'Não'; linha[U.c['Telefone']] = telefone;
   if (v.email !== undefined) linha[U.c['E-mail']] = email;
+  if (!original || !(anterior && anterior.uid)) linha[U.c['ID']] = novoIdConta();
   let row;
   if (original) {
     const atual = U.lista.find(x => x.usuario === original);
@@ -1230,7 +1318,7 @@ function salvarUsuario(r, conta) {
     if (anterior && anterior.perfil !== perfil) mud.push('perfil ' + anterior.perfil + ' → ' + perfil);
     if (anterior && anterior.ativo !== ativo) mud.push(ativo ? 'reativado' : 'bloqueado');
     if (senha) mud.push('senha trocada');
-    if (anterior && anterior.telefone !== telefone) mud.push('WhatsApp');
+    if (anterior && anterior.telefone !== telefone) mud.push('Telefone');
   }
   AUDIT_DET = (original ? 'Alterou ' : 'Criou ') + usuario + (mud.length ? ': ' + mud.join(', ') : ' (sem mudanças)') + (encerradas ? '; ' + encerradas + ' acesso(s) aberto(s) encerrado(s)' : '');
   if (!original || senha || (anterior && (anterior.perfil !== perfil || anterior.ativo !== ativo || original !== usuario)))
@@ -1372,6 +1460,8 @@ function garantirColunasPerfis(sh) {
     const nome = String(r[0]).trim();
     return faltam.map(p => nome === PERFIL_TOTAL || (nome === 'Manutenção' && PADRAO_MANUTENCAO.indexOf(p[0]) >= 0) ? 'Sim' : 'Não');
   });
+  const necessarias = ncol + faltam.length;
+  if (sh.getMaxColumns() < necessarias) sh.insertColumnsAfter(sh.getMaxColumns(), necessarias - sh.getMaxColumns());
   const rng = sh.getRange(1, ncol + 1, novas.length, faltam.length);
   rng.setNumberFormat('@');
   rng.setValues(novas);
@@ -1437,7 +1527,7 @@ function abaUsuarios() {
 }
 
 function senhaAleatoria() {
-  return String(Math.floor(10000000 + Math.random() * 90000000));
+  return Utilities.getUuid().replace(/-/g, '').slice(0, 12);
 }
 
 // ---------- relatório para o dashboard ----------
@@ -1461,7 +1551,7 @@ function relatorio(de, ate, conta) {
   Object.keys(preco).forEach(k => { preco[k] = preco[k].valor; });
   const osDoPeriodo = linhas(tabela('os')).filter(o => {
     const ab = String(o.abertaEm).slice(0, 10), fe = String(o.concluidaEm).slice(0, 10);
-    return (ab >= de && ab <= ate) || (fe && fe >= de && fe <= ate) || o.status === OS_STATUS.aberta || o.status === OS_STATUS.andamento;
+    return (ab >= de && ab <= ate) || (fe && fe >= de && fe <= ate) || o.status === OS_STATUS.aberta || o.status === OS_STATUS.andamento || o.status === OS_STATUS.validacao;
   }).map(limpa);
   const demDoPeriodo = linhas(tabela('dem')).filter(d => {
     const cr = String(d.criadaEm).slice(0, 10), fe = String(d.concluidaEm).slice(0, 10);
@@ -1585,10 +1675,29 @@ function osAtualizar(r, conta) {
       if (d.encerrada) throw falha('Esta OS já está encerrada.');
       const sol = texto(r.solucao, 3000);
       if (!sol) throw falha('Descreva o que foi feito.');
-      upd.status = OS_STATUS.concluida; upd.concluidaEm = agora(); upd.concluidaPor = conta.nome; upd.solucao = sol;
-      if (!o.iniciadaEm) upd.iniciadaEm = upd.concluidaEm;
+      if (o.status !== OS_STATUS.andamento) throw falha('Inicie o atendimento antes de enviar para validação.');
+      if (!idsDeArquivos(o.fotosDepois).length) throw falha('Anexe pelo menos uma foto depois do serviço.');
+      upd.status = OS_STATUS.validacao; upd.tecnicaEm = agora(); upd.tecnicaPor = conta.nome; upd.solucao = sol;
       if (d.livre) { upd.responsavel = conta.nome; upd.responsavelUsuario = conta.usuario; }
-      txt = 'Concluiu: ' + sol; msg = o.numero + ' concluída.';
+      txt = 'Enviou para validação: ' + sol; msg = o.numero + ' aguardando validação administrativa.';
+      break;
+    }
+    case 'validar': {
+      if (!d.ger || conta.perfil !== 'Administração') negar();
+      if (o.status !== OS_STATUS.validacao) throw falha('Esta OS não está aguardando validação.');
+      if (!texto(o.solucao, 3000) || !idsDeArquivos(o.fotosDepois).length) throw falha('A conclusão precisa de solução e foto.');
+      upd.status = OS_STATUS.concluida; upd.concluidaEm = agora(); upd.concluidaPor = conta.nome;
+      upd.validadaEm = upd.concluidaEm; upd.validadaPor = conta.nome;
+      txt = 'Validou e encerrou a OS'; msg = o.numero + ' validada e encerrada.';
+      break;
+    }
+    case 'devolver': {
+      if (!d.ger || conta.perfil !== 'Administração') negar();
+      if (o.status !== OS_STATUS.validacao) throw falha('Esta OS não está aguardando validação.');
+      const motivo = texto(r.motivo, 300);
+      if (!motivo) throw falha('Informe o motivo da devolução.');
+      upd.status = OS_STATUS.andamento;
+      txt = 'Devolveu para correção: ' + motivo; msg = o.numero + ' devolvida para correção.';
       break;
     }
     case 'cancelar': {
@@ -1603,7 +1712,7 @@ function osAtualizar(r, conta) {
     case 'reabrir':
       if (!d.ger) negar();
       if (!d.encerrada) throw falha('Esta OS já está em aberto.');
-      upd.status = OS_STATUS.aberta; upd.concluidaEm = ''; upd.concluidaPor = ''; upd.motivoCancelamento = ''; upd.solucao = '';
+      upd.status = OS_STATUS.aberta; upd.concluidaEm = ''; upd.concluidaPor = ''; upd.motivoCancelamento = ''; upd.solucao = ''; upd.tecnicaEm = ''; upd.tecnicaPor = ''; upd.validadaEm = ''; upd.validadaPor = '';
       txt = 'Reabriu a OS' + (texto(r.motivo, 300) ? ': ' + texto(r.motivo, 300) : ''); msg = o.numero + ' reaberta.';
       break;
     case 'atribuir':
@@ -1629,10 +1738,10 @@ function osAtualizar(r, conta) {
   }
   upd.andamento = osAndamento(o.andamento, conta.nome, txt);
   gravar(t, upd, o._row);
-  if (r.op === 'concluir' || r.op === 'cancelar') {
+  if (r.op === 'validar' || r.op === 'cancelar') {
     const td = tabela('dem');
     linhas(td).filter(d => d.os === o.numero).forEach(d =>
-      gravar(td, { andamento: osAndamento(d.andamento, conta.nome, 'A ' + o.numero + ' foi ' + (r.op === 'concluir' ? 'concluída' : 'cancelada')), atualizadoEm: agora() }, d._row));
+      gravar(td, { andamento: osAndamento(d.andamento, conta.nome, 'A ' + o.numero + ' foi ' + (r.op === 'validar' ? 'concluída' : 'cancelada')), atualizadoEm: agora() }, d._row));
   }
   return msg;
 }
@@ -1681,7 +1790,7 @@ function osFoto(r, conta) {
   const d = osDireitos(o, conta);
   const abriu = o.abertaPorUsuario === conta.usuario && !!conta.perms.os_abrir;
   if (!(d.atender || (abriu && fase === 'antes'))) throw falha('Seu perfil não tem permissão para pôr fotos nesta OS.');
-  if (o.status === OS_STATUS.cancelada) throw falha('Esta OS está cancelada.');
+  if (d.encerrada || o.status === OS_STATUS.validacao) throw falha('Reabra ou devolva a OS para alterar as evidências.');
   const campo = fase === 'antes' ? 'fotosAntes' : 'fotosDepois';
   const ids = String(o[campo] || '').split(',').filter(Boolean);
   if (ids.length >= OS_MAX_FOTOS) throw falha('Esta OS já tem ' + OS_MAX_FOTOS + ' fotos de ' + fase + '.');
@@ -1712,6 +1821,17 @@ function fotoDaPasta(id, pastaObj) {
   return f;
 }
 
+// O ID de um arquivo não concede acesso: confira a OS e o setor antes de ler o Drive.
+function osFotoVerAutorizada(id, conta) {
+  const fotoId = String(id || '');
+  const permitida = linhas(tabela('os')).some(o =>
+    setoresDe(conta).indexOf(osSetor(o)) >= 0 &&
+    idsDeArquivos(String(o.fotosAntes || '') + ',' + String(o.fotosDepois || '')).indexOf(fotoId) >= 0);
+  if (!permitida) {
+    const e = falha('Seu perfil não tem permissão para abrir esta foto.'); e.negado = true; throw e;
+  }
+  return verFoto(fotoId);
+}
 function verFoto(id) { return verArquivo(id, pastaFotos()); }
 function verArquivo(id, pasta) {
   const f = fotoDaPasta(id, pasta), b = f.getBlob();
@@ -1723,6 +1843,7 @@ function osFotoRemover(r, conta) {
   const o = linhas(t).find(x => x.id === r.id);
   if (!o) throw falha('OS não encontrada. Atualize a página.');
   const d = osDireitos(o, conta);
+  if (d.encerrada || o.status === OS_STATUS.validacao) throw falha('Reabra ou devolva a OS para alterar as evidências.');
   if (!d.ger && !(d.atender && !d.encerrada)) throw falha('Seu perfil não tem permissão para tirar fotos desta OS.');
   const campo = r.fase === 'depois' ? 'fotosDepois' : 'fotosAntes';
   const ids = String(o[campo] || '').split(',').filter(Boolean);
@@ -2974,6 +3095,10 @@ function rondaResolver(r, conta) {
 // ---------- importação de contagem de inventário ----------
 
 function importarContagem(r, conta) {
+  // A planilha de inventário é uma contagem: atualiza o cadastro (nome, local, mínimo…) na hora,
+  // mas nenhum saldo muda aqui. Cada diferença vira uma solicitação para a aprovação da Administração;
+  // linhas iguais ao saldo viram Conferência. O histórico antigo da planilha só entra com a aprovação.
+  // Ordem segura: tudo é validado e montado antes; depois cada aba é gravada de uma vez só.
   const entrada = Array.isArray(r.linhas) ? r.linhas : [];
   if (!entrada.length) throw falha('A planilha não tem itens para importar.');
   if (entrada.length > 5000) throw falha('A planilha tem itens demais (máximo 5.000).');
@@ -2981,180 +3106,216 @@ function importarContagem(r, conta) {
   const motivo = texto(r.motivo, 120) || 'Contagem de inventário';
   const setor = texto(r.setor) ? setorDe({ setor: r.setor }) : setoresDe(conta)[0];
   exigirSetor(conta, setor);
+  if (setor !== 'Manutenção') throw falha('O inventário está disponível somente para materiais da Manutenção.');
   const prefixo = prefixoSetor(setor);
   const ti = tabela('itens');
   const ss = SpreadsheetApp.getActive();
-  if (!conta.perms.itens_cadastrar && entrada.some(l => !l.codigo)) throw falha('Seu perfil não pode cadastrar itens novos.');
+  const props = PropertiesService.getScriptProperties();
 
-  // cópia de segurança da aba Itens antes de qualquer mudança
-  const stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd-MM-yyyy HH.mm.ss');
-  let nomeCopia = 'Itens (cópia de ' + stamp + ')', k2 = 2;
-  while (ss.getSheetByName(nomeCopia)) nomeCopia = 'Itens (cópia de ' + stamp + ' ' + (k2++) + ')';
-  ti.sh.copyTo(ss).setName(nomeCopia).hideSheet();
+  // a mesma planilha enviada de novo: pede confirmação (mesmo confirmada, nada é lançado duas vezes)
+  const digesto = digestoImportacao(setor, r);
+  const ja = props.getProperty('IMPORT_' + digesto);
+  if (ja && !r.confirmarRepeticao) {
+    let x; try { x = JSON.parse(ja); } catch (e) { x = {}; }
+    const e = falha('Esta mesma planilha já foi importada em ' + (x.em || '?') + ' por ' + (x.porNome || '?') + ' (lote ' + (x.lote || '?') + '). ' +
+      'Importar de novo não lança nada em dobro, mas cria outra rodada de conferências. Confirme se quer mesmo enviar outra vez.');
+    e.codigo = 'importacao_repetida'; throw e;
+  }
 
   const n = ti.sh.getLastRow() - 1;
   const vals = n > 0 ? ti.sh.getRange(2, 1, n, ti.ncol).getValues() : [];
   const I = ti.idx;
-  const porCodigo = {};
-  vals.forEach((row, i) => { const c = String(row[I.codigo]).trim().toUpperCase(); if (c && String(row[I.id])) porCodigo[c] = i; });
+  const normNome = x => String(x || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const porCodigo = {}, porNome = {};
   const setorDaLinha = row => setorDe({ setor: row[I.setor] });
+  vals.forEach((row, i) => {
+    if (!String(row[I.id])) return;
+    const c = String(row[I.codigo]).trim().toUpperCase(); if (c) porCodigo[c] = i;
+    if (setorDaLinha(row) === setor) { const kn = normNome(row[I.nome]); (porNome[kn] = porNome[kn] || []).push(i); }
+  });
   let maxNum = 0;
   vals.forEach(row => {
     const c = String(row[I.codigo]);
     if (prefixo !== 'MAN-' && c.toUpperCase().indexOf(prefixo) !== 0) return;
     const x = /(\d+)\s*$/.exec(c); if (x) maxNum = Math.max(maxNum, Number(x[1]));
   });
-  // os códigos que já vêm na planilha também contam, para o automático não repetir nenhum
   entrada.forEach(l => {
     const c = texto(l.codigo, 30);
     if (!c || (prefixo !== 'MAN-' && c.toUpperCase().indexOf(prefixo) !== 0)) return;
     const x = /(\d+)\s*$/.exec(c); if (x) maxNum = Math.max(maxNum, Number(x[1]));
   });
 
-  const usados = {}, novos = [], movs = [], mantidas = {};
-  let atualizados = 0, criados = 0, iguais = 0;
-  const ag = agora(), dia = hoje();
-
-  // histórico da planilha (compras e retiradas já anotadas lá): entra com a data original,
-  // e o estoque inicial do item é o saldo menos esse histórico, para o saldo final continuar igual
-  const MARCA = 'Histórico da planilha';
-  const normNome = x => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  // histórico da planilha (compras e retiradas já anotadas lá): guardado na solicitação e lançado só na aprovação,
+  // com a data original. Linha sem data válida (ou com data futura) fica de fora: data inventada faria o
+  // mesmo lançamento parecer novo numa próxima importação.
+  let histDataRuim = 0;
   const hist = (Array.isArray(r.historico) ? r.historico : []).slice(0, 5000).map(h => ({
-    tipo: h.tipo === 'saida' ? 'saida' : 'entrada', data: dataValida(h.data), nome: texto(h.nome, 160), qtd: numero(h.qtd),
+    tipo: h.tipo === 'saida' ? 'saida' : 'entrada', data: dataHistorica(h.data), nome: texto(h.nome, 160), qtd: numero(h.qtd),
     fornecedor: texto(h.fornecedor, 120), nf: texto(h.nf, 40), valorUnit: h.valorUnit === '' || h.valorUnit == null ? '' : numero(h.valorUnit),
     responsavel: texto(h.responsavel, 80), destino: texto(h.destino, 120), obs: texto(h.obs, 250)
-  })).filter(h => h.nome && h.qtd > 0 && isFinite(h.qtd));
-  const linhaPorNome = {};
-  entrada.forEach((l, k) => { const kn = normNome(l.nome); if (!(kn in linhaPorNome)) linhaPorNome[kn] = k; });
+  })).filter(h => h.nome && h.qtd > 0 && isFinite(h.qtd)).filter(h => { if (h.data) return true; histDataRuim++; return false; });
+  // cada linha do histórico vai para o item de mesmo nome; nome repetido na planilha = ambíguo, fica de fora
+  const linhasPorNome = {};
+  entrada.forEach((l, k) => { const kn = normNome(l.nome); (linhasPorNome[kn] = linhasPorNome[kn] || []).push(k); });
   const histPorLinha = {};
-  let histSemItem = 0;
-  hist.forEach(h => { const k = linhaPorNome[normNome(h.nome)]; if (k === undefined) { histSemItem++; return; } (histPorLinha[k] = histPorLinha[k] || []).push(h); });
-  const jaLancado = {};
-  if (hist.length) linhas(tabela('movs')).forEach(m => { if (String(m.obs).indexOf(MARCA) === 0) jaLancado[[m.itemId, m.tipo, m.data, arred(Number(m.qtd))].join('|')] = true; });
-  const histNovo = (k, itemId) => (histPorLinha[k] || []).filter(h => !jaLancado[[itemId, h.tipo, h.data, arred(h.qtd)].join('|')]);
-  const somaHist = lista => lista.reduce((t, h) => t + (h.tipo === 'entrada' ? h.qtd : -h.qtd), 0);
-  const dataAjuste = /^\d{4}-\d{2}-\d{2}$/.test(String(r.dataAjuste || '')) && String(r.dataAjuste) < dia ? String(r.dataAjuste) : dia;
-  const pendentes = [];
-  let histLancado = 0;
-
-  const mov = (it, delta, mot, data) => movs.push({
-    id: novoId('M'), data: data || dia, tipo: TIPOS.ajuste, itemId: it.id, itemCodigo: it.codigo, itemNome: it.nome,
-    qtd: Math.abs(arred(delta)), unidade: it.unidade, delta: arred(delta), motivo: mot, obs: 'Importação de inventário',
-    registradoPor: conta.nome, criadoEm: ag
+  let histSemItem = 0, histAmbiguo = 0;
+  hist.forEach(h => {
+    const ks = linhasPorNome[normNome(h.nome)];
+    if (!ks) { histSemItem++; return; }
+    if (ks.length > 1) { histAmbiguo++; return; }
+    (histPorLinha[ks[0]] = histPorLinha[ks[0]] || []).push(h);
   });
+  const movsAtuais = linhas(tabela('movs'));
+  const lancados = contarLancados(movsAtuais);
+  let histJaNoSistema = 0;
+  const histNovo = (k, itemId) => {
+    const todos = histPorLinha[k] || [];
+    const faltam = histFaltante(itemId, todos, lancados);
+    histJaNoSistema += todos.length - faltam.length;
+    return faltam.map(h => { const c = Object.assign({}, h); delete c.nome; return c; });
+  };
+  const dia = hoje();
+  const dataAjuste = /^\d{4}-\d{2}-\d{2}$/.test(String(r.dataAjuste || '')) && String(r.dataAjuste) < dia ? String(r.dataAjuste) : dia;
+
+  const tc = tabela('cont'), conts = linhas(tc), ult = ultimasMovs(movsAtuais), numeroCT = proximoNumeroContagem(conts);
+  const bloqItens = itensBloqueados();
+  const lote = 'L' + Date.now().toString(36).toUpperCase();
+  const usados = {}, usadosIdx = {}, novos = [], mantidas = {}, pedidos = [], conferencias = [], bloqueados = [];
+  let criados = 0, atualizadosCad = 0, removidos = 0, histNaFila = 0, porNomeAchados = 0;
+  const ag = agora();
 
   entrada.forEach((l, k) => {
     const nome = texto(l.nome, 160);
     if (!nome) throw falha('Linha ' + (k + 1) + ': falta o nome do item.');
     const qtd = numero(l.qtd === '' || l.qtd == null ? 0 : l.qtd);
-    if (!(qtd >= 0)) throw falha('Linha ' + (k + 1) + ' (' + nome + '): quantidade inválida.');
+    if (!Number.isFinite(qtd) || !(qtd >= 0)) throw falha('Linha ' + (k + 1) + ' (' + nome + '): quantidade inválida.');
     let codigo = texto(l.codigo, 30);
     const chave = codigo.toUpperCase();
     if (chave && usados[chave]) throw falha('O código ' + codigo + ' aparece mais de uma vez na planilha.');
     if (chave) usados[chave] = true;
+    if (!chave && linhasPorNome[normNome(nome)].length > 1) throw falha('O item "' + nome + '" aparece mais de uma vez na planilha sem código. Ponha o código em cada linha (ou junte as linhas) para não contar o mesmo item duas vezes.');
     const campos = {
       nome, categoria: texto(l.categoria, 60), tipoItem: texto(l.tipoItem, 40), unidade: texto(l.unidade, 15),
       local: texto(l.local, 60), obs: texto(l.obs, 300)
     };
     const minimo = l.minimo === '' || l.minimo == null ? null : numero(l.minimo);
-    const i = chave ? porCodigo[chave] : undefined;
+    let i = chave ? porCodigo[chave] : undefined;
+    // sem código: reconhece o item já cadastrado com o mesmo nome no setor (reimportação da mesma planilha)
+    if (i === undefined && !chave) {
+      const mesmos = porNome[normNome(nome)] || [];
+      if (mesmos.length > 1) throw falha('Há ' + mesmos.length + ' itens chamados "' + nome + '" no cadastro. Ponha o código na linha ' + (k + 1) + ' da planilha.');
+      if (mesmos.length === 1) { i = mesmos[0]; porNomeAchados++; }
+    }
     if (i !== undefined && setorDaLinha(vals[i]) !== setor) {
       throw falha('O código ' + codigo + ' já é usado por "' + vals[i][I.nome] + '" no setor ' + setorDaLinha(vals[i]) + '. Mude o código na planilha.');
     }
     if (i !== undefined) {
+      if (usadosIdx[i]) throw falha('O item "' + vals[i][I.nome] + '" aparece mais de uma vez na planilha (linha ' + (k + 1) + ').');
+      usadosIdx[i] = true;
       const row = vals[i];
       mantidas[i] = true;
       Object.keys(campos).forEach(c => { if (campos[c]) row[I[c]] = campos[c]; });
       if (minimo !== null && minimo >= 0) row[I.minimo] = minimo;
-      const antes = Number(row[I.qtd]) || 0;
-      row[I.atualizadoEm] = ag;
-      const itx = { id: String(row[I.id]), codigo: String(row[I.codigo]), nome: String(row[I.nome]), unidade: String(row[I.unidade]) };
-      const hn = histNovo(k, itx.id), base = arred(qtd - somaHist(hn));
-      if (hn.length) pendentes.push({ it: itx, lista: hn });
-      if (arred(base) !== arred(antes)) mov(itx, base - antes, motivo + ' (de ' + fmt(antes) + ' para ' + fmt(base) + ')');
-      if (arred(qtd) !== arred(antes)) { row[I.qtd] = qtd; atualizados++; } else iguais++;
+      row[I.atualizadoEm] = ag; atualizadosCad++;
+      const itx = { id: String(row[I.id]), codigo: String(row[I.codigo]), nome: String(row[I.nome]), unidade: String(row[I.unidade]), qtd: Number(row[I.qtd]) || 0, setor };
+      if (bloqItens[itx.id]) { bloqueados.push(itx.nome + ' (bloqueado para revisão)'); return; }
+      const pend = contagemPendenteDoItem(conts, itx.id);
+      if (pend) { bloqueados.push(itx.nome + ' (' + pend.numero + ')'); return; }
+      const hn = histNovo(k, itx.id);
+      if (arred(qtd) === arred(itx.qtd) && !hn.length) { conferencias.push(movConferencia(itx, qtd, conta, 'Importação de inventário: ' + motivo)); return; }
+      histNaFila += hn.length;
+      pedidos.push(novaSolicitacao(itx, qtd, motivo, conta, { numero: numeroCT, lote, origem: 'Importação', ultimaMov: ult[itx.id] || '', extra: hn.length ? { hist: hn } : null }));
     } else {
+      if (!conta.perms.itens_cadastrar) throw falha('Seu perfil não pode cadastrar itens novos ("' + nome + '").');
       if (!codigo) { maxNum++; codigo = prefixo + ('000' + maxNum).slice(prefixo === 'MAN-' ? -4 : -3); }
       const row = new Array(ti.ncol).fill('');
       const id = novoId('I');
       row[I.id] = id; row[I.codigo] = codigo;
       Object.keys(campos).forEach(c => { row[I[c]] = campos[c]; });
       if (!row[I.unidade]) row[I.unidade] = 'un';
-      row[I.qtd] = qtd; row[I.minimo] = minimo !== null && minimo >= 0 ? minimo : 0;
+      row[I.qtd] = 0; row[I.minimo] = minimo !== null && minimo >= 0 ? minimo : 0;
       row[I.criadoEm] = ag; row[I.atualizadoEm] = ag; row[I.setor] = setor;
       novos.push(row); criados++;
-      const itx = { id, codigo, nome, unidade: row[I.unidade] };
-      const hn = histNovo(k, id), base = arred(qtd - somaHist(hn));
-      if (hn.length) pendentes.push({ it: itx, lista: hn });
-      if (base !== 0) mov(itx, base, motivo + ' (item novo)', hn.length ? dataAjuste : dia);
+      const itx = { id, codigo, nome, unidade: row[I.unidade], qtd: 0, setor };
+      const hn = histNovo(k, id);
+      if (qtd === 0 && !hn.length) return;
+      histNaFila += hn.length;
+      pedidos.push(novaSolicitacao(itx, qtd, motivo + ' (item novo)', conta, { numero: numeroCT, lote, origem: 'Importação · item novo', ultimaMov: '', extra: { novo: true, hist: hn, dataAjuste } }));
     }
   });
 
-  // lançamentos do histórico, com a data, o fornecedor e o valor que estavam na planilha
-  pendentes.forEach(p => p.lista.forEach(h => {
-    movs.push({
-      id: novoId('M'), data: h.data, tipo: TIPOS[h.tipo], itemId: p.it.id, itemCodigo: p.it.codigo, itemNome: p.it.nome,
-      qtd: h.qtd, unidade: p.it.unidade, delta: h.tipo === 'entrada' ? h.qtd : -h.qtd,
-      responsavel: h.responsavel, destino: h.destino, fornecedor: h.fornecedor, nf: h.nf, valorUnit: h.valorUnit,
-      obs: (MARCA + (h.obs ? ': ' + h.obs : '')).slice(0, 300), registradoPor: conta.nome, criadoEm: ag
-    });
-    histLancado++;
-  }));
-
-  let removidos = 0;
+  // modo substituir: item do setor fora da lista sai do cadastro; se ainda tem saldo, primeiro vai para aprovação zerar
   let final = vals;
   if (substituir) {
     final = [];
     vals.forEach((row, i) => {
-      // só sai do cadastro o que é do mesmo setor da planilha importada
       if (mantidas[i] || !String(row[I.id]) || setorDaLinha(row) !== setor) { if (String(row[I.id])) final.push(row); return; }
-      removidos++;
       const q = Number(row[I.qtd]) || 0;
-      if (q) mov({ id: String(row[I.id]), codigo: String(row[I.codigo]), nome: String(row[I.nome]), unidade: String(row[I.unidade]) },
-        -q, 'Saiu do cadastro na importação: ' + motivo);
+      const itx = { id: String(row[I.id]), codigo: String(row[I.codigo]), nome: String(row[I.nome]), unidade: String(row[I.unidade]), qtd: q, setor };
+      const pend = contagemPendenteDoItem(conts, itx.id);
+      if (q === 0 && !pend && !bloqItens[itx.id]) { removidos++; return; }
+      final.push(row);
+      if (bloqItens[itx.id]) { bloqueados.push(itx.nome + ' (bloqueado para revisão)'); return; }
+      if (pend) { bloqueados.push(itx.nome + ' (' + pend.numero + ')'); return; }
+      pedidos.push(novaSolicitacao(itx, 0, 'Fora da lista do inventário: ' + motivo, conta, { numero: numeroCT, lote, origem: 'Importação · fora da lista', ultimaMov: ult[itx.id] || '', extra: { remover: true } }));
     });
   }
+  if (pedidos.length) exigirContagem(conta);
   final = final.concat(novos);
 
-  // grava a aba Itens de uma vez só
-  if (n > 0) ti.sh.getRange(2, 1, n, ti.ncol).clearContent();
-  if (final.length) {
-    const fmts = final.map(() => ti.def.cols.reduce((f, c) => { f[ti.idx[c[0]]] = ti.def.num.indexOf(c[0]) >= 0 ? 'General' : '@'; return f; }, new Array(ti.ncol).fill('@')));
-    const rng = ti.sh.getRange(2, 1, final.length, ti.ncol);
+  // a partir daqui, gravações. A marca avisa a verificação automática se o script parar no meio.
+  props.setProperty('IMPORT_ANDAMENTO', JSON.stringify({ lote, setor, por: conta.usuario, porNome: conta.nome, em: agoraSeg() }));
+
+  // cópia de segurança da aba Itens antes de qualquer mudança (protegida contra edição)
+  const stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd-MM-yyyy HH.mm.ss');
+  let nomeCopia = 'Itens (cópia de ' + stamp + ')', k2 = 2;
+  while (ss.getSheetByName(nomeCopia)) nomeCopia = 'Itens (cópia de ' + stamp + ' ' + (k2++) + ')';
+  const copia = ti.sh.copyTo(ss).setName(nomeCopia).hideSheet();
+  const protecaoErro = protegerSoDono(copia, 'Cópia de segurança do Pier Gestão: não editar');
+  if (protecaoErro) throw falha('Não foi possível proteger a cópia de segurança. A importação foi interrompida antes de alterar o cadastro.');
+
+  // grava o cadastro (saldos iguais aos de antes; itens novos com 0) numa única escrita, sem apagar antes:
+  // as linhas que sobram no fim ficam em branco na mesma operação
+  const total = Math.max(n, final.length);
+  if (total > 0) {
+    const vazias = new Array(total - final.length).fill(null).map(() => new Array(ti.ncol).fill(''));
+    const rng = ti.sh.getRange(2, 1, total, ti.ncol);
+    const fmts = final.concat(vazias).map(() => ti.def.cols.reduce((f, c) => { f[ti.idx[c[0]]] = ti.def.num.indexOf(c[0]) >= 0 ? 'General' : '@'; return f; }, new Array(ti.ncol).fill('@')));
     rng.setNumberFormats(fmts);
     rng.setValues(final.map(row => row.map((v, j) => {
       const c = ti.def.cols.find(x => ti.idx[x[0]] === j);
       if (c && ti.def.num.indexOf(c[0]) >= 0) return v === '' ? '' : Number(v);
       return v instanceof Date ? Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm') : String(v);
-    })));
+    })).concat(vazias));
   }
-
-  // grava os ajustes na aba Movimentacoes de uma vez só
-  if (movs.length) {
-    const tm = tabela('movs');
-    const linhasMov = movs.map(m => {
-      const row = new Array(tm.ncol).fill('');
-      tm.def.cols.forEach(([k]) => { if (k in m) row[tm.idx[k]] = m[k]; });
-      return row;
-    });
-    const fmts = linhasMov.map(() => tm.def.cols.reduce((f, c) => { f[tm.idx[c[0]]] = tm.def.num.indexOf(c[0]) >= 0 ? 'General' : '@'; return f; }, new Array(tm.ncol).fill('@')));
-    const rng = tm.sh.getRange(tm.sh.getLastRow() + 1, 1, linhasMov.length, tm.ncol);
-    rng.setNumberFormats(fmts);
-    rng.setValues(linhasMov);
-  }
+  if (FALHA_SIMULADA === 'import_apos_itens') throw new Error('Falha simulada depois de gravar os itens');
+  gravarVarias(tc, pedidos);
+  if (FALHA_SIMULADA === 'import_apos_pedidos') throw new Error('Falha simulada depois das solicitações');
+  gravarVarias(tabela('movs'), conferencias);
+  pedidos.forEach(c => auditarContagem(conta, 'Contagem enviada para aprovação', c, 'importação de inventário, lote ' + lote));
+  props.setProperty('IMPORT_' + digesto, JSON.stringify({ lote, em: agora(), porNome: conta.nome }));
+  props.deleteProperty('IMPORT_ANDAMENTO');
+  auditar(conta, 'Importou inventário', 'setor ' + setor + '; lote ' + lote + '; ' + pedidos.length + ' ajuste(s) para aprovação; ' + conferencias.length + ' conferido(s); ' + criados + ' item(ns) novo(s) com saldo 0; ' + removidos + ' removido(s) com saldo 0; ' +
+    histNaFila + ' lançamento(s) do histórico na fila; ' + histJaNoSistema + ' já no sistema; ' + histDataRuim + ' sem data válida; ' + histAmbiguo + ' ambíguo(s); cópia ' + nomeCopia + (r.confirmarRepeticao && ja ? '; reimportação confirmada' : ''));
+  AUDIT_FEITO = true;
 
   const partes = [];
-  if (atualizados) partes.push(atualizados + ' com quantidade nova');
-  if (criados) partes.push(criados + ' novos');
-  if (iguais) partes.push(iguais + ' sem mudança');
-  if (removidos) partes.push(removidos + ' saíram do cadastro');
-  if (histLancado) partes.push(histLancado + ' lançamentos do histórico da planilha');
+  if (pedidos.length) partes.push(pedidos.length + (pedidos.length === 1 ? ' ajuste enviado' : ' ajustes enviados') + ' para a aprovação da Administração');
+  if (conferencias.length) partes.push(conferencias.length + ' conferido' + (conferencias.length === 1 ? '' : 's') + ' sem diferença');
+  if (criados) partes.push(criados + ' ite' + (criados === 1 ? 'm novo cadastrado' : 'ns novos cadastrados') + ' com estoque 0');
+  if (porNomeAchados) partes.push(porNomeAchados + ' reconhecido' + (porNomeAchados === 1 ? '' : 's') + ' pelo nome (linha sem código)');
+  if (removidos) partes.push(removidos + ' saíram do cadastro (já estavam zerados)');
+  if (histNaFila) partes.push(histNaFila + ' lançamentos do histórico da planilha aguardando a aprovação');
+  if (histJaNoSistema) partes.push(histJaNoSistema + ' lançamentos do histórico já estavam no sistema (não repetidos)');
   if (histSemItem) partes.push(histSemItem + ' linhas do histórico sem item correspondente (não lançadas)');
-  return 'Inventário de ' + setor + ' importado: ' + partes.join(', ') + '. Cópia da lista anterior guardada na aba oculta "' + nomeCopia + '".';
+  if (histAmbiguo) partes.push(histAmbiguo + ' linhas do histórico com nome de item repetido na planilha (não lançadas)');
+  if (histDataRuim) partes.push(histDataRuim + ' linhas do histórico sem data válida ou com data futura (não lançadas)');
+  if (bloqueados.length) partes.push(bloqueados.length + ' com ajuste pendente ou bloqueados, não enviados de novo: ' + bloqueados.slice(0, 5).join(', '));
+  return 'Inventário de ' + setor + ': ' + (partes.join('; ') || 'nada mudou') + '. Nenhum saldo foi alterado. Cópia da lista anterior na aba oculta "' + nomeCopia + '".';
 }
 
-// Rode esta função uma vez pelo editor (Executar) para autorizar o acesso ao Drive das fotos.
-// Perfil "Limpeza" e um login único para a equipe de limpeza (criados uma vez só)
+// data de lançamento antigo: só aceita dia que existe no calendário, de 2000 até hoje
+
 function garantirLimpeza() {
   const perfis = lerPerfis();
   let msg = '';
@@ -4102,11 +4263,7 @@ function cotLista() {
   const pend = SpreadsheetApp.getActive().getSheetByName(ABAS.pend.nome) ? linhas(tabela('pend'))
     .filter(p => p.status !== 'Concluído' && p.status !== 'Cancelado' && p.tipo !== 'Constante')
     .map(p => ({ id: p.id, numero: p.numero, titulo: p.titulo, secao: pendRotuloSecao(p.secao) })) : [];
-  return { cotacoes: lista, pendOpcoes: pend, cotVersao: COT_VERSAO, ia: cotIADisponivel() };
-}
-
-function cotIADisponivel() {
-  return typeof iaCotacao === 'function' && !!PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
+  return { cotacoes: lista, pendOpcoes: pend, cotVersao: COT_VERSAO };
 }
 
 function cotSalvar(r, conta) {
@@ -4253,12 +4410,6 @@ function cotVerArquivo(r) {
   const ok = fid && (fid === c.mapaId || dados.fornecedores.some(f => f.anexos.some(a => a.id === fid)));
   if (!ok) throw falha('Arquivo não encontrado nesta cotação.');
   return verArquivo(fid, pastaCotacoes());
-}
-
-// ajuda da IA: só existe quando o arquivo IA.gs estiver instalado e a chave da API configurada
-function cotIA(r, conta) {
-  if (!cotIADisponivel()) throw falha('A ajuda da IA ainda não foi ligada. Ela depende de uma conta de API da Anthropic.');
-  return iaCotacao(r, conta);
 }
 
 // ---------- log de segurança: telas vistas, exportações e alertas ----------
@@ -4515,7 +4666,7 @@ function pendExcluir(id) {
 
 const SEG = {
   iteracoes: 3000,              // rodadas do hash da senha (deixa adivinhar senhas muito mais lento)
-  senhaMin: 6,                  // tamanho mínimo das senhas novas
+  senhaMin: 10,                  // tamanho mínimo das senhas novas
   sessaoInativa: 24 * 36e5,     // a sessão termina depois de 24 h sem uso…
   sessaoMax: 7 * 24 * 36e5,     // …e, de qualquer forma, 7 dias depois da entrada
   tentativas: 5,                // senhas erradas seguidas até bloquear o login…
@@ -4579,7 +4730,7 @@ function abrirSessao(conta, reg) {
   const agoraMs = Date.now();
   limparSessoesVencidas();
   PropertiesService.getScriptProperties().setProperty(chaveSessao(token), JSON.stringify({
-    u: conta.usuario, c: agoraMs, v: agoraMs, a: texto((reg || {}).aparelho, 60)
+    u: conta.usuario, id: conta.id || '', c: agoraMs, v: agoraMs, a: texto((reg || {}).aparelho, 60)
   }));
   return token;
 }
@@ -4598,7 +4749,7 @@ function contaDaSessao(token) {
   const x = lerSessao(token);
   if (!x) return null;
   const us = lerUsuarios().lista.find(u => u.usuario === x.s.u);
-  if (!us || !us.ativo) { x.props.deleteProperty(x.k); return null; }
+  if (!us || !us.ativo || (x.s.id && x.s.id !== us.uid)) { x.props.deleteProperty(x.k); return null; }
   if (Date.now() - x.s.v > 5 * 60e3) { x.s.v = Date.now(); x.props.setProperty(x.k, JSON.stringify(x.s)); }
   const conta = contaDe(us);
   conta.sessao = x.k;
@@ -4633,6 +4784,22 @@ function contarSessoes() {
 }
 
 // --- tentativas de login: 5 senhas erradas seguidas bloqueiam o login por 15 minutos ---
+function verificarEntrada(usuario, senha) {
+  // A criação inicial das abas possui seu próprio lock; prepare antes da seção crítica.
+  abaUsuarios();
+  abaPerfis();
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) throw falha('O sistema está ocupado. Tente entrar novamente em alguns segundos.');
+  try {
+    garantirIdsUsuarios(true);
+    const bloqueado = loginBloqueado(usuario);
+    if (bloqueado) return { bloqueado, conta: null, travou: false };
+    const conta = autenticar(usuario, senha);
+    if (!conta) return { bloqueado: 0, conta: null, travou: registrarFalhaLogin(usuario) };
+    limparFalhasLogin(usuario);
+    return { bloqueado: 0, conta, travou: false };
+  } finally { lock.releaseLock(); }
+}
 function chaveLogin(u) { return 'LOGIN_' + String(u || '').slice(0, 40); }
 function loginBloqueado(usuario) {
   if (!usuario) return 0;
@@ -4667,6 +4834,7 @@ const ACOES_AUDIT = {
   espReserva: 'Reserva de espaço', espEspaco: 'Espaço', espVistoria: 'Vistoria de espaço', espColar: 'Reserva colada do e-mail', espImportar: 'Importou PDF de reservas', espEmails: 'Leu e-mails de reserva',
   medMedidor: 'Medidor', medLeituras: 'Leitura de medidor', medContas: 'Conta de consumo', medImportar: 'Importou planilha de medições',
   miImportar: 'Importou medição individual (Exista)', miExcluir: 'Excluiu período da medição individual',
+  rondaPontoSalvar: 'Configurou ponto QR', rondaVisitar: 'Vistoria no ponto QR',
   rondaSalvar: 'Ronda', rondaFoto: 'Foto na ronda', rondaFotoRemover: 'Tirou foto da ronda', rondaResolver: 'Resolveu pendência da ronda',
   visao: 'Abriu tela',
   trocarSenha: 'Trocou a própria senha',
@@ -4855,4 +5023,786 @@ function falha(msg) { const e = new Error(msg); e.paraUsuario = true; return e; 
 
 function json(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * Executar SOMENTE no projeto vinculado à planilha nova de homologação.
+ * Adicionar junto de Codigo.gs. Não instala, publica ou envia mensagens.
+ * Propriedade exigida: PIER_HOMOLOG_ID = ID da planilha nova.
+ */
+function prepararHomologacaoPier() { throw new Error('Rotina de homologação indisponível em produção.'); }
+
+
+/** Testes de integração no Google, apenas na planilha fictícia preparada. Sem implantação. */
+function testarHomologacaoPier() { throw new Error('Rotina de homologação indisponível em produção.'); }
+
+/** Atualização da homologação existente: não recria a preparação nem redefine usuários. */
+// Compatibilidade: mantém o nome anterior sem reativar módulos retirados.
+function atualizarHomologacaoPier20() { throw new Error('Rotina de homologação indisponível em produção.'); }
+
+// Compatibilidade da importação de inventário.
+function dataHistorica(s) {
+  const t = String(s || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) return '';
+  if (utcParaIso(isoParaUTC(t)) !== t) return '';
+  return t >= '2000-01-01' && t <= hoje() ? t : '';
+}
+// impressão digital da planilha importada (mesmo setor, mesmas linhas e mesmo histórico, qualquer que seja o modo)
+function digestoImportacao(setor, r) {
+  const txt = JSON.stringify([setor, r.linhas || [], r.historico || []]);
+  const d = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, txt);
+  return d.map(b => ('0' + (b & 255).toString(16)).slice(-2)).join('').slice(0, 24);
+}
+// quantas vezes cada lançamento (item, tipo, data, quantidade) já existe no histórico do sistema,
+// venha da planilha antiga ou de registro feito no sistema; estornados não contam
+function chaveHist(itemId, tipo, data, qtd) { return [itemId, tipo, String(data).slice(0, 10), arred(Number(qtd))].join('|'); }
+function contarLancados(movs) {
+  const n = {};
+  movs.forEach(m => {
+    if (m.estornado || (m.tipo !== 'entrada' && m.tipo !== 'saida')) return;
+    const k = chaveHist(m.itemId, m.tipo, m.data, m.qtd); n[k] = (n[k] || 0) + 1;
+  });
+  return n;
+}
+// fica só o que ainda falta: 2 compras iguais no mesmo dia na planilha e 1 no sistema = entra 1
+function histFaltante(itemId, hist, lancados) {
+  const vistos = {};
+  return (hist || []).filter(h => { const k = chaveHist(itemId, h.tipo, h.data, h.qtd); vistos[k] = (vistos[k] || 0) + 1; return vistos[k] > (lancados[k] || 0); });
+}
+
+// Rode esta função uma vez pelo editor (Executar) para autorizar o acesso ao Drive das fotos.
+// Perfil "Limpeza" e um login único para a equipe de limpeza (criados uma vez só)
+
+// Inventário: módulo reconciliado da branch liberacao-inventario.
+const CONT_STATUS = { pendente: 'Pendente', aprovada: 'Aprovada', rejeitada: 'Rejeitada', reconferir: 'Reconferir', cancelada: 'Cancelada' };
+const CONT_MAX_ITENS = 500;
+var FALHA_SIMULADA = '';   // usado só pelos testes: 'apos_marca', 'apos_historico', 'apos_saldo', 'import_apos_itens', 'import_apos_pedidos'
+var FALHA_ITEM = '';       // testes: limita a falha simulada da aprovação a um item
+var AUDIT_FEITO = false;   // a ação já gravou a própria auditoria detalhada
+
+function podeContar(conta) { const p = conta && conta.perms || {}; return !!conta && (conta.perfil === PERFIL_TOTAL || (conta.perfil !== 'Limpeza' && p.contagem_registrar && p.setor_manutencao)); }
+function exigirContagem(conta) {
+  if (!podeContar(conta)) { const e = falha('Seu perfil não tem permissão para registrar contagens.'); e.negado = true; throw e; }
+}
+function exigirAdministracao(conta) {
+  if (!conta || conta.perfil !== PERFIL_TOTAL) { const e = falha('Só o perfil Administração aprova, rejeita ou devolve ajustes de estoque.'); e.negado = true; throw e; }
+}
+// última movimentação de cada item (pela ordem de gravação na aba)
+function ultimasMovs(movs) {
+  const u = {};
+  (movs || linhas(tabela('movs'))).forEach(m => { if (m.itemId) u[m.itemId] = m.id; });
+  return u;
+}
+function proximoNumeroContagem(conts) {
+  let max = 0;
+  conts.forEach(c => { const x = /(\d+)\s*$/.exec(String(c.numero || '')); if (x) max = Math.max(max, Number(x[1])); });
+  return function () { max++; return 'CT-' + String(max).padStart(4, '0'); };
+}
+function contagemPendenteDoItem(conts, itemId) {
+  return conts.find(c => c.itemId === itemId && (c.status === CONT_STATUS.pendente || c.etapa === 'aplicando'));
+}
+// monta uma solicitação (não grava); quem chama grava todas de uma vez
+function novaSolicitacao(it, qtd, just, conta, o) {
+  o = o || {};
+  const saldo = Number(it.qtd) || 0;
+  return {
+    id: novoId('CT'), numero: o.numero(), lote: o.lote || '', origem: o.origem || 'Contagem',
+    itemId: it.id, itemCodigo: it.codigo, itemNome: it.nome, setor: setorDe(it), unidade: it.unidade,
+    saldoContagem: arred(saldo), ultimaMov: o.ultimaMov || '', qtdContada: arred(qtd), diferenca: arred(qtd - saldo),
+    justificativa: texto(just, 300), contadoPor: conta.usuario, contadoPorId: conta.id || '', contadoPorNome: conta.nome, contadoEm: agoraSeg(),
+    status: CONT_STATUS.pendente, versao: 1, decididoPor: '', decididoPorNome: '', decididoEm: '', motivoDecisao: '',
+    qtdFinal: '', movId: '', operacao: '', etapa: '', extra: o.extra ? JSON.stringify(o.extra) : ''
+  };
+}
+function gravarVarias(t, objs) {
+  if (!objs.length) return;
+  const rows = objs.map(o => { const row = new Array(t.ncol).fill(''); t.def.cols.forEach(([k]) => { if (k in o) row[t.idx[k]] = o[k] === undefined || o[k] === null ? '' : o[k]; }); return row; });
+  const fmts = rows.map(() => t.def.cols.reduce((f, c) => { f[t.idx[c[0]]] = t.def.num.indexOf(c[0]) >= 0 ? 'General' : '@'; return f; }, new Array(t.ncol).fill('@')));
+  const rng = t.sh.getRange(t.sh.getLastRow() + 1, 1, rows.length, t.ncol);
+  rng.setNumberFormats(fmts);
+  rng.setValues(rows.map(row => row.map((v, j) => { const c = t.def.cols.find(x => t.idx[x[0]] === j); return c && t.def.num.indexOf(c[0]) >= 0 ? (v === '' ? '' : Number(v)) : String(v); })));
+}
+function movConferencia(it, qtd, conta, obs) {
+  return {
+    id: novoId('M'), data: hoje(), tipo: TIPOS.conferencia, itemId: it.id, itemCodigo: it.codigo, itemNome: it.nome,
+    qtd: arred(qtd), unidade: it.unidade, delta: 0, responsavel: conta.nome, motivo: 'Conferência sem divergência: ' + fmt(qtd) + ' ' + (it.unidade || ''),
+    obs: texto(obs, 300), registradoPor: conta.nome, criadoEm: agoraSeg()
+  };
+}
+function auditarContagem(conta, acao, c, extra, resultado) {
+  auditar(conta, acao, [
+    c.numero + ' · item ' + c.itemCodigo + ' ' + c.itemNome + ' (' + c.itemId + ')',
+    'contado por ' + c.contadoPorNome + ' (' + c.contadoPor + (c.contadoPorId ? ', conta ' + c.contadoPorId : '') + ') em ' + c.contadoEm,
+    'saldo na contagem ' + fmt(c.saldoContagem) + ', contado ' + fmt(c.qtdContada) + ', diferença ' + (c.diferenca > 0 ? '+' : '') + fmt(c.diferenca),
+    c.justificativa ? 'justificativa: ' + c.justificativa : '', extra || ''
+  ].filter(Boolean).join(' · '), resultado);
+  AUDIT_FEITO = true;
+}
+
+// equipe registra a contagem: igual ao saldo = Conferência; diferente = solicitação pendente
+function contagemEnviar(r, conta) {
+  exigirContagem(conta);
+  if (!conta.id) throw falha('Entre novamente para identificar sua conta antes de contar.');
+  const lista = Array.isArray(r.itens) ? r.itens : [];
+  if (!lista.length) throw falha('Informe ao menos um item contado.');
+  if (lista.length > CONT_MAX_ITENS) throw falha('Conte no máximo ' + CONT_MAX_ITENS + ' itens por vez.');
+  const itens = linhas(tabela('itens')), movs = linhas(tabela('movs')), tc = tabela('cont'), conts = linhas(tc);
+  const ult = ultimasMovs(movs), numero = proximoNumeroContagem(conts), bloq = itensBloqueados();
+  const lote = lista.length > 1 ? 'L' + Date.now().toString(36).toUpperCase() : '';
+  const vistos = {}, sol = [], conf = [], erros = [];
+  lista.forEach((l, k) => {
+    const it = itens.find(x => x.id === l.itemId);
+    if (!it) { erros.push('Linha ' + (k + 1) + ': item não encontrado. Atualize a página.'); return; }
+    exigirSetor(conta, setorDe(it));
+    if (setorDe(it) !== 'Manutenção') throw falha('O inventário está disponível somente para materiais da Manutenção.');
+    if (vistos[it.id]) { erros.push(it.nome + ': aparece duas vezes na contagem.'); return; }
+    if (bloq[it.id]) { erros.push(it.nome + ': item bloqueado para revisão da Administração (' + bloq[it.id].motivo + ')'); return; }
+    vistos[it.id] = true;
+    const qtd = numero_(l.qtd);
+    if (!Number.isFinite(qtd) || !(qtd >= 0)) { erros.push(it.nome + ': quantidade contada inválida.'); return; }
+    const saldo = Number(it.qtd) || 0;
+    if (l.saldoVisto !== undefined && l.saldoVisto !== '' && arred(Number(l.saldoVisto)) !== arred(saldo)) {
+      erros.push(it.nome + ': o saldo mudou de ' + fmt(l.saldoVisto) + ' para ' + fmt(saldo) + ' enquanto você contava. Confira de novo.'); return;
+    }
+    const pend = contagemPendenteDoItem(conts, it.id);
+    if (pend) { erros.push(it.nome + ': já tem um ajuste aguardando aprovação (' + pend.numero + ').'); return; }
+    if (arred(qtd) === arred(saldo)) { conf.push(movConferencia(it, qtd, conta, l.justificativa)); return; }
+    const just = texto(l.justificativa, 300);
+    if (!just) { erros.push(it.nome + ': explique a diferença (o sistema tem ' + fmt(saldo) + ', você contou ' + fmt(qtd) + ').'); return; }
+    sol.push(novaSolicitacao(it, qtd, just, conta, { numero, lote, ultimaMov: ult[it.id] || '', origem: texto(r.origem, 40) || 'Contagem' }));
+  });
+  if (erros.length) throw falha(erros.slice(0, 8).join(' ') + (erros.length > 8 ? ' (e mais ' + (erros.length - 8) + ')' : '') + ' Nada foi enviado: corrija e envie de novo.');
+  gravarVarias(tc, sol);
+  gravarVarias(tabela('movs'), conf);
+  sol.forEach(c => auditarContagem(conta, 'Contagem enviada para aprovação', c));
+  conf.forEach(m => auditar(conta, 'Conferência sem divergência', m.itemCodigo + ' ' + m.itemNome + ' (' + m.itemId + ') · conferido ' + fmt(m.qtd) + ' ' + m.unidade));
+  AUDIT_FEITO = true;
+  const partes = [];
+  if (sol.length) partes.push(sol.length === 1 ? 'ajuste ' + sol[0].numero + ' enviado para aprovação' : sol.length + ' ajustes enviados para aprovação');
+  if (conf.length) partes.push(conf.length === 1 ? '1 item conferido sem diferença' : conf.length + ' itens conferidos sem diferença');
+  return partes.join(' e ').replace(/^./, x => x.toUpperCase()) + '.';
+}
+function numero_(v) { return v === '' || v === null || v === undefined ? NaN : numero(v); }
+
+// Administração decide: aprovar, rejeitar ou devolver para reconferência (cada item validado separadamente)
+function contagemDecidir(r, conta) {
+  exigirAdministracao(conta);
+  if (!conta.id) throw falha('Entre novamente para identificar sua conta antes de decidir.');
+  const op = r.op;
+  if (['aprovar', 'rejeitar', 'reconferir'].indexOf(op) < 0) throw falha('Operação inválida.');
+  const alvos = Array.isArray(r.itens) ? r.itens : [];
+  if (alvos.length > 200) throw falha('Decida no máximo 200 solicitações por chamada.');
+  if (!alvos.length) throw falha('Escolha ao menos uma solicitação.');
+  const motivo = texto(r.motivo, 300);
+  if (op !== 'aprovar' && !motivo) throw falha(op === 'rejeitar' ? 'Informe o motivo da rejeição.' : 'Explique o que precisa ser conferido de novo.');
+  const tc = tabela('cont');
+  const resultados = [];
+  alvos.forEach(a => {
+    const conts = linhas(tc);
+    const c = conts.find(x => x.id === String(a.id || ''));
+    if (!c) { resultados.push({ id: a.id, ok: false, msg: 'Solicitação não encontrada.' }); return; }
+    const rot = c.numero + ' (' + c.itemNome + ')';
+    if (c.etapa === 'aplicando') { resultados.push({ id: c.id, numero: c.numero, ok: false, msg: rot + ': aprovação em andamento. Atualize a tela.' }); return; }
+    if (c.status !== CONT_STATUS.pendente) {
+      resultados.push({ id: c.id, numero: c.numero, ok: c.status === CONT_STATUS.aprovada && op === 'aprovar', jaDecidida: true,
+        msg: rot + ': já estava ' + c.status.toLowerCase() + (c.decididoPorNome ? ' (' + c.decididoPorNome + ', ' + c.decididoEm + ')' : '') + '.' });
+      return;
+    }
+    if (Number(c.versao) !== Number(a.versao)) { resultados.push({ id: c.id, numero: c.numero, ok: false, msg: rot + ': a solicitação mudou. Atualize a tela e confira de novo.' }); return; }
+    if (contouEsta(c, conta)) {
+      auditarContagem(conta, 'Tentou decidir a própria contagem', c, 'conta ' + (conta.id || conta.usuario), 'Negado');
+      resultados.push({ id: c.id, numero: c.numero, ok: false, msg: rot + ': quem contou não pode decidir a própria contagem. Outra pessoa da Administração precisa analisar.' });
+      return;
+    }
+    const base = { decididoPor: conta.usuario, decididoPorId: conta.id || '', decididoPorNome: conta.nome, decididoEm: agoraSeg(), versao: Number(c.versao) + 1 };
+    if (op !== 'aprovar') {
+      const st = op === 'rejeitar' ? CONT_STATUS.rejeitada : CONT_STATUS.reconferir;
+      gravar(tc, Object.assign(base, { status: st, motivoDecisao: motivo }), c._row);
+      auditarContagem(conta, op === 'rejeitar' ? 'Ajuste rejeitado' : 'Ajuste devolvido para reconferência', c, 'motivo: ' + motivo + '; saldo continua ' + fmt(c.saldoContagem), st);
+      resultados.push({ id: c.id, numero: c.numero, ok: true, msg: rot + ': ' + (op === 'rejeitar' ? 'rejeitado' : 'devolvido para reconferência') + '. O saldo não mudou.' });
+      return;
+    }
+    if (c.setor !== 'Manutenção') { resultados.push({id:c.id,ok:false,msg:'O inventário está restrito à Manutenção.'}); return; }
+    const bq = lerBloqueio(c.itemId);
+    if (bq) { resultados.push({ id: c.id, numero: c.numero, ok: false, msg: rot + ': o item está bloqueado para revisão (' + bq.motivo + ') Libere o item antes de decidir.' }); return; }
+    // aprovação: o item e o histórico precisam estar como na hora da contagem
+    const it = linhas(tabela('itens')).find(x => x.id === c.itemId);
+    const ult = ultimasMovs()[c.itemId] || '';
+    let mudou = '';
+    if (!it) mudou = 'o item não existe mais no cadastro';
+    else if (arred(Number(it.qtd) || 0) !== arred(c.saldoContagem)) mudou = 'o saldo mudou de ' + fmt(c.saldoContagem) + ' para ' + fmt(Number(it.qtd) || 0) + ' depois da contagem';
+    else if (ult !== String(c.ultimaMov || '')) mudou = 'houve movimentação do item depois da contagem';
+    if (mudou) {
+      gravar(tc, Object.assign(base, { status: CONT_STATUS.reconferir, motivoDecisao: 'Conferência automática: ' + mudou + '. Conte de novo.' }), c._row);
+      auditarContagem(conta, 'Ajuste exige reconferência', c, mudou, CONT_STATUS.reconferir);
+      resultados.push({ id: c.id, numero: c.numero, ok: false, reconferir: true, msg: rot + ': ' + mudou + '. Foi para Reconferir, sem alterar o saldo.' });
+      return;
+    }
+    aplicarAjuste(tc, c, it, conta, base);
+    resultados.push({ id: c.id, numero: c.numero, ok: true, msg: rot + ': aprovado. Saldo ' + fmt(c.saldoContagem) + ' → ' + fmt(c.qtdContada) + '.' });
+  });
+  AUDIT_FEITO = true;
+  const ok = resultados.filter(x => x.ok).length;
+  return { texto: ok + ' de ' + resultados.length + (resultados.length === 1 ? ' solicitação concluída.' : ' solicitações concluídas.'), resultados };
+}
+
+// Aplicação em etapas, com identificador de operação: marca → histórico → saldo → conclusão.
+// Se o script parar no meio, reconciliarContagens() termina ou desfaz na próxima gravação.
+function aplicarAjuste(tc, c, it, conta, base) {
+  const op = Utilities.getUuid();
+  const props = PropertiesService.getScriptProperties();
+  gravar(tc, Object.assign({}, base, { etapa: 'aplicando', operacao: op, qtdFinal: c.qtdContada }), c._row);
+  props.setProperty('CONT_APLICANDO', op);
+  SpreadsheetApp.flush();
+  const falhar = ponto => FALHA_SIMULADA === ponto && (!FALHA_ITEM || FALHA_ITEM === c.itemId);
+  if (falhar('apos_marca')) throw new Error('Falha simulada depois de marcar a operação');
+  const movs = movsDoAjuste(c, it, op, conta);
+  gravarVarias(tabela('movs'), movs);
+  SpreadsheetApp.flush();
+  if (falhar('apos_historico')) throw new Error('Falha simulada depois do histórico');
+  aplicarSaldo(c, it);
+  SpreadsheetApp.flush();
+  if (falhar('apos_saldo')) throw new Error('Falha simulada depois do saldo');
+  concluirContagem(tc, c, movs, conta);
+  props.deleteProperty('CONT_APLICANDO');
+  SALDO_OK[c.itemId] = true;
+  // confirma a consistência antes de responder
+  const conf = linhas(tc).find(x => x.id === c.id);
+  const itD = linhas(tabela('itens')).find(x => x.id === c.itemId);
+  const extra = lerExtra(c);
+  const saldoOk = itD ? arred(Number(itD.qtd) || 0) === arred(c.qtdContada) : !!extra.remover;
+  if (!conf || conf.status !== CONT_STATUS.aprovada || !saldoOk) throw falha('A aprovação de ' + c.numero + ' não pôde ser confirmada. Atualize a tela: o sistema confere de novo na próxima operação.');
+  auditarContagem(conta, 'Ajuste aprovado', c, 'quantidade final ' + fmt(c.qtdContada) + '; movimentação ' + (conf.movId || '—') + '; operação ' + op, CONT_STATUS.aprovada);
+}
+function lerExtra(c) { try { return JSON.parse(c.extra || '{}') || {}; } catch (e) { return {}; } }
+// histórico do ajuste: compras e retiradas antigas da planilha importada (com a data original, sem repetir)
+// e o Ajuste que leva o saldo ao valor contado
+function movsDoAjuste(c, it, op, conta) {
+  const extra = lerExtra(c);
+  const MARCA = 'Histórico da planilha';
+  const hist = Array.isArray(extra.hist) ? extra.hist : [];
+  // confere de novo na aprovação: o que entrou no histórico depois da importação não é lançado outra vez
+  const novos = hist.length ? histFaltante(c.itemId, hist, contarLancados(linhas(tabela('movs')))) : [];
+  const somaHist = novos.reduce((t, h) => t + (h.tipo === 'entrada' ? h.qtd : -h.qtd), 0);
+  const ag = agoraSeg();
+  const out = novos.map(h => ({
+    id: novoId('M'), data: h.data, tipo: TIPOS[h.tipo], itemId: c.itemId, itemCodigo: c.itemCodigo, itemNome: c.itemNome,
+    qtd: h.qtd, unidade: c.unidade, delta: h.tipo === 'entrada' ? h.qtd : -h.qtd, responsavel: h.responsavel, destino: h.destino,
+    fornecedor: h.fornecedor, nf: h.nf, valorUnit: h.valorUnit, obs: (MARCA + (h.obs ? ': ' + h.obs : '')).slice(0, 300),
+    registradoPor: conta.nome, criadoEm: ag, contagem: c.numero, operacao: op
+  }));
+  const delta = arred(c.qtdContada - c.saldoContagem - somaHist);
+  const novo = !!extra.novo, remover = !!extra.remover;
+  const rotulo = novo ? 'Saldo inicial' : remover ? 'Saiu da lista do inventário' : 'Contagem';
+  if (delta === 0 && out.length) return out; // o histórico antigo já explica o saldo: não precisa de Ajuste
+  out.push({
+    id: novoId('M'), data: novo && hist.length && extra.dataAjuste ? extra.dataAjuste : hoje(), tipo: TIPOS.ajuste,
+    itemId: c.itemId, itemCodigo: c.itemCodigo, itemNome: c.itemNome, qtd: Math.abs(delta), unidade: c.unidade, delta,
+    responsavel: c.contadoPorNome,
+    motivo: (rotulo + ' ' + c.numero + ' aprovada: ' + (c.justificativa || '') + ' (de ' + fmt(c.saldoContagem) + ' para ' + fmt(c.qtdContada) + ')').slice(0, 300),
+    obs: ('Contado por ' + c.contadoPorNome + ' em ' + c.contadoEm + '; aprovado por ' + conta.nome + (novos.length ? '; ' + novos.length + ' lançamento(s) do histórico da planilha' : '')).slice(0, 300),
+    registradoPor: conta.nome, criadoEm: ag, contagem: c.numero, operacao: op,
+    saldoAnterior: c.saldoContagem, saldoFinal: c.qtdContada, aprovadoPor: conta.nome
+  });
+  return out;
+}
+function aplicarSaldo(c, it) {
+  const ti = tabela('itens');
+  const atual = it ? linhas(ti).find(x => x.id === c.itemId) : null;
+  if (!atual) return;
+  // valor absoluto: aplicar duas vezes dá o mesmo resultado
+  gravar(ti, { qtd: arred(c.qtdContada), atualizadoEm: agora() }, atual._row);
+  if (lerExtra(c).remover && arred(c.qtdContada) === 0) ti.sh.deleteRow(atual._row);
+}
+function concluirContagem(tc, c, movs, conta) {
+  const aj = (movs || []).filter(m => m.tipo === TIPOS.ajuste || m.tipo === 'ajuste').pop();
+  gravar(tc, { status: CONT_STATUS.aprovada, etapa: 'concluida', movId: aj ? aj.id : '' }, linhas(tc).find(x => x.id === c.id)._row);
+}
+
+// Termina ou desfaz uma aprovação interrompida (roda dentro do bloqueio, antes de qualquer gravação)
+function reconciliarContagens(completo) {
+  const props = PropertiesService.getScriptProperties();
+  const res = { n: 0, erros: 0, itens: {} };
+  // na gravação comum só procura quando há marca de operação aberta; a rotina agendada procura sempre
+  if (!completo && !props.getProperty('CONT_APLICANDO')) return res;
+  const tc = tabela('cont');
+  const sist = SISTEMA;
+  linhas(tc).filter(c => c.etapa === 'aplicando').forEach(c => {
+    res.n++;
+    res.itens[c.itemId] = true;
+    const movs = linhas(tabela('movs')).filter(m => m.operacao && m.operacao === c.operacao);
+    const it = linhas(tabela('itens')).find(x => x.id === c.itemId);
+    const extra = lerExtra(c);
+    const q = it ? arred(Number(it.qtd) || 0) : null;
+    const saldoNovo = it ? q === arred(c.qtdFinal) : !!extra.remover;
+    const saldoAntigo = it && q === arred(c.saldoContagem);
+    const decisor = { id: c.decididoPorId, usuario: c.decididoPor, nome: c.decididoPorNome, perfil: PERFIL_TOTAL };
+    if (!movs.length && saldoAntigo) {
+      gravar(tc, { etapa: '', operacao: '', qtdFinal: '', decididoPor: '', decididoPorNome: '', decididoEm: '', versao: Number(c.versao) + 1 }, c._row);
+      auditarContagem(sist, 'Aprovação interrompida desfeita', c, 'nada tinha sido gravado; voltou para Pendente', 'Recuperado');
+    } else if (movs.length && (saldoNovo || saldoAntigo)) {
+      if (!saldoNovo || (it && extra.remover && q === 0)) aplicarSaldo(c, it);
+      concluirContagem(tc, c, movs, decisor);
+      auditarContagem(sist, 'Aprovação interrompida concluída', c, 'histórico já gravado; ' + (saldoNovo ? 'saldo já atualizado' : 'saldo atualizado agora') + '; operação ' + c.operacao, CONT_STATUS.aprovada);
+    } else if (!movs.length && saldoNovo) {
+      const ms = movsDoAjuste(c, it, c.operacao, decisor);
+      gravarVarias(tabela('movs'), ms);
+      concluirContagem(tc, c, ms, decisor);
+      auditarContagem(sist, 'Aprovação interrompida concluída', c, 'saldo já atualizado; histórico gravado agora; operação ' + c.operacao, CONT_STATUS.aprovada);
+    } else {
+      gravar(tc, { status: CONT_STATUS.reconferir, etapa: 'erro', versao: Number(c.versao) + 1,
+        motivoDecisao: 'Recuperação: saldo atual ' + (q === null ? 'sem item' : fmt(q)) + ' não bate com a contagem nem com o aprovado. Confira o item e o histórico.' }, c._row);
+      auditarContagem(sist, 'Inconsistência na recuperação', c, 'operação ' + c.operacao + '; movimentações gravadas: ' + movs.length + '; saldo atual ' + (q === null ? 'sem item' : fmt(q)), 'Erro');
+      res.erros++;
+      delete res.itens[c.itemId];
+      // não dá para saber qual saldo está certo: o item fica travado até a Administração revisar
+      bloquearItem({ itemId: c.itemId, itemCodigo: c.itemCodigo, itemNome: c.itemNome, tipo: 'recuperacao', contagem: c.numero, operacao: c.operacao,
+        saldoPlanilha: q === null ? undefined : q,
+        motivo: 'a aprovação ' + c.numero + ' parou no meio e o saldo (' + (q === null ? 'item apagado' : fmt(q)) + ') não bate nem com o saldo da contagem (' + fmt(c.saldoContagem) + ') nem com o aprovado (' + fmt(c.qtdFinal) + ').' });
+    }
+  });
+  SpreadsheetApp.flush();
+  props.deleteProperty('CONT_APLICANDO');
+  return res;
+}
+
+// quem enviou cancela a própria solicitação enquanto está pendente
+function contagemCancelar(r, conta) {
+  const tc = tabela('cont');
+  const c = linhas(tc).find(x => x.id === String(r.id || ''));
+  if (!c) throw falha('Solicitação não encontrada.');
+  if (!contouEsta(c, conta)) { const e = falha('Só quem enviou a contagem pode cancelar.'); e.negado = true; throw e; }
+  if (c.status !== CONT_STATUS.pendente || c.etapa) throw falha('Esta solicitação já foi ' + c.status.toLowerCase() + '.');
+  if (Number(c.versao) !== Number(r.versao)) throw falha('A solicitação mudou. Atualize a tela.');
+  gravar(tc, { status: CONT_STATUS.cancelada, decididoPor: conta.usuario, decididoPorId: conta.id || '', decididoPorNome: conta.nome, decididoEm: agoraSeg(), motivoDecisao: 'Cancelada por quem contou', versao: Number(c.versao) + 1 }, c._row);
+  auditarContagem(conta, 'Contagem cancelada', c, '', CONT_STATUS.cancelada);
+  return c.numero + ' cancelada. O saldo não mudou.';
+}
+
+// o que cada um vê: Administração vê todas; quem conta vê as próprias (pendentes e dos últimos 90 dias)
+function contagensVisiveis(conta) {
+  if (!podeContar(conta)) return null;
+  const corte = Utilities.formatDate(new Date(Date.now() - 90 * 864e5), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  const admin = conta.perfil === PERFIL_TOTAL;
+  return linhas(tabela('cont'))
+    .filter(c => c.status === CONT_STATUS.pendente || c.etapa === 'aplicando' || String(c.contadoEm).slice(0, 10) >= corte)
+    .filter(c => admin || contouEsta(c, conta))
+    .map(c => {
+      const ex = lerExtra(c);
+      const o = Object.assign({}, c); delete o._row; delete o.extra; delete o.operacao;
+      o.minha = contouEsta(c, conta); delete o.contadoPorId; delete o.decididoPorId;
+      o.historico = Array.isArray(ex.hist) ? ex.hist.length : 0; o.remover = !!ex.remover; o.novo = !!ex.novo;
+      return o;
+    });
+}
+
+// ---------- integridade: recuperação automática, bloqueio de itens e conferência dos saldos ----------
+// 1) recuperarOperacoesPendentes() roda sozinha por um acionador de tempo (instalado à mão, só com
+//    autorização) e também antes de cada gravação: termina ou desfaz aprovações
+//    interrompidas, sempre pelo identificador da operação, sem aplicar nada duas vezes.
+// 2) O sistema guarda (nas propriedades do script, fora da planilha) o último saldo que ele mesmo gravou
+//    em cada item. Saldo diferente disso = alteração fora do sistema (edição direta na planilha) ou gravação
+//    que parou no meio: o item fica bloqueado até a Administração revisar.
+const SISTEMA = { id: '', usuario: 'sistema', nome: 'Sistema', perfil: '' };
+const RECUP = { minutos: 10, esperaLockMs: 30000, pedaco: 8000 };
+var SALDO_OK = {};   // itens cujo saldo esta execução gravou de forma completa (movimentação + saldo)
+
+// --- bloqueio de itens (uma propriedade por item: BLOQ_<id>) ---
+function chaveBloqueio(id) { return 'BLOQ_' + String(id).slice(0, 60); }
+function lerBloqueio(id) {
+  if (!id) return null;
+  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(chaveBloqueio(id)) || 'null'); } catch (e) { return null; }
+}
+function itensBloqueados() {
+  const all = PropertiesService.getScriptProperties().getProperties(), out = {};
+  Object.keys(all).forEach(k => { if (k.indexOf('BLOQ_') === 0) { try { const b = JSON.parse(all[k]); if (b && b.itemId) out[b.itemId] = b; } catch (e) {} } });
+  return out;
+}
+function bloquearItem(info, conta) {
+  if (lerBloqueio(info.itemId)) return false; // já bloqueado: mantém o primeiro registro
+  const b = Object.assign({ desde: agoraSeg() }, info);
+  b.motivo = texto(b.motivo, 300);
+  PropertiesService.getScriptProperties().setProperty(chaveBloqueio(b.itemId), JSON.stringify(b));
+  auditar(conta || SISTEMA, 'Item bloqueado', [b.itemCodigo, b.itemNome, '(' + b.itemId + ')', '·', b.motivo,
+    b.saldoSistema !== undefined ? '· saldo do sistema ' + fmt(b.saldoSistema) : '', b.saldoPlanilha !== undefined ? '· saldo na planilha ' + fmt(b.saldoPlanilha) : '']
+    .filter(Boolean).join(' '), 'Bloqueado');
+  return true;
+}
+function exigirItemLivre(id, nomeItem) {
+  const b = lerBloqueio(id);
+  if (b) throw falha('O item ' + (nomeItem || b.itemNome || '') + ' está bloqueado para alterações: ' + b.motivo + ' A Administração precisa revisar e liberar o item.');
+}
+
+// --- retrato dos saldos gravados pelo sistema (propriedades SALDOS_0, SALDOS_1… em pedaços de 8 mil caracteres) ---
+function lerRetrato() {
+  const p = PropertiesService.getScriptProperties();
+  const n = Number(p.getProperty('SALDOS_N') || 0);
+  if (!n) return null;
+  let txt = '';
+  for (let i = 0; i < n; i++) txt += p.getProperty('SALDOS_' + i) || '';
+  try { return JSON.parse(txt); } catch (e) { return null; }
+}
+function gravarRetrato(mapa) {
+  const p = PropertiesService.getScriptProperties();
+  const txt = JSON.stringify(mapa);
+  const antes = Number(p.getProperty('SALDOS_N') || 0);
+  const partes = [];
+  for (let i = 0; i < txt.length; i += RECUP.pedaco) partes.push(txt.slice(i, i + RECUP.pedaco));
+  if (!partes.length) partes.push('{}');
+  partes.forEach((x, i) => { if (p.getProperty('SALDOS_' + i) !== x) p.setProperty('SALDOS_' + i, x); });
+  for (let i = partes.length; i < antes; i++) p.deleteProperty('SALDOS_' + i);
+  if (antes !== partes.length) p.setProperty('SALDOS_N', String(partes.length));
+}
+function saldosAtuais() {
+  const out = {};
+  linhas(tabela('itens')).forEach(it => { out[it.id] = { q: arred(Number(it.qtd) || 0), codigo: it.codigo, nome: it.nome }; });
+  return out;
+}
+// compara a planilha com o retrato: diferença = item bloqueado. "ignorar" = itens que a recuperação acabou de acertar.
+function conferirSaldos(ignorar, conta) {
+  const atual = saldosAtuais();
+  const ret = lerRetrato();
+  const mapa = {};
+  Object.keys(atual).forEach(id => { mapa[id] = atual[id].q; });
+  if (!ret) { gravarRetrato(mapa); return { bloqueados: [], removidos: [], inicial: true }; }
+  const bloq = itensBloqueados(), novos = [], removidos = [];
+  Object.keys(atual).forEach(id => {
+    if ((ignorar && ignorar[id]) || bloq[id]) return;
+    const antes = id in ret ? arred(Number(ret[id]) || 0) : 0, agora = atual[id].q;
+    if (antes === agora) return;
+    const fora = !(id in ret);
+    bloquearItem({ itemId: id, itemCodigo: atual[id].codigo, itemNome: atual[id].nome, tipo: 'saldo_externo', saldoSistema: antes, saldoPlanilha: agora,
+      motivo: fora ? 'o item apareceu na planilha com saldo ' + fmt(agora) + ' sem ter sido cadastrado pelo sistema.'
+        : 'o saldo mudou de ' + fmt(antes) + ' para ' + fmt(agora) + ' fora do sistema (edição direta na planilha ou gravação interrompida).' }, conta);
+    novos.push(id);
+  });
+  Object.keys(ret).forEach(id => {
+    if (id in atual || arred(Number(ret[id]) || 0) === 0) return;
+    removidos.push(id);
+    auditar(conta || SISTEMA, 'Item sumiu da planilha', 'o item ' + id + ' tinha saldo ' + fmt(ret[id]) + ' e foi apagado fora do sistema. Confira a aba Itens e a cópia de segurança.', 'Alerta');
+  });
+  if (JSON.stringify(mapa) !== JSON.stringify(ret)) gravarRetrato(mapa);
+  if (removidos.length) registrarAlerta('Itens apagados direto na planilha: ' + removidos.join(', ') + '.');
+  return { bloqueados: novos, removidos };
+}
+// depois de uma gravação: o retrato passa a ser o saldo atual (todos os itens, ou só os que terminaram certo)
+function atualizarRetrato(soEstes) {
+  const atual = saldosAtuais();
+  let mapa = {};
+  if (soEstes) {
+    mapa = lerRetrato() || {};
+    Object.keys(soEstes).forEach(id => { if (id in atual) mapa[id] = atual[id].q; else delete mapa[id]; });
+  } else Object.keys(atual).forEach(id => { mapa[id] = atual[id].q; });
+  gravarRetrato(mapa);
+}
+
+// --- situação da verificação automática (mostrada para a Administração) ---
+function registrarAlerta(txt) {
+  const p = PropertiesService.getScriptProperties();
+  let a; try { a = JSON.parse(p.getProperty('RECUP_ALERTAS') || '[]'); } catch (e) { a = []; }
+  a.unshift({ em: agoraSeg(), txt: texto(txt, 300) });
+  p.setProperty('RECUP_ALERTAS', JSON.stringify(a.slice(0, 10)));
+}
+function estadoIntegridade() {
+  const p = PropertiesService.getScriptProperties();
+  let est = null, alertas = [];
+  try { est = JSON.parse(p.getProperty('RECUP_ESTADO') || 'null'); } catch (e) {}
+  try { alertas = JSON.parse(p.getProperty('RECUP_ALERTAS') || '[]'); } catch (e) {}
+  return { ultima: est, alertas };
+}
+
+// --- importação interrompida: a marca IMPORT_ANDAMENTO só fica se o script parou no meio ---
+function conferirImportacaoInterrompida() {
+  const p = PropertiesService.getScriptProperties();
+  const raw = p.getProperty('IMPORT_ANDAMENTO');
+  if (!raw) return null;
+  let x; try { x = JSON.parse(raw); } catch (e) { x = {}; }
+  const txt = 'A importação do lote ' + (x.lote || '?') + ' (' + (x.setor || '') + ', ' + (x.porNome || x.por || '') + ', ' + (x.em || '') + ') parou no meio. ' +
+    'Nenhum saldo muda na importação; importe a mesma planilha de novo: itens já criados são reconhecidos e o histórico não se repete.';
+  auditar(SISTEMA, 'Importação interrompida', txt, 'Alerta');
+  registrarAlerta(txt);
+  p.deleteProperty('IMPORT_ANDAMENTO');
+  return x;
+}
+
+// Rotina agendada (acionador de tempo). Nunca roda junto com uma gravação: espera o mesmo bloqueio do doPost.
+function recuperarOperacoesPendentes() {
+  exigirHomologacaoInventario();
+  const p = PropertiesService.getScriptProperties();
+  const lock = LockService.getScriptLock();
+  const inicio = agoraSeg();
+  if (!lock.tryLock(RECUP.esperaLockMs)) {
+    p.setProperty('RECUP_ESTADO', JSON.stringify({ em: inicio, resultado: 'ocupado', txt: 'Sistema ocupado com outra gravação; tenta de novo na próxima rodada.' }));
+    return 'ocupado';
+  }
+  AUDIT_DET = ''; AUDIT_FEITO = false; SALDO_OK = {};
+  let est;
+  try {
+    const rec = reconciliarContagens(true);
+    const imp = conferirImportacaoInterrompida();
+    const sal = conferirSaldos(rec.itens, SISTEMA);
+    SpreadsheetApp.flush();
+    const bloq = Object.keys(itensBloqueados()).length;
+    const partes = [];
+    if (rec.n) partes.push(rec.n + ' aprovação(ões) interrompida(s) tratada(s)' + (rec.erros ? ', ' + rec.erros + ' com inconsistência' : ''));
+    if (sal.bloqueados.length) partes.push(sal.bloqueados.length + ' item(ns) com saldo alterado fora do sistema');
+    if (sal.removidos.length) partes.push(sal.removidos.length + ' item(ns) apagado(s) fora do sistema');
+    if (imp) partes.push('importação interrompida (lote ' + (imp.lote || '?') + ')');
+    const problema = rec.erros || sal.bloqueados.length || sal.removidos.length || imp;
+    est = { em: inicio, resultado: problema ? 'atencao' : rec.n ? 'corrigido' : 'ok', bloqueados: bloq,
+      txt: partes.length ? partes.join('; ') + '.' : 'Nenhuma operação pendente; saldos conferidos.' };
+    if (partes.length) auditar(SISTEMA, 'Verificação automática', est.txt, problema ? 'Alerta' : 'Recuperado');
+  } catch (e) {
+    est = { em: inicio, resultado: 'erro', txt: 'Erro na verificação: ' + texto(e.message, 200) };
+    auditar(SISTEMA, 'Verificação automática', est.txt, 'Erro');
+  } finally {
+    p.setProperty('RECUP_ESTADO', JSON.stringify(est));
+    lock.releaseLock();
+  }
+  return est.resultado + ': ' + est.txt;
+}
+
+// Administração revisa e libera um item bloqueado
+function itemLiberar(r, conta) {
+  exigirAdministracao(conta);
+  const id = String(r.itemId || ''), b = lerBloqueio(id);
+  if (!b) throw falha('Este item não está bloqueado. Atualize a tela.');
+  if (r.op !== 'restaurar') throw falha('Uma alteração externa não pode ser aceita como ajuste direto. Restaure o saldo do sistema e registre uma nova contagem.');
+  const motivo = texto(r.motivo, 300);
+  if (!motivo) throw falha('Descreva a conferência antes de restaurar o saldo.');
+  const ti = tabela('itens'), it = linhas(ti).find(x => x.id === id);
+  if (b.tipo !== 'saldo_externo' || !it || !Number.isFinite(Number(b.saldoSistema)))
+    throw falha('Esta inconsistência exige revisão técnica do histórico antes da liberação.');
+  if (contagemPendenteDoItem(linhas(tabela('cont')), id)) throw falha('Decida antes a contagem pendente deste item.');
+  gravar(ti, {qtd:arred(Number(b.saldoSistema)),atualizadoEm:agora()}, it._row);
+  SpreadsheetApp.flush();
+  PropertiesService.getScriptProperties().deleteProperty(chaveBloqueio(id));
+  SALDO_OK[id] = true;
+  auditar(conta,'Saldo restaurado',it.codigo + ': restauração de ' + fmt(it.qtd) + ' para ' + fmt(b.saldoSistema) + '. ' + motivo,'Restaurado');
+  AUDIT_FEITO = true;
+  return 'Saldo do sistema restaurado. Se houver diferença física, envie uma nova contagem para aprovação.';
+}
+
+// Identificação fixa das contas do inventário.
+const COL_ID_CONTA = 'ID da conta';
+function novoIdConta() { return 'C-' + Utilities.getUuid().replace(/-/g, '').slice(0, 16).toUpperCase(); }
+function garantirColunaIdConta(U) {
+  if (U.c['ID'] >= 0) return U;
+  if (U.sh.getMaxColumns() < U.ncol + 1) U.sh.insertColumnsAfter(U.sh.getMaxColumns(), 1);
+  U.sh.getRange(1, U.ncol + 1).setValue(COL_ID_CONTA).setFontWeight('bold').setBackground('#1F2A37').setFontColor('#FFFFFF');
+  return lerUsuarios();
+}
+// dá identificador a quem não tem e troca identificadores repetidos (linha copiada à mão na planilha)
+function garantirIdsUsuarios(semBloqueio) {
+  let U = lerUsuarios();
+  const vistos = {};
+  const precisa = U.c['ID'] < 0 || U.lista.some(u => { const dup = !u.uid || vistos[u.uid]; vistos[u.uid] = true; return dup; });
+  if (!precisa) return 0;
+  const lock = semBloqueio ? null : LockService.getScriptLock();
+  if (lock && !lock.tryLock(10000)) return 0; // outra execução está gravando: tenta na próxima
+  try {
+    U = garantirColunaIdConta(lerUsuarios());
+    const usados = {}, trocados = [];
+    let n = 0;
+    U.lista.forEach(u => {
+      if (u.uid && !usados[u.uid]) { usados[u.uid] = true; return; }
+      if (u.uid) trocados.push(u.usuario);
+      let id = novoIdConta();
+      while (usados[id]) id = novoIdConta();
+      usados[id] = true;
+      U.sh.getRange(u.row, U.c['ID'] + 1).setNumberFormat('@').setValue(id);
+      n++;
+    });
+    if (n) auditar({ usuario: 'sistema', nome: 'Sistema', perfil: '' }, 'Identificador das contas', n + ' conta(s) receberam identificador fixo' + (trocados.length ? '; identificador repetido trocado em: ' + trocados.join(', ') : ''));
+    return n;
+  } finally { if (lock) lock.releaseLock(); }
+}
+// mesma pessoa = mesmo identificador fixo; por segurança, o mesmo login também conta como a mesma pessoa
+function mesmaConta(idA, usuarioA, conta) {
+  if (!conta) return false;
+  if (idA && conta.id && idA === conta.id) return true;
+  return !!usuarioA && usuarioA === conta.usuario;
+}
+function contouEsta(c, conta) { return mesmaConta(c.contadoPorId, c.contadoPor, conta); }
+
+
+function dados(meses, conta) {
+  const out = dadosBasePier(meses, conta);
+  out.contagens = contagensVisiveis(conta) || [];
+  const visiveis = new Set((out.itens || []).map(it => it.id));
+  out.bloqueios = Object.values(itensBloqueados()).filter(b => visiveis.has(b.itemId));
+  if (conta && conta.perfil === PERFIL_TOTAL) {
+    out.integridade = estadoIntegridade();
+    out.adminsAtivos = lerUsuarios().lista.filter(u => u.ativo && u.perfil === PERFIL_TOTAL).length;
+  }
+  return out;
+}
+
+function exigirHomologacaoInventario() {
+  const ss = SpreadsheetApp.getActive(), p = PropertiesService.getScriptProperties();
+  if (!ss || ss.getId() !== '1h96bbEfeMth_cnjjwpujCeIaTjyBYoabbJ2UzmmY_Eo' ||
+      p.getProperty('PIER_HOMOLOG_ID') !== ss.getId() || p.getProperty('PIER_AMBIENTE') !== 'homologacao')
+    throw new Error('Use exclusivamente o projeto da homologação do Pier Gestão 2.0.');
+}
+function atualizarInventarioPier20() { throw new Error('Rotina de homologação indisponível em produção.'); }
+
+function agoraSeg() { return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss'); }
+
+function donoDaPlanilha() { try { return SpreadsheetApp.getActive().getOwner().getEmail(); } catch (e) { return ''; } }
+function protegerSoDono(sh, descricao) {
+  try {
+    const ja = sh.getProtections(SpreadsheetApp.ProtectionType.SHEET);
+    const p = ja.length ? ja[0] : sh.protect();
+    p.setDescription(descricao || 'Gravada pelo Pier Gestão: não editar');
+    if (p.isWarningOnly && p.isWarningOnly()) p.setWarningOnly(false);
+    const dono = donoDaPlanilha();
+    const outros = p.getEditors().filter(u => u.getEmail() && u.getEmail() !== dono);
+    if (outros.length) p.removeEditors(outros);
+    if (p.canDomainEdit()) p.setDomainEdit(false);
+    return '';
+  } catch (e) { let nome = 'aba'; try { nome = sh.getName(); } catch (e2) {} return nome + ': ' + e.message; }
+}
+
+// Pontos QR: o código identifica o local, nunca substitui a sessão ou a confirmação de vistoria.
+function rondaQrAdmin(conta) {
+  rondaExigir(conta, false);
+  if (conta.perfil !== 'Administração' || !conta.perms.ronda_fazer) throw falha('Somente a Administração pode configurar os pontos.');
+}
+function rondaQrPontos() { return linhas(tabela('rondaPontos')); }
+function rondaQrAtivo(p) { return String(p.ativo).toLowerCase() === 'sim'; }
+function rondaQrNormal(v) { return String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/\s+/g, ' '); }
+function rondaQrLista(conta) {
+  rondaExigir(conta, false);
+  const admin = conta.perfil === 'Administração' && !!conta.perms.ronda_fazer;
+  const data = hoje(), dia = String(new Date(data + 'T12:00:00Z').getUTCDay());
+  const hora = agora().slice(11,16);
+  const historico = linhas(tabela('rondaVisitas')).filter(v => v.data >= somarDias(data, -60));
+  const visitas = historico.filter(v => v.data === data);
+  const verOs = ['os_ver','os_abrir','os_atender','os_gerenciar'].some(k => conta.perms[k]);
+  const ordens = verOs ? linhas(tabela('os')).filter(o => o.status !== OS_STATUS.concluida && o.status !== OS_STATUS.cancelada && setoresDe(conta).includes(osSetor(o))) : [];
+  return {pontosQr: rondaQrPontos().filter(p => admin || rondaQrAtivo(p)).map(p => {
+    const feitas = visitas.filter(v => v.pontoId === p.id);
+    const cumprida = feitas.some(v => v.resultado !== 'NV');
+    const prevista = rondaQrAtivo(p) && p.desde <= data && String(p.dias).split(',').includes(dia);
+    const os = ordens.filter(o => rondaQrNormal(o.local) === rondaQrNormal(p.local)).map(o => ({id:o.id,numero:o.numero,titulo:o.titulo,status:o.status}));
+    const x = {id:p.id,nome:p.nome,local:p.local,ativo:rondaQrAtivo(p),dias:p.dias,limite:p.limite,
+      situacao: !rondaQrAtivo(p) ? 'Inativo' : !prevista ? 'Sem programação hoje' : cumprida ? 'Realizada' : hora >= p.limite ? 'Ronda não realizada' : 'Pendente',
+      visitas: feitas.map(v => ({quando:v.quando,nome:v.nome,resultado:v.resultado,obs:v.obs})),
+      historico:historico.filter(v => v.pontoId === p.id).map(v => ({quando:v.quando,nome:v.nome,resultado:v.resultado,obs:v.obs})), os};
+    if (admin) x.token = p.token;
+    return x;
+  }), podeConfigurarQr:admin};
+}
+function rondaQrSalvar(r, conta) {
+  rondaQrAdmin(conta);
+  const t = tabela('rondaPontos'), lista = linhas(t), v = r.ponto || {};
+  const anterior = v.id ? lista.find(p => p.id === v.id) : null;
+  if (v.id && !anterior) throw falha('Ponto não encontrado.');
+  const nome = texto(v.nome,80), local = texto(v.local,120), limite = texto(v.limite,5);
+  if (!nome || !local) throw falha('Informe o nome do ponto e o local correspondente nas OS.');
+  if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(limite)) throw falha('Informe um horário válido.');
+  const dias = String(v.dias || '').split(',');
+  if (!dias.length || dias.some(d => !/^[0-6]$/.test(d)) || new Set(dias).size !== dias.length) throw falha('Selecione dias válidos, sem repetição.');
+  const novo = {id:anterior ? anterior.id : novoId('RQ'),nome,local,limite,dias:dias.sort().join(','),ativo:v.ativo === false ? 'Não' : 'Sim',
+    token:anterior && !r.renovar ? anterior.token : Utilities.getUuid().replace(/-/g,''),
+    desde:anterior ? anterior.desde : hoje(),atualizadoEm:agora(),atualizadoPor:conta.nome};
+  gravar(t, novo, anterior && anterior._row);
+  AUDIT_DET = 'Configurou ponto QR ' + nome + (r.renovar ? ' · código renovado' : '');
+  return 'Ponto salvo. Mudanças de horário e dias valem imediatamente; renove e substitua a etiqueta se necessário.';
+}
+function rondaQrVisitar(r, conta) {
+  rondaExigir(conta, true);
+  const p = rondaQrPontos().find(p => p.token === texto(r.codigo,80) && rondaQrAtivo(p));
+  if (!p) throw falha('QR inválido, inativo ou substituído.');
+  if (!['OK','P','C','NV'].includes(r.resultado)) throw falha('Selecione o resultado da vistoria.');
+  const obs = texto(r.obs,1000);
+  if (r.resultado !== 'OK' && !obs) throw falha('Descreva a ocorrência ou o motivo de não observar o local.');
+  const op = texto(r.operacao,80);
+  if (!/^[a-zA-Z0-9_-]{16,80}$/.test(op)) throw falha('Identificação do envio inválida.');
+  const t = tabela('rondaVisitas');
+  const repetida = linhas(t).find(v => v.operacao === op);
+  if (repetida) {
+    if (repetida.pontoId !== p.id || repetida.usuario !== conta.usuario || repetida.contaId !== (conta.id || '') || repetida.resultado !== r.resultado || repetida.obs !== obs) throw falha('Esse envio já foi usado para outro registro.');
+    return 'Vistoria já registrada; nenhum registro duplicado.';
+  }
+  gravar(t,{id:novoId('RV'),pontoId:p.id,pontoNome:p.nome,data:hoje(),quando:agora(),usuario:conta.usuario,contaId:conta.id || '',nome:conta.nome,resultado:r.resultado,obs,operacao:op});
+  AUDIT_DET = 'Vistoriou ponto QR ' + p.nome + ' · ' + r.resultado;
+  return r.resultado === 'NV' ? 'Não observado registrado. A ronda continua pendente neste ponto.' : 'Vistoria registrada no ponto ' + p.nome + '.';
+}
+
+// Correspondências: controle manual, exclusivo do perfil Administração.
+function corrExigir(conta) {
+  if (!conta || conta.perfil !== 'Administração') throw falha('Somente a Administração pode acessar correspondências.');
+}
+function corrPublica(x) { const o = Object.assign({}, x); delete o._row; delete o.operacaoId; return o; }
+function corrSalvar(req, conta) {
+  corrExigir(conta);
+  const t = tabela('correspondencias'), lista = linhas(t), v = req.correspondencia || {};
+  if (req.op === 'receber') {
+    const operacaoId = texto(req.operacaoId, 80);
+    if (!/^[a-zA-Z0-9_-]{12,80}$/.test(operacaoId)) throw falha('Identificador da operação inválido.');
+    if (lista.some(x => x.operacaoId === operacaoId)) return 'Recebimento já registrado.';
+    const o = {bloco:texto(v.bloco,40), unidade:texto(v.unidade,30), destinatario:texto(v.destinatario,100), tipo:texto(v.tipo,30), transportadora:texto(v.transportadora,80), rastreio:texto(v.rastreio,100), local:texto(v.local,100), obs:texto(v.obs,500)};
+    if (!o.bloco || !o.unidade || !o.destinatario || !o.local) throw falha('Informe bloco, unidade, destinatário e local de guarda.');
+    if (!['Encomenda','Carta','Documento','Outro'].includes(o.tipo)) throw falha('Tipo de correspondência inválido.');
+    Object.assign(o,{id:novoId('CR'),operacaoId,status:'Aguardando retirada',recebidoEm:agora(),recebidoPor:conta.nome,versao:1});
+    gravar(t,o); AUDIT_DET = 'Recebeu correspondência '+o.id+' · '+o.bloco+'/'+o.unidade;
+    return 'Recebimento registrado.';
+  }
+  const ja = lista.find(x => x.id === String(req.id || ''));
+  if (!ja) throw falha('Correspondência não encontrada.');
+  const alvo = req.op === 'entregar' ? 'Entregue' : req.op === 'cancelar' ? 'Cancelada' : '';
+  if (!alvo) throw falha('Operação inválida.');
+  if (ja.status !== 'Aguardando retirada') throw falha('Este registro já foi finalizado. Atualize a lista.');
+  if (Number(req.versao) !== Number(ja.versao)) throw falha('O registro mudou. Atualize a lista antes de continuar.');
+  const o = {status:alvo,versao:Number(ja.versao)+1};
+  if (req.op === 'entregar') {
+    o.retiradoPor = texto(req.retiradoPor,100);
+    if (!o.retiradoPor) throw falha('Informe quem retirou a correspondência.');
+    o.retiradoEm = agora(); o.entreguePor = conta.nome;
+  } else {
+    o.motivo = texto(req.motivo,500);
+    if (!o.motivo) throw falha('Informe o motivo do cancelamento.');
+    o.canceladoEm = agora(); o.canceladoPor = conta.nome;
+  }
+  gravar(t,o,ja._row); AUDIT_DET = alvo+' · correspondência '+ja.id+' · '+ja.bloco+'/'+ja.unidade;
+  return alvo === 'Entregue' ? 'Retirada registrada.' : 'Recebimento cancelado; histórico preservado.';
+}
+
+// Ativação exclusiva da planilha oficial informada por Alexsandro.
+function exigirPlanilhaProducaoPier20() {
+  const ss=SpreadsheetApp.getActive();
+  if (!ss || ss.getId() !== '15wnsofNNPt8E5HydcJaFfmQpDGAtyF45ErcwkIHhlm8') throw new Error('Use o projeto vinculado à planilha oficial PIER GESTÃO.');
+  ['Usuarios','Perfis','Itens','Movimentacoes'].forEach(nome=>{if(!ss.getSheetByName(nome))throw new Error('Aba obrigatória ausente: '+nome+'. A ativação foi interrompida.');});
+}
+function ativarProducaoPier20() {
+  exigirPlanilhaProducaoPier20();
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) throw new Error('Outro registro está em andamento. Tente novamente.');
+  try {
+    // Confere cabeçalhos obrigatórios antes de criar colunas ou preencher IDs.
+    ['itens','movs'].forEach(k => {
+      const d = ABAS[k], sh = SpreadsheetApp.getActive().getSheetByName(d.nome);
+      if (!sh) throw new Error('Aba ausente: ' + d.nome);
+      const cab = sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0].map(String);
+      if (d.cols.some(c => !(d.opcionais || []).includes(c[0]) && !cab.includes(c[1]))) throw new Error('Cabeçalho incompatível em ' + d.nome);
+    });
+    const U = lerUsuarios(), ids = new Set();
+    U.lista.forEach(u => { if (u.uid && ids.has(u.uid)) throw new Error('Há ID de conta duplicado. Revise antes de migrar.'); if (u.uid) ids.add(u.uid); });
+    TABS = {};
+    tabela('cont'); tabela('movs');
+    const n = garantirIdsUsuarios(true);
+    garantirColunasPerfis(abaPerfis());
+    if (!lerRetrato()) atualizarRetrato();
+    // A migração inicial encerra as sessões antigas, que ainda não possuíam ID fixo.
+    const props = PropertiesService.getScriptProperties();
+    if (props.getProperty('PIER_INVENTARIO_V4') !== 'pronto') {
+      lerUsuarios().lista.forEach(u => encerrarSessoesDe(u.usuario));
+      props.setProperty('PIER_INVENTARIO_V4','pronto');
+    }
+    SpreadsheetApp.flush();
+    props.setProperty('PIER_AMBIENTE','producao');
+    props.setProperty('PIER_PRODUCAO_ID',SpreadsheetApp.getActive().getId());
+    return 'Produção ativada. '+n+' conta(s) receberam ID fixo. Dados e senhas preservados. Atualize a implantação existente.';
+  } finally { lock.releaseLock(); }
 }
