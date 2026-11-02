@@ -157,7 +157,8 @@ async function api(acao, extra, opc){
   if (ARQ_PEND[acao] && acao !== "arqVerificar") corpo.arquivos = ARQ_PEND[acao]; // o servidor registra o arquivo junto da importação
   let r;
   try {
-    r = await buscarJsonPier(API, {method:"POST", body:JSON.stringify(corpo), redirect:"follow"});
+    // importações grandes podem levar mais que os 30 s padrão
+    r = await buscarJsonPier(API, {method:"POST", body:JSON.stringify(corpo), redirect:"follow"}, /importar|Importar/.test(acao) ? 180000 : 30000);
   } catch(e){
     throw {paraUsuario:true, message:e.message || "Sem conexão com a planilha. Verifique a internet e tente de novo."};
   }

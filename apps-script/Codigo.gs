@@ -385,7 +385,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-02 Pier Gestão 2.0 — importação em lote';
+const VERSAO = '2026-11-02 Pier Gestão 2.0 — importação mais rápida';
 
 function doGet() {
   TABS = {};
@@ -2689,7 +2689,7 @@ function miImportar(r, conta) {
   if (!unidades.length && !hist.length && !res) throw falha('Nada para importar.');
   if (unidades.length > 600 || hist.length > 4000) throw falha('Arquivo grande demais para uma importação.');
   const t = tabela('mi'), todas = linhas(t), porChave = new Map(todas.map(x => [miChave(x.periodo, x.bloco, x.unidade), x]));
-  const novas = [], quando = agora();
+  const novas = [], upd = [], quando = agora();
   let atualizadas = 0, hNovos = 0;
   unidades.forEach((x, i) => {
     const periodo = String(x.periodo || r.periodo || ''), bloco = texto(x.bloco, 10), unidade = texto(x.unidade, 20);
@@ -2704,8 +2704,8 @@ function miImportar(r, conta) {
     if (x.hidrometro) o.hidrometro = texto(x.hidrometro, 30);
     if (x.local) o.local = texto(x.local, 60);
     const k = miChave(periodo, bloco, unidade), atual = porChave.get(k);
-    if (atual) { gravar(t, o, atual._row); atualizadas++; }
-    else { o.id = novoId('MI'); novas.push(o); porChave.set(k, o); }
+    if (atual && atual._row) { upd.push([atual._row, o]); atualizadas++; }
+    else if (!atual) { o.id = novoId('MI'); novas.push(o); porChave.set(k, o); }
   });
   hist.forEach(x => {
     const periodo = String(x.periodo || ''), bloco = texto(x.bloco, 10), unidade = texto(x.unidade, 20);
@@ -2717,6 +2717,13 @@ function miImportar(r, conta) {
     const o = { id: novoId('MI'), periodo, bloco, unidade, consumo, origem: 'Histórico Exista', importadoEm: quando, importadoPor: conta.nome };
     novas.push(o); porChave.set(k, o); hNovos++;
   });
+  // substituição de um período já importado: um bloco só de leitura e gravação (antes era uma gravação por unidade e passava do tempo)
+  if (upd.length) {
+    const r0 = Math.min.apply(null, upd.map(u => u[0])), r1 = Math.max.apply(null, upd.map(u => u[0]));
+    const rng = t.sh.getRange(r0, 1, r1 - r0 + 1, t.ncol), vals = rng.getValues();
+    upd.forEach(([row, o]) => { const v = vals[row - r0]; Object.keys(o).forEach(k => { if (t.idx[k] !== undefined) v[t.idx[k]] = o[k]; }); });
+    rng.setValues(vals);
+  }
   anexarLinhas(t, novas);
   let resumo = '';
   if (res && miPer(res.periodo)) {
