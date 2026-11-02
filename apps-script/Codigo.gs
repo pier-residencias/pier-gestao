@@ -377,7 +377,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-02 Pier Gestão 2.0 — medição individual corrigida';
+const VERSAO = '2026-11-02 Pier Gestão 2.0 — importações da medição individual';
 
 function doGet() {
   TABS = {};
@@ -2681,6 +2681,14 @@ function miImportar(r, conta) {
   return (unidades.length ? (novas.length - hNovos) + ' unidade(s) nova(s) e ' + atualizadas + ' atualizada(s).' : '') + (hNovos ? ' ' + hNovos + ' consumo(s) de meses anteriores.' : '') + resumo;
 }
 function miExcluir(r, conta) {
+  // uma linha só (lançamento de uma unidade num período)
+  if (r.id) {
+    const t = tabela('mi'), x = linhas(t).find(z => z.id === texto(r.id, 40));
+    if (!x) throw falha('Este lançamento não existe mais. Atualize a tela.');
+    t.sh.deleteRow(x._row);
+    AUDIT_DET = 'Excluiu o lançamento da unidade ' + x.unidade + ' (bloco ' + x.bloco + ') em ' + x.periodo + ' da medição individual';
+    return 'Lançamento da unidade ' + x.unidade + ' (' + x.periodo.split('-').reverse().join('/') + ') excluído.';
+  }
   const periodo = String(r.periodo || '');
   if (!miPer(periodo)) throw falha('Período inválido.');
   let n = 0;
@@ -2689,11 +2697,11 @@ function miExcluir(r, conta) {
     if (tot < 1) return;
     const vals = t.sh.getRange(2, 1, tot, t.ncol).getValues(), fica = vals.filter(v => celula(v[t.idx.periodo], false) !== periodo);
     if (fica.length === vals.length) return;
-    if (k === 'mi') n = vals.length - fica.length;
+    if (k === 'mi') n = vals.length - fica.length; else r.temResumo = true;
     t.sh.getRange(2, 1, tot, t.ncol).clearContent();
     if (fica.length) t.sh.getRange(2, 1, fica.length, t.ncol).setValues(fica);
   });
-  if (!n) throw falha('Não há lançamentos neste período.');
+  if (!n && !r.temResumo) throw falha('Não há lançamentos neste período.');
   AUDIT_DET = 'Excluiu o período ' + periodo + ' da medição individual (' + n + ' linha(s))';
   return 'Período ' + periodo.split('-').reverse().join('/') + ' excluído (' + n + ' unidade(s)).';
 }

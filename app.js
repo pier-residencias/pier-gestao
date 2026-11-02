@@ -6790,7 +6790,7 @@ function miAnalise(x){
 function miPeriodos(){ return [...new Set(MI.d.mi.filter(x => x.origem !== "Histórico Exista").map(x => x.periodo).concat(MI.d.mir.map(x => x.periodo)))].filter(Boolean).sort().reverse(); }
 function renderMI(){
   const sec = $("#t-medind"); if (!sec || sec.hidden) return;
-  const box = $("#mi-corpo"); $("#mi-importar").hidden = !can("med_lancar");
+  const box = $("#mi-corpo"); $("#mi-importar").hidden = !can("med_lancar"); $("#mi-imps").hidden = !MI.d;
   if (MI.erro && !MI.d) { box.innerHTML = `<div class="notice crit">${esc(MI.erro)}${/desconhecida/i.test(MI.erro) ? " A medição individual precisa do Apps Script novo (colar o código e implantar uma nova versão)." : ""}</div>`; return; }
   if (!MI.d) { box.innerHTML = `<div class="empty"><span class="spin" aria-hidden="true"></span> Carregando…</div>`; return; }
   const pers = miPeriodos();
@@ -6868,12 +6868,51 @@ function miAbrirUnidade(id){
   $("#modal-box").innerHTML = `<h3>Unidade ${esc(x.unidade)}${String(x.bloco) !== "0" ? ` · Bloco ${esc(x.bloco)}` : ""}</h3>
     <p class="muted">${info.hidrometro ? `Hidrômetro ${esc(info.hidrometro)}${info.local ? ` · ${esc(info.local)}` : ""} · ` : ""}${a.media !== null ? `média anterior ${mdF(a.media, 2)} m³` : "sem histórico anterior"}</p>
     <div class="mi-hist">${hs.map(y => `<div class="mi-hb ${y.periodo === x.periodo ? "atual" : ""}"><span class="mi-hv num">${mdF(y.consumo, 1)}</span><span class="mi-hbar" style="height:${Math.max(2, (Number(y.consumo) || 0) / max * 100).toFixed(1)}%"></span><span class="mi-hm">${esc(miRotPer(y.periodo).slice(0, 3))}/${esc(String(y.periodo).slice(2, 4))}</span></div>`).join("")}</div>
-    <div class="tablebox flat"><table><thead><tr><th>Período</th><th class="num">Leitura atual</th><th class="num">Consumo</th><th class="num">Valor</th></tr></thead><tbody>
-      ${hs.slice().reverse().map(y => `<tr><td>${esc(miRotPer(y.periodo))}${y.dataFim ? `<span class="sub">${fData(y.dataFim)}</span>` : ""}</td><td class="num">${y.leituraAtual !== "" && y.leituraAtual !== undefined ? mdF(y.leituraAtual, 2) : "—"}</td><td class="num"><b>${mdF(y.consumo, 2)} m³</b></td><td class="num">${y.valor !== "" && y.valor !== undefined ? fBRL(y.valor) : "—"}</td></tr>`).join("")}
+    <div class="tablebox flat"><table><thead><tr><th>Período</th><th class="num">Leitura atual</th><th class="num">Consumo</th><th class="num">Valor</th>${can("med_lancar") ? "<th></th>" : ""}</tr></thead><tbody>
+      ${hs.slice().reverse().map(y => `<tr><td>${esc(miRotPer(y.periodo))}${y.dataFim ? `<span class="sub">${fData(y.dataFim)}</span>` : ""}</td><td class="num">${y.leituraAtual !== "" && y.leituraAtual !== undefined ? mdF(y.leituraAtual, 2) : "—"}</td><td class="num"><b>${mdF(y.consumo, 2)} m³</b></td><td class="num">${y.valor !== "" && y.valor !== undefined ? fBRL(y.valor) : "—"}</td>${can("med_lancar") ? `<td class="md-ac"><button type="button" class="btn small danger" data-mi-dl="${esc(y.id)}" title="Excluir este lançamento">Excluir</button></td>` : ""}</tr>`).join("")}
     </tbody></table></div>
-    <div class="actions"><button class="btn" type="button" id="mi-u-x">Fechar</button></div>`;
+    <div class="actions"><button class="btn" type="button" id="mi-u-x">Fechar</button><span class="hint" id="mi-u-msg"></span></div>`;
   $("#modal").hidden = false; $("#mi-u-x").onclick = fecharModal; $("#mi-u-x").focus();
+  $("#modal-box").onclick = e => {
+    const b = e.target.closest("[data-mi-dl]"); if (!b) return;
+    if (!b.dataset.conf) { b.dataset.conf = "1"; b.textContent = "Confirmar"; $("#mi-u-msg").className = "hint err"; $("#mi-u-msg").textContent = "Clique em Confirmar para excluir este lançamento."; return; }
+    const outro = hs.find(y => y.id !== b.dataset.miDl);
+    enviar(b, $("#mi-u-msg"), "miExcluir", {id:b.dataset.miDl}, r => { miAplicar(r); renderMI(); if (outro && MI.d.mi.some(y => y.id === outro.id)) miAbrirUnidade(outro.id); else fecharModal(); toast(r.msg); });
+  };
 }
+// ----- importações: o que entrou em cada período (planilha, PDF, histórico, conta) e a exclusão -----
+function miImportacoes(aviso){
+  if (!MI.d) return;
+  const pers = [...new Set(MI.d.mi.map(x => x.periodo).concat(MI.d.mir.map(x => x.periodo)))].filter(Boolean).sort().reverse();
+  const lanc = can("med_lancar");
+  const lin = pers.map(p => {
+    const ls = MI.d.mi.filter(x => x.periodo === p), r = MI.d.mir.find(x => x.periodo === p);
+    const pl = ls.filter(x => x.origem === "Planilha Exista").length, gl = ls.filter(x => x.origem === "Relatório Global").length, hi = ls.filter(x => x.origem === "Histórico Exista").length;
+    const soma = ls.reduce((s, x) => s + (Number(x.consumo) || 0), 0), valor = ls.reduce((s, x) => s + (Number(x.valor) || 0), 0);
+    const quando = ls.map(x => x.importadoEm).concat(r ? [r.importadoEm] : []).filter(Boolean).sort().pop() || "";
+    const quem = (ls.find(x => x.importadoEm === quando) || r || {}).importadoPor || "";
+    const orig = [pl ? `${pl} da planilha` : "", gl ? `${gl} do PDF` : "", hi ? `${hi} de histórico` : ""].filter(Boolean).join(" · ");
+    return `<tr><td><b>${esc(miRotPerLongo(p))}</b></td><td>${orig || "—"}</td><td class="num">${ls.length ? mdF(soma, 1) + " m³" : "—"}</td><td class="num hide-s">${valor ? fBRL(valor) : "—"}</td>
+      <td>${r && r.concM3 !== "" && r.concM3 !== undefined ? `${esc(r.concessionaria || "Conta")} ${mdF(r.concM3, 1)} m³` : "—"}</td><td class="hide-m">${quando ? esc(fDataHora(quando)) + (quem ? `<span class="sub">${esc(quem)}</span>` : "") : "—"}</td>
+      <td class="md-ac">${pl + gl ? `<button type="button" class="btn small" data-mi-ver="${p}">Ver</button>` : ""}${lanc ? `<button type="button" class="btn small danger" data-mi-del="${p}">Excluir</button>` : ""}</td></tr>`;
+  }).join("");
+  $("#modal-box").classList.add("largo");
+  $("#modal-box").innerHTML = `<h3>Importações da medição individual</h3>
+    <p class="hint" style="margin:-6px 0 12px">Tudo o que entrou em cada período. Se algum arquivo entrou errado, exclua o período e importe de novo (a conferência da conta sai junto). Para tirar só uma unidade, abra a unidade na tabela e use <b>Excluir</b> na linha do período.</p>
+    <div class="tablebox flat"><table><thead><tr><th>Período</th><th>Unidades</th><th class="num">Consumo</th><th class="num hide-s">Valor</th><th>Conta</th><th class="hide-m">Importado em</th><th></th></tr></thead><tbody>${lin || `<tr><td colspan="7"><div class="empty">Nada importado ainda.</div></td></tr>`}</tbody></table></div>
+    <div id="mi-imp-conf"></div>
+    <div class="actions"><button class="btn" type="button" id="mi-imp-x">Fechar</button><span class="hint" id="mi-imp-msg">${aviso ? esc(aviso) : ""}</span></div>`;
+  $("#modal").hidden = false; $("#mi-imp-x").onclick = fecharModal;
+  $("#modal-box").onclick = e => {
+    const v = e.target.closest("[data-mi-ver]"); if (v) { MI.per = v.dataset.miVer; MI.bloco = ""; fecharModal(); renderMI(); return; }
+    const d = e.target.closest("[data-mi-del]"); if (!d) return;
+    const p = d.dataset.miDel, n = MI.d.mi.filter(x => x.periodo === p).length;
+    $("#mi-imp-conf").innerHTML = `<div class="notice crit" style="margin:12px 0"><p style="margin:0 0 8px"><b>Excluir ${esc(miRotPerLongo(p))}?</b> Apaga ${n} lançamento${n === 1 ? "" : "s"} de unidade${MI.d.mir.some(x => x.periodo === p) ? " e a conta da concessionária" : ""} deste período. Não dá para desfazer; depois é só importar de novo.</p><div class="actions"><button class="btn danger" type="button" id="mi-imp-ok">Sim, excluir</button><button class="btn" type="button" id="mi-imp-no">Cancelar</button></div></div>`;
+    $("#mi-imp-no").onclick = () => { $("#mi-imp-conf").innerHTML = ""; };
+    $("#mi-imp-ok").onclick = () => enviar($("#mi-imp-ok"), $("#mi-imp-msg"), "miExcluir", {periodo:p}, r => { miAplicar(r); if (MI.per === p) MI.per = ""; renderMI(); miImportacoes(r.msg); });
+  };
+}
+$("#mi-imps").addEventListener("click", () => { if (MI.d) miImportacoes(); else toast("Aguarde carregar a medição individual.", true); });
 // ----- leitura dos relatórios da Exista -----
 // planilha (Excel): cabeçalho TIPO | UNIDADE | BLOCO | DATA | ... | LEITURA ANTERIOR | LEITURA ATUAL | LEITURA ESTIMADA | CONSUMO EM M³ | INDIVIDUAL R$
 function miLerPlanilha(F){
