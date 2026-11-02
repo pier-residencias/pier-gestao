@@ -1,5 +1,9 @@
 (() => {
 "use strict";
+// A tela inicial só é liberada depois de restaurar a sessão e aplicar os dados.
+const avisoInicioPier=setTimeout(()=>{const el=document.getElementById('pier-inicio-msg');if(el)el.textContent='A planilha está demorando para responder. Aguarde a confirmação da sua sessão.';},8000);
+function concluirInicioPier(){clearTimeout(avisoInicioPier);document.documentElement.classList.remove('pier-iniciando');document.getElementById('pier-inicio')?.remove();}
+
 const $ = (s, r=document) => r.querySelector(s);
 const $$ = (s, r=document) => [...r.querySelectorAll(s)];
 const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -95,11 +99,16 @@ const apagarSessao = () => { try { localStorage.removeItem(CHAVE_SESSAO); } catc
 
 // ---------- comunicação com a planilha ----------
 // opc.soLer: só lê (ex.: meses extras para conferir nota repetida) sem trocar o que a tela mostra
+async function buscarJsonPier(url,opcoes,prazo=30000){
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),prazo);
+ try {const resp=await fetch(url,{...opcoes,signal:controller.signal});if(!resp.ok&&resp.status)throw new Error('Falha de conexão.');return await resp.json();}
+ catch(e){if(e.name==='AbortError')throw new Error('A planilha demorou para responder. Tente entrar novamente.');throw e;}
+ finally{clearTimeout(timer);}
+}
 let ambienteConfirmado = null;
 async function conferirAmbiente(){
   if (!ambienteConfirmado) ambienteConfirmado = (async () => {
-    const resp = await fetch(API, {method:"POST", body:JSON.stringify({acao:"ambiente"}), redirect:"follow"});
-    const r = await resp.json();
+    const r = await buscarJsonPier(API, {method:"POST", body:JSON.stringify({acao:"ambiente"}), redirect:"follow"},12000);
     if (!r.ok || r.ambiente !== "producao") throw new Error("A conexão oficial ainda não foi ativada como produção. Execute ativarProducaoPier20 no Apps Script da planilha PIER GESTÃO e atualize a implantação.");
   })().catch(e => { ambienteConfirmado = null; throw e; });
   return ambienteConfirmado;
@@ -111,10 +120,9 @@ async function api(acao, extra, opc){
   const corpo = Object.assign({acao, token:S.token, meses}, extra||{});
   let r;
   try {
-    const resp = await fetch(API, {method:"POST", body:JSON.stringify(corpo), redirect:"follow"});
-    r = await resp.json();
+    r = await buscarJsonPier(API, {method:"POST", body:JSON.stringify(corpo), redirect:"follow"});
   } catch(e){
-    throw {paraUsuario:true, message:"Sem conexão com a planilha. Verifique a internet e tente de novo."};
+    throw {paraUsuario:true, message:e.message || "Sem conexão com a planilha. Verifique a internet e tente de novo."};
   }
   if (!r.ok) {
     if ((r.codigo === "senha" || r.codigo === "sessao") && !(acao === "entrar" && extra && extra.senha !== undefined)) { encerrarLocal(r.erro || "Sua sessão terminou. Entre de novo."); }
@@ -8388,9 +8396,10 @@ if (sess && sess.senha) apagarSessao(); // versão antiga guardava a senha no ap
 if (sess && sess.token && sess.usuario) {
   S.usuario = sess.usuario || ""; S.token = sess.token;
   try { S.setor = localStorage.getItem("estoque-setor") || S.setor; S.adm = localStorage.getItem("estoque-entrada") === "Administração"; } catch(e){}
-  api("entrar", {registro:{motivo:"retorno", entrada:S.adm ? "Administração" : S.setor, aparelho:aparelho()}, comDados:true, comPend:pedirPend(S.adm)}).then(r => { entradaPend(r); if (S.adm && !(TEM_ADM && podeAdm())) S.adm = false; if (!S.adm && !setoresReais().length && TEM_ADM && podeAdm()) S.adm = true; aplicarPermissoes(); renderMe(); setTab(rdQrDestino(podeAba(S.tab) ? S.tab : primeiraAba())); entradaDados(r); }).catch(e => { if (S.token) mostrarLogin(e.message); });
+  api("entrar", {registro:{motivo:"retorno", entrada:S.adm ? "Administração" : S.setor, aparelho:aparelho()}, comDados:true, comPend:pedirPend(S.adm)}).then(r => { entradaPend(r); if (S.adm && !(TEM_ADM && podeAdm())) S.adm = false; if (!S.adm && !setoresReais().length && TEM_ADM && podeAdm()) S.adm = true; aplicarPermissoes(); renderMe(); setTab(rdQrDestino(podeAba(S.tab) ? S.tab : primeiraAba())); entradaDados(r); }).catch(e => { mostrarLogin(e.message || "Não foi possível restaurar sua sessão. Entre novamente."); }).finally(concluirInicioPier);
 } else {
   if(RQ.codigo) $("#l-setor").value="Administração";
   mostrarLogin("");
+  concluirInicioPier();
 }
 })();

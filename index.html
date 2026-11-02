@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR" data-theme="dark">
+<html lang="pt-BR" data-theme="dark" class="pier-iniciando">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -13,8 +13,16 @@
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap"></noscript>
 <link rel="stylesheet" href="estilo.css?v=20261102producao">
 <link rel="stylesheet" href="visual-2.css?v=20261102producao">
+<style>
+html.pier-iniciando body>main,html.pier-iniciando body>header,html.pier-iniciando body>aside,html.pier-iniciando #side-fundo {visibility:hidden;}
+#pier-inicio{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;background:#0c1117;color:#e9f0f5;padding:24px;font:14px system-ui,sans-serif;text-align:center;}
+:root[data-theme="light"] #pier-inicio{background:#f2f5f7;color:#163047;}
+#pier-inicio>div{max-width:390px;}#pier-inicio h1{font-size:24px;margin:18px 0 10px;}#pier-inicio p{line-height:1.6;}#pier-inicio .inicio-indicador{display:inline-block;width:32px;height:32px;border:3px solid #397d9d;border-top-color:transparent;border-radius:50%;animation:pier-girar 1s linear infinite;}@keyframes pier-girar{to{transform:rotate(360deg);}}
+@media(prefers-reduced-motion:reduce){#pier-inicio .inicio-indicador{animation:none;border-top-color:#85bdd8;}}
+</style>
 </head>
 <body>
+<div id="pier-inicio" role="status" aria-live="polite"><div><span class="inicio-indicador" aria-hidden="true"></span><h1>Pier Gestão 2.0</h1><p id="pier-inicio-msg">Restaurando sua sessão e carregando a página…</p><noscript>Ative o JavaScript no navegador para abrir o sistema.</noscript></div></div>
 
 <div class="login" id="login" hidden>
   <form class="card" id="f-login" novalidate autocomplete="on">
@@ -793,7 +801,7 @@
 <script src="config.js"></script>
 <script src="nfe.js?v=20261101os5"></script>
 <script src="vendor/qrcode.js?v=2.0.4"></script>
-<script src="app.js?v=20261102producao"></script>
+<script src="app.js?v=20261102inicio"></script>
 
 </body>
 </html>
