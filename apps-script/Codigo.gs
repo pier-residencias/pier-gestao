@@ -385,7 +385,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-02 Pier Gestão 2.0 — importação mais rápida';
+const VERSAO = '2026-11-02 Pier Gestão 2.0 — sem Espaços e Demandas no menu';
 
 function doGet() {
   TABS = {};
@@ -2911,7 +2911,10 @@ function espLerEmails(conta) {
   return r.novas || r.atual ? (r.novas ? r.novas + ' reserva' + (r.novas === 1 ? '' : 's') + ' nova' + (r.novas === 1 ? '' : 's') + '. ' : '') + (r.atual ? r.atual + ' atualizada' + (r.atual === 1 ? '' : 's') + '.' : '') : 'Nenhum e-mail de reserva novo.';
 }
 // para o acionador de tempo (a cada 15 minutos): Acionadores → Adicionar → lerReservasAutomatico → Baseado no tempo
+// Espaços tirados do sistema (02/11/2026): a leitura automática dos e-mails de reserva para. Para voltar, troque para true.
+const ESPACOS_ATIVO = false;
 function lerReservasAutomatico() {
+  if (!ESPACOS_ATIVO) return;
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) return;
   try { espLerEmails({ nome: 'Leitura automática' }); } finally { lock.releaseLock(); }
