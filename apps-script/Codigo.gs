@@ -377,7 +377,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-02 Pier Gestão 2.0 — importações da medição individual';
+const VERSAO = '2026-11-02 Pier Gestão 2.0 — gráficos da medição individual';
 
 function doGet() {
   TABS = {};
@@ -536,6 +536,7 @@ function doPost(e) {
         case 'medImportar': medExigir(conta, true); msg = medImportar(req, conta); extra.med = true; extra.semDados = true; break;
         case 'miImportar': medExigir(conta, true); msg = miImportar(req, conta); extra.mi = true; extra.semDados = true; break;
         case 'miExcluir': medExigir(conta, true); msg = miExcluir(req, conta); extra.mi = true; extra.semDados = true; break;
+        case 'miBlocos': medExigir(conta, true); msg = miSalvarBlocos(req); extra.mi = true; extra.semDados = true; break;
         case 'rondaPontoSalvar': msg = rondaQrSalvar(req, conta); extra.semDados = true; break;
         case 'rondaVisitar': msg = rondaQrVisitar(req, conta); extra.semDados = true; break;
         case 'rondaSalvar': rondaExigir(conta, true); msg = rondaSalvar(req, conta); extra.ronda = msg.ronda; msg = msg.texto; extra.semDados = true; break;
@@ -2620,7 +2621,29 @@ function miLista() {
   const ls = linhas(tabela('mi')).map(unLimpa), rs = linhas(tabela('mir')).map(unLimpa);
   ls.sort((a, b) => String(a.periodo).localeCompare(String(b.periodo)) || String(a.bloco).localeCompare(String(b.bloco), 'pt-BR', { numeric: true }) || String(a.unidade).localeCompare(String(b.unidade), 'pt-BR', { numeric: true }));
   rs.sort((a, b) => String(a.periodo).localeCompare(String(b.periodo)));
-  return { mi: ls, mir: rs };
+  return { mi: ls, mir: rs, miBlocos: miNomesBlocos() };
+}
+// nomes dos blocos ("1" → "Marina"): os salvos na medição individual; sem isso, os do cadastro de Unidades que tenham o número
+function miNomesBlocos() {
+  const props = PropertiesService.getScriptProperties();
+  let salvos = {}, un = [];
+  try { salvos = JSON.parse(props.getProperty('MI_BLOCOS') || '{}') || {}; } catch (e) { salvos = {}; }
+  try { un = JSON.parse(props.getProperty('UN_BLOCOS') || '[]') || []; } catch (e) { un = []; }
+  const out = {};
+  un.forEach(nome => {
+    const m = /\d+/.exec(String(nome)); if (!m) return;
+    const resto = String(nome).replace(/bloco/i, '').replace(m[0], '').replace(/[()\-–·:]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (resto) out[String(Number(m[0]))] = resto;
+  });
+  Object.keys(salvos).forEach(k => { if (String(salvos[k]).trim()) out[k] = String(salvos[k]).trim(); else delete out[k]; });
+  return out;
+}
+function miSalvarBlocos(r) {
+  const v = r.blocos || {}, o = {};
+  Object.keys(v).slice(0, 40).forEach(k => { const b = texto(k, 10); if (b) o[b] = texto(v[k], 40); });
+  PropertiesService.getScriptProperties().setProperty('MI_BLOCOS', JSON.stringify(o));
+  AUDIT_DET = 'Nomes dos blocos na medição individual: ' + Object.keys(o).map(k => k + '=' + (o[k] || '—')).join(', ');
+  return 'Nomes dos blocos salvos.';
 }
 const miChave = (p, b, u) => String(p) + '|' + String(b).trim().toLowerCase() + '|' + String(u).trim().toLowerCase();
 const miPer = s => /^\d{4}-\d{2}$/.test(String(s || ''));
@@ -4843,7 +4866,7 @@ const ACOES_AUDIT = {
   fornSalvar: 'Fornecedor', fornImportar: 'Importou planilha de fornecedores', fornDasCotacoes: 'Trouxe fornecedores das cotações',
   espReserva: 'Reserva de espaço', espEspaco: 'Espaço', espVistoria: 'Vistoria de espaço', espColar: 'Reserva colada do e-mail', espImportar: 'Importou PDF de reservas', espEmails: 'Leu e-mails de reserva',
   medMedidor: 'Medidor', medLeituras: 'Leitura de medidor', medContas: 'Conta de consumo', medImportar: 'Importou planilha de medições',
-  miImportar: 'Importou medição individual (Exista)', miExcluir: 'Excluiu período da medição individual',
+  miImportar: 'Importou medição individual (Exista)', miBlocos: 'Nomes dos blocos (medição individual)', miExcluir: 'Excluiu período da medição individual',
   rondaPontoSalvar: 'Configurou ponto QR', rondaVisitar: 'Vistoria no ponto QR',
   rondaSalvar: 'Ronda', rondaFoto: 'Foto na ronda', rondaFotoRemover: 'Tirou foto da ronda', rondaResolver: 'Resolveu pendência da ronda',
   visao: 'Abriu tela',
