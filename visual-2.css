@@ -200,3 +200,23 @@
 @media(max-width:1100px){.ba-resumo{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:600px){.ba-resumo{grid-template-columns:repeat(2,minmax(0,1fr))}.ba-topo label{width:100%}}
 .ba-tab th{white-space:normal}
+/* Guarita Norte: quadro de avisos (04/11/2026) */
+.gua-abas{display:flex;gap:6px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:5px}
+.gua-abas button{border:0;background:none;color:var(--muted);font:inherit;font-size:13px;font-weight:600;padding:9px 14px;border-radius:9px;cursor:pointer;display:flex;gap:8px;align-items:center}
+.gua-abas button[aria-selected=true]{background:color-mix(in srgb,var(--gua) 18%,var(--surface));color:var(--fg)}
+.av-cont{background:var(--crit);color:#fff;border-radius:999px;font-size:11px;min-width:20px;padding:1px 6px;text-align:center}
+.gua-barra{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}.gua-barra h3{margin:0}
+.av-faixa{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 14px;padding:12px 16px;border-radius:12px;border:1px solid var(--warn);background:color-mix(in srgb,var(--warn) 16%,var(--surface));box-shadow:var(--shadow)}
+.av-faixa.urg{border-color:var(--crit);background:color-mix(in srgb,var(--crit) 16%,var(--surface))}.av-faixa>span:nth-child(2){flex:1;min-width:180px}
+.av-sino{font-size:20px;animation:av-balanca 1.4s ease-in-out 3}@keyframes av-balanca{0%,100%{transform:rotate(0)}25%{transform:rotate(14deg)}75%{transform:rotate(-14deg)}}
+@media (prefers-reduced-motion:reduce){.av-sino{animation:none}}
+.av-lista{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.av-card{--av:var(--info);border:1px solid var(--line);border-top:5px solid var(--av);border-radius:12px;padding:18px;background:var(--bg);min-width:0;overflow-wrap:anywhere}
+.av-card.av-imp{--av:var(--warn)}.av-card.av-urg{--av:var(--crit)}.av-card.novo{box-shadow:0 0 0 2px color-mix(in srgb,var(--av) 55%,transparent)}.av-card.arq{opacity:.7}
+.av-topo{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.av-prior{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--av)}.av-data{margin-left:auto;font-size:12px;color:var(--muted)}
+.av-card h3{margin:12px 0 8px;font-size:18px}.av-texto{margin:0;line-height:1.55;white-space:normal}.av-rodape{font-size:12px;color:var(--muted);margin:12px 0 0}
+.av-cientes{margin-top:10px;font-size:12px}.av-cientes summary{cursor:pointer;color:var(--accent-ink)}.av-cientes ul{margin:6px 0 0;padding-left:18px}
+.av-card .actions{margin-top:12px}.av-arqbox{margin-top:8px}.av-arqbox summary{cursor:pointer;font-size:13px;color:var(--muted);margin-bottom:10px}
+.av-janela{--av:var(--info);border-top:5px solid var(--av);padding-top:12px}.av-janela.av-imp{--av:var(--warn)}.av-janela.av-urg{--av:var(--crit)}.av-janela .overline{color:var(--av)}.av-janela h3{font-size:20px;margin:8px 0}
+@media(max-width:900px){.av-lista{grid-template-columns:1fr}}
+.av-j-tit{color:var(--warn);margin:0 0 10px}.av-janela+.av-janela{margin-top:16px}

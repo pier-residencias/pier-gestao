@@ -240,7 +240,7 @@ function mostrarLogin(msg){
   ($("#l-usuario").value ? $("#l-senha") : $("#l-usuario")).focus();
 }
 // sair encerra a sessão também no servidor: o código guardado no aparelho deixa de valer
-function encerrarLocal(msg){ S.gua = false; GUA.Sul.lista = []; GUA.Norte.lista = []; BARCO.lista = []; BARCO.dia = null; BARCO.mes = null; BARCO.data = ""; rdQrLimpar(); RD.lista=null; RD.edit=null; RD.erro=""; INV_CT.val.clear(); INV_CT.msg=""; INV_AP.sel.clear(); INV_AP.ultimos=[]; INV_AP.aberto=null; S.contagens=[]; S.bloq=new Map(); S.token = ""; S.perms = {}; S.rel = null; S.eq = null; S.pend = null; unLimparMemoria(); mdLimpar(); miLimpar(); esLimpar(); FO.lista = null; fecharModal(); apagarSessao(); abrirMenuAdm(false); fecharMenu(); mostrarLogin(msg); renderMenu(); }
+function encerrarLocal(msg){ S.gua = false; AV.lista = []; AV.carregado = false; AV.mostrados.clear(); AV.vista = "avisos"; { const f = document.getElementById("av-faixa"); if (f) f.hidden = true; } GUA.Sul.lista = []; GUA.Norte.lista = []; BARCO.lista = []; BARCO.dia = null; BARCO.mes = null; BARCO.data = ""; rdQrLimpar(); RD.lista=null; RD.edit=null; RD.erro=""; INV_CT.val.clear(); INV_CT.msg=""; INV_AP.sel.clear(); INV_AP.ultimos=[]; INV_AP.aberto=null; S.contagens=[]; S.bloq=new Map(); S.token = ""; S.perms = {}; S.rel = null; S.eq = null; S.pend = null; unLimparMemoria(); mdLimpar(); miLimpar(); esLimpar(); FO.lista = null; fecharModal(); apagarSessao(); abrirMenuAdm(false); fecharMenu(); mostrarLogin(msg); renderMenu(); }
 function sair(msg){
   const tk = S.token;
   if (tk && API) { try { fetch(API, {method:"POST", body:JSON.stringify({acao:"sair", token:tk}), redirect:"follow", keepalive:true}).catch(()=>{}); } catch(e){} }
@@ -438,7 +438,9 @@ function setTab(t){
   if (t==="esreservas" || t==="esvistorias" || t==="esespacos") { renderEspTudo(); carregarEsp(); }
   if (t==="fornecedores") { renderForn(); carregarForn(); }
   if (t==="gbarco") { barcoRender(); barcoCarregar(); }
-  if (t==="gsul" || t==="gnorte") { const g = t === "gsul" ? "Sul" : "Norte"; guaRender(g); guaCarregar(g); }
+  if (t==="gsul" || t==="gnorte") { const g = t === "gsul" ? "Sul" : "Norte"; guaRender(g); if (g === "Sul" || AV.vista === "visit") guaCarregar(g); }
+  if (t==="gnorte") avCarregar();
+  if (S.gua && avPode()) { avIniciar(); if (!AV.carregado) avCarregar(); else avAlerta(); } else avAlerta();
   if (t==="inicio") { renderInicio(); if (can("pendencias")) carregarPend(); }
   if (t==="acessos") carregarAcessos();
   if (t==="cotacoes") { renderCot(); carregarCot(); }
@@ -602,11 +604,12 @@ async function guaCarregar(g){
   finally { if (S.token === token && ger === st.ger) { st.carregando = false; guaRender(g); } }
 }
 function guaRender(g){
-  const st = GUA[g], info = GUA_INFO[g], sec = document.getElementById("t-" + info.aba); if (!sec || !st) return;
+  if (g === "Norte") avRender();
+  const st = GUA[g], info = GUA_INFO[g], sec = g === "Norte" ? document.getElementById("gn-visit") : document.getElementById("t-" + info.aba); if (!sec || !st) return;
   if (!sec.dataset.pronto) {
     sec.dataset.pronto = "1";
-    sec.innerHTML = `<div class="gua-hero"><div><p class="overline">GUARITAS · ${esc(info.desc.toUpperCase())}</p><h2>Guarita ${esc(g)}</h2><p>Entrada e saída de visitantes e prestadores de serviço.</p></div>
-      <div class="corr-acoes"><button type="button" class="btn primary" data-gua-nova="${g}">+ Registrar entrada</button>${g === "Sul" && podeAba("gbarco") ? `<button type="button" class="btn" data-go-barco>Barco do condomínio</button>` : ""}<button type="button" class="btn" data-gua-atualizar="${g}">Atualizar</button></div></div>
+    sec.innerHTML = (g === "Norte" ? `<div class="gua-barra"><h3>Visitantes e prestadores</h3><div class="corr-acoes"><button type="button" class="btn primary" data-gua-nova="${g}">+ Registrar entrada</button><button type="button" class="btn" data-gua-atualizar="${g}">Atualizar</button></div></div>` : `<div class="gua-hero"><div><p class="overline">GUARITAS · ${esc(info.desc.toUpperCase())}</p><h2>Guarita ${esc(g)}</h2><p>Entrada e saída de visitantes e prestadores de serviço.</p></div>
+      <div class="corr-acoes"><button type="button" class="btn primary" data-gua-nova="${g}">+ Registrar entrada</button>${g === "Sul" && podeAba("gbarco") ? `<button type="button" class="btn" data-go-barco>Barco do condomínio</button>` : ""}<button type="button" class="btn" data-gua-atualizar="${g}">Atualizar</button></div></div>`) + `
       <div class="corr-resumo gua-resumo" data-gua-resumo></div>
       <div class="panel stack"><div class="corr-filtros"><label>Buscar<input class="input" type="search" data-gua-busca placeholder="Nome, unidade, empresa, placa…"></label>
         <label>Mostrar<select class="input" data-gua-filtro><option value="dentro">Dentro agora</option><option value="hoje">Entradas de hoje</option><option value="7">Últimos 7 dias</option><option value="30">Últimos 30 dias</option></select></label></div>
@@ -862,6 +865,132 @@ document.addEventListener("click", e => {
   if (e.target.closest("[data-go-barco]")) { setTab("gbarco"); return; }
   const a = e.target.closest("[data-ba-add],[data-ba-rem]"); if (!a) return;
   if (a.dataset.baAdd) barcoPassageiro(a.dataset.baAdd); else barcoRemover(a.dataset.baRem);
+});
+// ---------- Quadro de avisos da Guarita Norte (pedido de 04/11/2026) ----------
+// Só a Administração publica. Quem está no setor Guaritas com a Guarita Norte recebe o aviso na tela (faixa no topo + janela do aviso novo) e dá "Estou ciente".
+const AV = {espera:null, lista:[], adm:false, carregado:false, ger:0, vista:"avisos", mostrados:new Set(), timer:null, salvando:false, verArq:false};
+const AV_COR = {Normal:"av-normal", Importante:"av-imp", Urgente:"av-urg"};
+const avPode = () => S.token && (can("gua_norte") || S.perfil === "Administração");
+const avNovos = () => AV.lista.filter(a => a.ativo && !a.euCiente && !AV.adm);
+async function avCarregar(){
+  if (!avPode()) return;
+  const ger = ++AV.ger, token = S.token;
+  try { const r = await api("avisos"); if (S.token !== token || ger !== AV.ger) return; AV.lista = r.avisos || []; AV.adm = !!r.avAdm; AV.carregado = true; }
+  catch(e){ return; }
+  avRender(); avAlerta();
+}
+// verifica a cada minuto enquanto alguém está no setor Guaritas
+function avIniciar(){
+  if (AV.timer) return;
+  AV.timer = setInterval(() => { if (document.visibilityState === "visible" && S.token && S.gua && avPode()) avCarregar(); }, 60000);
+}
+function avAlerta(){
+  let bar = document.getElementById("av-faixa");
+  const novos = S.gua ? avNovos() : [];
+  if (!bar) { bar = document.createElement("div"); bar.id = "av-faixa"; bar.className = "av-faixa"; bar.setAttribute("role", "status"); const m = document.querySelector("main"); if (!m) return; m.prepend(bar); }
+  bar.hidden = !novos.length;
+  if (novos.length) {
+    const urg = novos.some(a => a.prioridade === "Urgente");
+    bar.className = "av-faixa" + (urg ? " urg" : "");
+    bar.innerHTML = `<span class="av-sino" aria-hidden="true">🔔</span><span><b>${novos.length === 1 ? "1 aviso novo" : novos.length + " avisos novos"} da Administração</b> no quadro da Guarita Norte</span><button type="button" class="btn small" data-av-ir>Ver avisos</button>`;
+  }
+  // janela automática: só para o aviso que ainda não apareceu nesta sessão, e sem atrapalhar outra janela aberta
+  const nv = novos.filter(a => !AV.mostrados.has(a.id + ":" + a.versao)), novo = nv.length ? nv : null;
+  // a janela só conta como vista quando a pessoa responde ("Estou ciente" ou "Ler depois"); com outra janela aberta
+  // (ex.: um cadastro em andamento) espera e tenta de novo, sem interromper
+  if (!novo) return;
+  if ($("#modal").hidden) avJanela(novo);
+  if (!AV.espera) AV.espera = setTimeout(() => { AV.espera = null; if (S.token && S.gua) avAlerta(); }, 4000);
+}
+function avCartao(a){
+  const novo = a.ativo && !a.euCiente && !AV.adm, cls = AV_COR[a.prioridade] || "av-normal";
+  const cientes = AV.adm && a.ativo ? `<details class="av-cientes"><summary>${a.cientes.length ? `Ciente: ${a.cientes.length} ${a.cientes.length === 1 ? "pessoa" : "pessoas"}` : "Ninguém deu ciente ainda"}</summary>${a.cientes.length ? `<ul>${a.cientes.map(c => `<li>${esc(c.n)} <span class="hint">${esc(guaHora(c.em))}</span></li>`).join("")}</ul>` : ""}</details>` : "";
+  return `<article class="av-card ${cls}${novo ? " novo" : ""}${a.ativo ? "" : " arq"}">
+    <div class="av-topo"><span class="av-prior">${esc(a.prioridade)}</span>${novo ? '<span class="pill p-entrada">Novo</span>' : ""}${!a.ativo ? `<span class="pill">${esc(a.status)}</span>` : ""}<span class="av-data">${esc(guaHora(a.editadoEm || a.criadoEm))}</span></div>
+    <h3>${esc(a.titulo)}</h3><p class="av-texto">${esc(a.texto).replace(/\n/g, "<br>")}</p>
+    <p class="av-rodape">Publicado por ${esc(a.criadoPor)}${a.editadoEm && a.status === "Ativo" ? ` · alterado por ${esc(a.editadoPor)}` : ""}${a.validoAte ? ` · válido até ${esc(barcoFmt(a.validoAte))}` : ""}</p>
+    ${cientes}
+    <div class="actions">${novo ? `<button type="button" class="btn primary" data-av-ciente="${esc(a.id)}">Estou ciente</button>` : a.ativo && !AV.adm ? '<span class="hint">✓ Você está ciente</span>' : ""}
+      ${AV.adm && a.ativo ? `<button type="button" class="btn small" data-av-editar="${esc(a.id)}">Alterar</button><button type="button" class="link" data-av-arquivar="${esc(a.id)}">Tirar do quadro</button>` : ""}</div></article>`;
+}
+function avRender(){
+  const sec = document.getElementById("t-gnorte"); if (!sec) return;
+  if (!sec.dataset.avPronto) {
+    sec.dataset.avPronto = "1";
+    sec.innerHTML = `<div class="gua-hero"><div><p class="overline">GUARITAS · PORTARIA NORTE</p><h2>Guarita Norte</h2><p>Quadro de avisos da Administração e controle de visitantes.</p></div>
+      <div class="gua-abas" role="tablist"><button type="button" role="tab" data-av-vista="avisos">Quadro de avisos <span class="av-cont" id="av-cont" hidden></span></button><button type="button" role="tab" data-av-vista="visit">Visitantes e prestadores</button></div></div>
+      <div id="gn-avisos" class="stack"><div class="panel stack"><div class="ba-cab"><h3>Quadro de avisos</h3><div class="actions"><button type="button" class="btn primary" id="av-novo" hidden>+ Novo aviso</button><button type="button" class="btn" id="av-atualizar">Atualizar</button></div></div>
+        <p class="hint" id="av-dica"></p><div id="av-lista" class="av-lista"></div><div id="av-arq"></div></div></div>
+      <div id="gn-visit" class="stack" hidden></div>`;
+    $("#av-novo").addEventListener("click", () => avForm(null));
+    $("#av-atualizar").addEventListener("click", avCarregar);
+  }
+  $$("#t-gnorte [data-av-vista]").forEach(b => b.setAttribute("aria-selected", b.dataset.avVista === AV.vista ? "true" : "false"));
+  $("#gn-avisos").hidden = AV.vista !== "avisos"; $("#gn-visit").hidden = AV.vista !== "visit";
+  const novos = avNovos().length; $("#av-cont").hidden = !novos; $("#av-cont").textContent = novos;
+  $("#av-novo").hidden = !AV.adm;
+  $("#av-dica").textContent = AV.adm ? "Só a Administração publica. Cada porteiro recebe o aviso na tela e confirma com “Estou ciente”; aqui você vê quem já confirmou." : "Recados da Administração. Leia e confirme com “Estou ciente”.";
+  const ativos = AV.lista.filter(a => a.ativo).sort((a, b) => (b.prioridade === "Urgente") - (a.prioridade === "Urgente") || String(b.editadoEm || b.criadoEm).localeCompare(String(a.editadoEm || a.criadoEm)));
+  $("#av-lista").innerHTML = !AV.carregado ? '<div class="empty">Carregando…</div>' : ativos.length ? ativos.map(avCartao).join("") : '<div class="empty">Nenhum aviso no quadro.</div>';
+  const arq = AV.lista.filter(a => !a.ativo);
+  $("#av-arq").innerHTML = AV.adm && arq.length ? `<details class="av-arqbox"><summary>Retirados ou vencidos nos últimos 30 dias (${arq.length})</summary><div class="av-lista">${arq.map(avCartao).join("")}</div></details>` : "";
+}
+// janela com todos os avisos novos de uma vez (urgentes primeiro)
+function avJanela(lista){
+  const ord = {Urgente:0, Importante:1, Normal:2}; lista = lista.slice().sort((a, b) => (ord[a.prioridade] ?? 3) - (ord[b.prioridade] ?? 3));
+  const box = $("#modal-box"); box.classList.toggle("largo", lista.length > 1);
+  box.innerHTML = `<p class="overline av-j-tit">🔔 ${lista.length === 1 ? "NOVO AVISO" : lista.length + " AVISOS NOVOS"} DA ADMINISTRAÇÃO</p>
+    ${lista.map(a => `<div class="av-janela ${AV_COR[a.prioridade] || ""}"><p class="overline">${esc(a.prioridade.toUpperCase())}</p><h3>${esc(a.titulo)}</h3><p class="av-texto">${esc(a.texto).replace(/\n/g, "<br>")}</p>
+    <p class="av-rodape">Publicado por ${esc(a.criadoPor)} · ${esc(guaHora(a.editadoEm || a.criadoEm))}</p></div>`).join("")}
+    <p class="hint err" id="av-j-msg" role="alert"></p>
+    <div class="actions"><button type="button" class="btn primary" id="av-j-ok">${lista.length === 1 ? "Estou ciente" : "Estou ciente de todos"}</button><button type="button" class="btn" id="av-j-depois">Ler depois</button></div>`;
+  $("#modal").hidden = false; $("#av-j-ok").focus();
+  const visto = () => lista.forEach(a => AV.mostrados.add(a.id + ":" + a.versao));
+  $("#av-j-depois").onclick = () => { visto(); fecharModal(); };
+  $("#av-j-ok").onclick = async () => { visto(); $("#av-j-ok").disabled = true; for (const a of lista) { if (!(await avCiente(a.id, false, true))) { $("#av-j-ok").disabled = false; return; } } fecharModal(); toast(lista.length === 1 ? "Ciente registrado." : "Ciente registrado nos " + lista.length + " avisos."); };
+}
+async function avCiente(id, avisar, daJanela){
+  if (AV.salvando) return false; AV.salvando = true;
+  try { const r = await api("avisoSalvar", {op:"ciente", id}); const a = AV.lista.find(x => x.id === id); if (a) a.euCiente = true; if (avisar !== false) toast(r.msg || "Ciente registrado."); avRender(); avAlerta(); return true; }
+  catch(e){ if (daJanela && $("#av-j-msg")) $("#av-j-msg").textContent = e.message; else toast(e.message || "Não foi possível registrar.", true); return false; }
+  finally { AV.salvando = false; }
+}
+function avForm(id){
+  if (!AV.adm) return;
+  const a = id ? AV.lista.find(x => x.id === id) : null;
+  const box = $("#modal-box"); box.classList.add("largo");
+  box.innerHTML = `<h3>${a ? "Alterar aviso" : "Novo aviso para a Guarita Norte"}</h3><form id="av-form"><div class="corr-form-grid">
+    <label class="full">Título *<input class="input" name="titulo" maxlength="100" required value="${esc(a ? a.titulo : "")}"></label>
+    <label class="full">Recado *<textarea class="input" name="texto" rows="6" maxlength="2000" required>${esc(a ? a.texto : "")}</textarea></label>
+    <label>Prioridade<select class="input" name="prioridade">${["Normal","Importante","Urgente"].map(p => `<option ${a && a.prioridade === p ? "selected" : ""}>${p}</option>`).join("")}</select></label>
+    <label>Válido até (opcional)<input class="input" type="date" name="validoAte" min="${hoje()}" value="${esc(a ? a.validoAte : "")}"></label></div>
+    ${a ? '<p class="hint">Ao alterar, todos os porteiros precisam dar ciente de novo.</p>' : '<p class="hint">Os porteiros com a Guarita Norte recebem o aviso na tela em até 1 minuto.</p>'}
+    <p class="hint err" id="av-form-msg" role="alert"></p><div class="actions"><button type="submit" class="btn primary">${a ? "Salvar alteração" : "Publicar aviso"}</button><button type="button" class="btn" id="av-form-voltar">Voltar</button></div></form>`;
+  $("#modal").hidden = false; $("#av-form [name=titulo]").focus();
+  $("#av-form-voltar").onclick = () => { if (!AV.salvando) fecharModal(); };
+  $("#av-form").onsubmit = async e => {
+    e.preventDefault(); const f = e.target; if (AV.salvando || !f.reportValidity()) return;
+    AV.salvando = true; f.querySelector("[type=submit]").disabled = true;
+    try { const r = await api("avisoSalvar", a ? {op:"editar", id:a.id, versao:a.versao, aviso:Object.fromEntries(new FormData(f))} : {op:"criar", aviso:Object.fromEntries(new FormData(f))}); fecharModal(); toast(r.msg || "Aviso salvo."); avCarregar(); }
+    catch(err){ $("#av-form-msg").textContent = err.message || "Não foi possível salvar."; }
+    finally { AV.salvando = false; const b = f.querySelector("[type=submit]"); if (b) b.disabled = false; }
+  };
+}
+function avArquivar(id){
+  const a = AV.lista.find(x => x.id === id); if (!a || !AV.adm) return;
+  const box = $("#modal-box"); box.classList.remove("largo");
+  box.innerHTML = `<h3>Tirar o aviso do quadro?</h3><p><b>${esc(a.titulo)}</b></p><p class="hint">Ele deixa de aparecer para os porteiros e fica guardado na planilha.</p><p class="hint err" id="av-arq-msg" role="alert"></p>
+    <div class="actions"><button type="button" class="btn danger" id="av-arq-ok">Tirar do quadro</button><button type="button" class="btn" id="av-arq-no">Voltar</button></div>`;
+  $("#modal").hidden = false; $("#av-arq-no").onclick = fecharModal; $("#av-arq-no").focus();
+  $("#av-arq-ok").onclick = async () => { try { const r = await api("avisoSalvar", {op:"arquivar", id}); fecharModal(); toast(r.msg); avCarregar(); } catch(e){ $("#av-arq-msg").textContent = e.message; } };
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-av-ir],[data-av-vista],[data-av-ciente],[data-av-editar],[data-av-arquivar]"); if (!b) return;
+  if (b.hasAttribute("data-av-ir")) { AV.vista = "avisos"; setTab("gnorte"); }
+  else if (b.dataset.avVista) { AV.vista = b.dataset.avVista; avRender(); if (AV.vista === "visit") { guaRender("Norte"); guaCarregar("Norte"); } }
+  else if (b.dataset.avCiente) avCiente(b.dataset.avCiente);
+  else if (b.dataset.avEditar) avForm(b.dataset.avEditar);
+  else if (b.dataset.avArquivar) avArquivar(b.dataset.avArquivar);
 });
 document.getElementById('menu-busca')?.addEventListener('input',filtrarMenuPier);
 document.getElementById('corr-nova')?.addEventListener('click',()=>corrFormulario('receber'));
