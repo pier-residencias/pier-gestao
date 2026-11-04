@@ -312,7 +312,7 @@ const ABAS = {
       ['aprovacao', 'Aprovação'], ['aprovGerente', 'Aprovada pelo gerente'], ['aprovSindico', 'Aprovada pelo síndico'],
       ['conclPedida', 'Conclusão pedida'], ['conclData', 'Data de conclusão informada'],
       ['conclGerente', 'Conclusão aprovada pelo gerente'], ['conclSindico', 'Conclusão aprovada pelo síndico'],
-      ['os', 'OS gerada'], ['osId', 'ID da OS']
+      ['os', 'OS gerada'], ['osId', 'ID da OS'], ['anexos', 'Comprovação (fotos e documentos)']
     ],
     num: ['ordem']
   },
@@ -420,7 +420,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-04 Pier Gestão 2.0 — quadro de avisos da Guarita Norte';
+const VERSAO = '2026-11-04 Pier Gestão 2.0 — comprovação das pendências';
 
 function doGet() {
   TABS = {};
@@ -498,6 +498,7 @@ function doPost(e) {
     if (req.acao === 'barco') return json(Object.assign(base, barcoDia(req, conta)));
     if (req.acao === 'barcoMes') return json(Object.assign(base, barcoMes(req, conta)));
     if (req.acao === 'correspondencias') { corrExigir(conta); return json(Object.assign(base, {correspondencias:linhas(tabela('correspondencias')).map(corrPublica)})); }
+    if (req.acao === 'pendVerAnexo') { pode('pendencias'); const f = pendVerAnexo(req); auditar(conta, 'Abriu comprovação de pendência', f.nome); return json(Object.assign(base, { arquivo: f })); }
     if (req.acao === 'fornecedores') { pode('pendencias'); return json(Object.assign(base, fornLista())); }
     if (req.acao === 'cotLista') { pode('pendencias'); return json(Object.assign(base, cotLista())); }
     if (req.acao === 'cotVerArquivo') { pode('pendencias'); const f = cotVerArquivo(req); auditar(conta, 'Abriu arquivo de cotação', f.nome); delete f.nome; return json(Object.assign(base, { arquivo: f })); }
@@ -595,6 +596,7 @@ function doPost(e) {
         case 'rondaFotoRemover': rondaExigir(conta, true); msg = rondaFotoRemover(req, conta); extra.ronda = msg.ronda; msg = msg.texto; extra.semDados = true; break;
         case 'rondaResolver': rondaExigir(conta, true); msg = rondaResolver(req, conta); extra.ronda = msg.ronda; msg = msg.texto; extra.semDados = true; break;
         case 'prestImportar': prestExigir(conta, true); msg = prestImportar(req, conta); break;
+        case 'pendAnexo': pode('pendencias'); msg = pendAnexo(req, conta); extra.pendencias = true; break;
         case 'pendExcluir': pode('pendencias'); msg = pendExcluir(req.id); extra.pendencias = true; break;
         default: throw falha('Ação desconhecida.');
       }
@@ -3787,6 +3789,50 @@ const PEND_INICIAIS = [
   [4, "21", "Pintura dos tubos PVC abaixo do deck de marrom", "Pendente", "Aguardando compra da tinta"]
 ];
 
+// ---------- comprovação da conclusão das pendências: fotos, PDF e Excel numa pasta própria do Drive ----------
+const PEND_ANEXO_MAX = 15;
+const PEND_ANEXO_TIPOS = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'application/pdf': 'pdf',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx', 'application/vnd.ms-excel': 'xls' };
+function pastaComprovacoes() { return pastaDrive('PASTA_PEND_COMPROV', 'Comprovações das pendências - Pier Gestão'); }
+function pendAnexosDe(p) { try { const l = JSON.parse(p.anexos || '[]'); return Array.isArray(l) ? l : []; } catch (e) { return []; } }
+// só depois de concluída (ou com a conclusão pedida, aguardando aprovação)
+function pendPodeComprovar(p) { return p.status === 'Concluído' || (!!String(p.conclPedida || '').trim() && p.status !== 'Cancelado'); }
+function pendAnexo(r, conta) {
+  const t = tabela('pend'), id = texto(r.id, 40);
+  const p = linhasOnde(t, ['id'], o => o.id === id)[0];
+  if (!p) throw falha('Pendência não encontrada. Atualize a tela.');
+  const l = pendAnexosDe(p);
+  if (r.op === 'remover') {
+    const a = l.find(x => x.id === String(r.fileId || ''));
+    if (!a) throw falha('Arquivo não encontrado nesta pendência.');
+    if (a.u !== conta.usuario && conta.perfil !== PERFIL_TOTAL && !ehGerente(conta)) throw falha('Só quem anexou, a Administração ou o gerente podem tirar este arquivo.');
+    try { fotoDaPasta(a.id, pastaComprovacoes()).setTrashed(true); } catch (e) {}
+    gravar(t, { anexos: JSON.stringify(l.filter(x => x.id !== a.id)), atualizadoEm: agora(), atualizadoPor: conta.nome }, p._row);
+    AUDIT_DET = 'Tirou comprovação da pendência ' + (p.numero || p.id);
+    return 'Arquivo retirado da comprovação.';
+  }
+  if (!pendPodeComprovar(p)) throw falha('A comprovação é anexada depois de concluir a pendência (ou de pedir a conclusão).');
+  if (l.length >= PEND_ANEXO_MAX) throw falha('Esta pendência já tem ' + PEND_ANEXO_MAX + ' arquivos de comprovação.');
+  const ext = PEND_ANEXO_TIPOS[r.mime];
+  if (!ext) throw falha('Envie foto (JPG ou PNG), PDF ou planilha do Excel.');
+  const b64 = String(r.b64 || '');
+  if (!b64 || b64.length > 10000000) throw falha('O arquivo está muito grande (máximo de 7 MB).');
+  const nome = ('Pendência ' + (p.numero || '') + ' - ' + String(p.titulo || '').slice(0, 50) + ' - comprovação ' + (l.length + 1)).replace(/[\\/:*?"<>|]/g, '-') + '.' + ext;
+  const f = pastaComprovacoes().createFile(Utilities.newBlob(Utilities.base64Decode(b64), r.mime, nome));
+  l.push({ id: f.getId(), nome: texto(r.nome, 120) || nome, mime: r.mime, em: agora(), por: conta.nome, u: conta.usuario });
+  gravar(t, { anexos: JSON.stringify(l), atualizadoEm: agora(), atualizadoPor: conta.nome }, p._row);
+  AUDIT_DET = 'Anexou comprovação na pendência ' + (p.numero || p.id);
+  return 'Comprovação anexada.';
+}
+// abre um arquivo: só os que pertencem à pendência e estão na pasta das comprovações
+function pendVerAnexo(r) {
+  const p = linhasOnde(tabela('pend'), ['id'], o => o.id === texto(r.id, 40))[0];
+  if (!p) throw falha('Pendência não encontrada.');
+  const fid = String(r.fileId || '');
+  if (!fid || !pendAnexosDe(p).some(a => a.id === fid)) throw falha('Arquivo não encontrado nesta pendência.');
+  return verArquivo(fid, pastaComprovacoes());
+}
+
 function pendLista() {
   const t = tabela('pend');
   let lista = linhas(t);
@@ -3809,7 +3855,7 @@ function pendLista() {
       concluidoEm: p.concluidoEm, prazoDefinidoEm: p.prazoDefinidoEm, prazoDefinidoPor: p.prazoDefinidoPor,
       criadaEm: p.criadaEm, prazoAtualizado: p.prazoAtualizado, aprovacao: p.aprovacao, aprovGerente: p.aprovGerente,
       aprovSindico: p.aprovSindico, conclPedida: p.conclPedida, conclData: p.conclData, conclGerente: p.conclGerente,
-      conclSindico: p.conclSindico, os: p.os, osId: p.osId,
+      conclSindico: p.conclSindico, os: p.os, osId: p.osId, anexos: pendAnexosDe(p).map(a => ({ id: a.id, nome: a.nome, mime: a.mime, em: a.em, por: a.por })),
       osStatus: p.osId && osPorId[p.osId] ? osPorId[p.osId].status : '', osSetor: p.osId && osPorId[p.osId] ? osSetor(osPorId[p.osId]) : '',
       cotId: cotPorPend[p.id] ? cotPorPend[p.id].id : '', cotNumero: cotPorPend[p.id] ? cotPorPend[p.id].numero : '',
       cotStatus: cotPorPend[p.id] ? cotPorPend[p.id].status : '' }))
@@ -4950,7 +4996,7 @@ function limparFalhasLogin(usuario) { if (usuario) PropertiesService.getScriptPr
 
 // --- histórico de auditoria (aba Auditoria) ---
 const ACOES_AUDIT = {
-  cotSalvar: 'Cotação', cotArquivo: 'Arquivo de cotação', guaritaSalvar: 'Guarita (visitante/prestador)', barcoSalvar: 'Barco (passageiros)', avisoSalvar: 'Quadro de avisos (Guarita Norte)',
+  cotSalvar: 'Cotação', cotArquivo: 'Arquivo de cotação', pendAnexo: 'Comprovação de pendência', guaritaSalvar: 'Guarita (visitante/prestador)', barcoSalvar: 'Barco (passageiros)', avisoSalvar: 'Quadro de avisos (Guarita Norte)',
   prestSalvar: 'Prestador de serviço', prestVisita: 'Visita de prestador', prestDoc: 'Documento de prestador', prestDocRemover: 'Tirou documento de prestador', prestImportar: 'Importou planilha de prestadores',
   unSalvar: 'Unidade', unConfig: 'Configuração das unidades', unOcupadas: 'Marcou unidades ocupadas', unImportar: 'Importou cadastro de moradores',
   fornSalvar: 'Fornecedor', fornImportar: 'Importou planilha de fornecedores', fornDasCotacoes: 'Trouxe fornecedores das cotações',
