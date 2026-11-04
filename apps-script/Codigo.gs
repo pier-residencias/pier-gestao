@@ -210,6 +210,14 @@ const ABAS = {
       ['saidaPor', 'Saída registrada por'], ['motivo', 'Motivo do cancelamento'], ['canceladoEm', 'Cancelado em'], ['canceladoPor', 'Cancelado por'], ['versao', 'Versão']],
     num: ['versao']
   },
+  // Quadro de avisos da Guarita Norte: só a Administração publica; os porteiros dão ciente
+  avisos: {
+    nome: 'Guarita Norte - avisos',
+    criar: true,
+    cols: [['id', 'ID'], ['titulo', 'Título'], ['texto', 'Recado'], ['prioridade', 'Prioridade'], ['validoAte', 'Válido até'], ['status', 'Situação'],
+      ['criadoEm', 'Publicado em'], ['criadoPor', 'Publicado por'], ['editadoEm', 'Alterado em'], ['editadoPor', 'Alterado por'], ['cientes', 'Cientes'], ['versao', 'Versão']],
+    num: ['versao']
+  },
   // Barco do condomínio (táxi boat), controlado na Guarita Sul: um passageiro (ou grupo) por linha, em cada viagem do dia
   barco: {
     nome: 'Barco - passageiros',
@@ -412,7 +420,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-04 Pier Gestão 2.0 — Guaritas Sul e Norte';
+const VERSAO = '2026-11-04 Pier Gestão 2.0 — quadro de avisos da Guarita Norte';
 
 function doGet() {
   TABS = {};
@@ -486,6 +494,7 @@ function doPost(e) {
     if (req.acao === 'relatorio') { pode('dashboard'); return json(Object.assign(base, { relatorio: relatorio(req.de, req.ate, conta) })); }
     if (req.acao === 'usuarios') { pode('usuarios'); return json(Object.assign(base, { equipe: equipe() })); }
     if (req.acao === 'guaritas') return json(Object.assign(base, guaLista(req, conta)));
+    if (req.acao === 'avisos') return json(Object.assign(base, avLista(conta)));
     if (req.acao === 'barco') return json(Object.assign(base, barcoDia(req, conta)));
     if (req.acao === 'barcoMes') return json(Object.assign(base, barcoMes(req, conta)));
     if (req.acao === 'correspondencias') { corrExigir(conta); return json(Object.assign(base, {correspondencias:linhas(tabela('correspondencias')).map(corrPublica)})); }
@@ -550,6 +559,7 @@ function doPost(e) {
         case 'trocarSenha': msg = trocarMinhaSenha(req, conta); extra.semDados = true; break;
         case 'pendSalvar': pode('pendencias'); msg = pendSalvar(req.pend || {}, conta); extra.pendencias = true; break;
         case 'guaritaSalvar': msg = guaSalvar(req, conta); extra.semDados = true; break;
+        case 'avisoSalvar': msg = avSalvar(req, conta); extra.semDados = true; break;
         case 'barcoSalvar': msg = barcoSalvar(req, conta); extra.semDados = true; break;
         case 'correspondenciaSalvar': corrExigir(conta); msg = corrSalvar(req, conta); extra.semDados = true; break;
         case 'fornSalvar': pode('pendencias'); msg = fornSalvar(req, conta); extra.forn = true; extra.semDados = true; break;
@@ -4940,7 +4950,7 @@ function limparFalhasLogin(usuario) { if (usuario) PropertiesService.getScriptPr
 
 // --- histórico de auditoria (aba Auditoria) ---
 const ACOES_AUDIT = {
-  cotSalvar: 'Cotação', cotArquivo: 'Arquivo de cotação', guaritaSalvar: 'Guarita (visitante/prestador)', barcoSalvar: 'Barco (passageiros)',
+  cotSalvar: 'Cotação', cotArquivo: 'Arquivo de cotação', guaritaSalvar: 'Guarita (visitante/prestador)', barcoSalvar: 'Barco (passageiros)', avisoSalvar: 'Quadro de avisos (Guarita Norte)',
   prestSalvar: 'Prestador de serviço', prestVisita: 'Visita de prestador', prestDoc: 'Documento de prestador', prestDocRemover: 'Tirou documento de prestador', prestImportar: 'Importou planilha de prestadores',
   unSalvar: 'Unidade', unConfig: 'Configuração das unidades', unOcupadas: 'Marcou unidades ocupadas', unImportar: 'Importou cadastro de moradores',
   fornSalvar: 'Fornecedor', fornImportar: 'Importou planilha de fornecedores', fornDasCotacoes: 'Trouxe fornecedores das cotações',
@@ -5939,6 +5949,69 @@ function guaSalvar(req, conta) {
   gravar(t, o, ja._row);
   AUDIT_DET = (o.status === 'Saiu' ? 'Saída' : 'Cancelou entrada') + ' · Guarita ' + g + ' · ' + ja.id;
   return o.status === 'Saiu' ? 'Saída registrada.' : 'Registro cancelado; o histórico fica guardado.';
+}
+
+// ---------- Quadro de avisos da Guarita Norte ----------
+// Publicar, alterar e arquivar: só o perfil Administração. Ler e dar ciente: quem tem a Guarita Norte (e a Administração).
+const AV_PRIOR = ['Normal', 'Importante', 'Urgente'];
+function avAdm(conta) { return !!conta && conta.perfil === PERFIL_TOTAL; }
+function avExigirLer(conta) { if (!avAdm(conta) && !(conta && conta.perms && conta.perms.gua_norte)) throw falha('Seu perfil não tem acesso ao quadro de avisos da Guarita Norte.'); }
+function avCientes(x) { try { const l = JSON.parse(x.cientes || '[]'); return Array.isArray(l) ? l : []; } catch (e) { return []; } }
+function avLista(conta) {
+  avExigirLer(conta);
+  const h = hoje(), adm = avAdm(conta), limite = Utilities.formatDate(new Date(Date.now() - 30 * 864e5), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  const l = linhas(tabela('avisos')).map(x => {
+    const vencido = !!x.validoAte && x.validoAte < h, ativo = x.status === 'Ativo' && !vencido, cientes = avCientes(x);
+    return { id: x.id, titulo: x.titulo, texto: x.texto, prioridade: x.prioridade, validoAte: x.validoAte, ativo, status: x.status === 'Ativo' && vencido ? 'Vencido' : x.status,
+      criadoEm: x.criadoEm, criadoPor: x.criadoPor, editadoEm: x.editadoEm, editadoPor: x.editadoPor, versao: x.versao,
+      cientes: adm ? cientes : [], euCiente: cientes.some(c => c.u === conta.usuario) };
+  }).filter(x => x.ativo || (adm && String(x.editadoEm || x.criadoEm).slice(0, 10) >= limite));
+  return { avisos: l, avAdm: adm };
+}
+function avSalvar(req, conta) {
+  const t = tabela('avisos');
+  if (req.op === 'ciente') {
+    avExigirLer(conta);
+    const x = linhasOnde(t, ['id'], o => o.id === String(req.id || ''))[0];
+    if (!x || x.status !== 'Ativo') throw falha('Aviso não encontrado. Atualize a tela.');
+    const l = avCientes(x);
+    if (l.some(c => c.u === conta.usuario)) return 'Você já estava ciente.';
+    l.push({ u: conta.usuario, n: conta.nome, em: agora() });
+    gravar(t, { cientes: JSON.stringify(l) }, x._row);
+    AUDIT_DET = 'Ciente do aviso ' + x.id;
+    return 'Ciente registrado.';
+  }
+  if (!avAdm(conta)) throw falha('Somente a Administração pode publicar ou alterar avisos.');
+  if (req.op === 'arquivar') {
+    const x = linhasOnde(t, ['id'], o => o.id === String(req.id || ''))[0];
+    if (!x) throw falha('Aviso não encontrado. Atualize a tela.');
+    gravar(t, { status: 'Arquivado', editadoEm: agora(), editadoPor: conta.nome, versao: Number(x.versao || 1) + 1 }, x._row);
+    AUDIT_DET = 'Arquivou aviso ' + x.id;
+    return 'Aviso retirado do quadro.';
+  }
+  const v = req.aviso || {};
+  const o = { titulo: texto(v.titulo, 100), texto: texto(v.texto, 2000), prioridade: texto(v.prioridade, 20), validoAte: texto(v.validoAte, 10) };
+  if (!o.titulo || !o.texto) throw falha('Informe o título e o recado.');
+  if (AV_PRIOR.indexOf(o.prioridade) < 0) throw falha('Prioridade inválida.');
+  if (o.validoAte && !/^\d{4}-\d{2}-\d{2}$/.test(o.validoAte)) throw falha('Data de validade inválida.');
+  if (o.validoAte && o.validoAte < hoje()) throw falha('A validade não pode ser no passado.');
+  if (req.op === 'criar') {
+    Object.assign(o, { id: novoId('AV'), status: 'Ativo', criadoEm: agora(), criadoPor: conta.nome, cientes: '[]', versao: 1 });
+    gravar(t, o);
+    AUDIT_DET = 'Publicou aviso ' + o.id;
+    return 'Aviso publicado. Os porteiros serão avisados na tela.';
+  }
+  if (req.op === 'editar') {
+    const x = linhasOnde(t, ['id'], q => q.id === String(req.id || ''))[0];
+    if (!x || x.status !== 'Ativo') throw falha('Aviso não encontrado. Atualize a tela.');
+    if (Number(req.versao) !== Number(x.versao)) throw falha('O aviso mudou. Atualize a tela antes de alterar.');
+    // recado alterado: todos precisam dar ciente de novo
+    Object.assign(o, { editadoEm: agora(), editadoPor: conta.nome, cientes: '[]', versao: Number(x.versao) + 1 });
+    gravar(t, o, x._row);
+    AUDIT_DET = 'Alterou aviso ' + x.id;
+    return 'Aviso alterado. Os porteiros serão avisados de novo.';
+  }
+  throw falha('Operação inválida.');
 }
 
 // ---------- Barco do condomínio (Guarita Sul): controle de passageiros por viagem ----------
