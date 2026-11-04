@@ -200,6 +200,33 @@ const ABAS = {
       ['importadoEm', 'Importado em'], ['importadoPor', 'Importado por'], ['resumo', 'Resultado']],
     num: ['tamanho']
   },
+  // Guaritas Sul e Norte: entrada e saída de visitantes e prestadores de serviço (pedido de 04/11/2026)
+  gua: {
+    nome: 'Guaritas',
+    criar: true,
+    cols: [['id', 'ID'], ['operacaoId', 'Operação'], ['guarita', 'Guarita'], ['tipo', 'Tipo'], ['nome', 'Nome'], ['documento', 'Documento'],
+      ['empresa', 'Empresa / serviço'], ['bloco', 'Destino (bloco ou área)'], ['unidade', 'Unidade'], ['autorizadoPor', 'Autorizado por'], ['placa', 'Placa'],
+      ['obs', 'Observação'], ['status', 'Situação'], ['entradaEm', 'Entrada'], ['entradaPor', 'Entrada registrada por'], ['saidaEm', 'Saída'],
+      ['saidaPor', 'Saída registrada por'], ['motivo', 'Motivo do cancelamento'], ['canceladoEm', 'Cancelado em'], ['canceladoPor', 'Cancelado por'], ['versao', 'Versão']],
+    num: ['versao']
+  },
+  // Barco do condomínio (táxi boat), controlado na Guarita Sul: um passageiro (ou grupo) por linha, em cada viagem do dia
+  barco: {
+    nome: 'Barco - passageiros',
+    criar: true,
+    cols: [['id', 'ID'], ['operacaoId', 'Operação'], ['data', 'Data'], ['grade', 'Grade'], ['horario', 'Horário'], ['trajeto', 'Trajeto'], ['nome', 'Nome do passageiro'],
+      ['categoria', 'Morador / Visitante / Pier / Funcionário(a)'], ['blocoApto', 'Bloco / apartamento'], ['qtd', 'Quantidade'], ['obs', 'Observação'], ['status', 'Situação'],
+      ['registradoEm', 'Registrado em'], ['registradoPor', 'Registrado por'], ['canceladoEm', 'Removido em'], ['canceladoPor', 'Removido por']],
+    num: ['qtd']
+  },
+  // operador do barco e rendições de cada dia
+  barcod: {
+    nome: 'Barco - dias',
+    criar: true,
+    cols: [['id', 'ID'], ['data', 'Data'], ['operadorDia', 'Operador diurno (07h às 19h)'], ['operadorNoite', 'Operador noturno (19h às 07h)'], ['almocoDe', 'Rendição almoço de'], ['almocoAte', 'Rendição almoço até'],
+      ['jantaDe', 'Rendição janta de'], ['jantaAte', 'Rendição janta até'], ['obs', 'Observação'], ['atualizadoEm', 'Atualizado em'], ['atualizadoPor', 'Atualizado por']],
+    num: []
+  },
   // medição individual de água por unidade (relatório mensal da Exista) e o resumo de cada período (conta da concessionária)
   mi: {
     nome: 'Medição individual',
@@ -385,7 +412,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-02 Pier Gestão 2.0 — sem Espaços e Demandas no menu';
+const VERSAO = '2026-11-04 Pier Gestão 2.0 — Guaritas Sul e Norte';
 
 function doGet() {
   TABS = {};
@@ -458,6 +485,9 @@ function doPost(e) {
     if (req.acao === 'dados') return json(Object.assign(base, { dados: dados(req.meses, conta) }));
     if (req.acao === 'relatorio') { pode('dashboard'); return json(Object.assign(base, { relatorio: relatorio(req.de, req.ate, conta) })); }
     if (req.acao === 'usuarios') { pode('usuarios'); return json(Object.assign(base, { equipe: equipe() })); }
+    if (req.acao === 'guaritas') return json(Object.assign(base, guaLista(req, conta)));
+    if (req.acao === 'barco') return json(Object.assign(base, barcoDia(req, conta)));
+    if (req.acao === 'barcoMes') return json(Object.assign(base, barcoMes(req, conta)));
     if (req.acao === 'correspondencias') { corrExigir(conta); return json(Object.assign(base, {correspondencias:linhas(tabela('correspondencias')).map(corrPublica)})); }
     if (req.acao === 'fornecedores') { pode('pendencias'); return json(Object.assign(base, fornLista())); }
     if (req.acao === 'cotLista') { pode('pendencias'); return json(Object.assign(base, cotLista())); }
@@ -519,6 +549,8 @@ function doPost(e) {
         case 'excluirPerfil': pode('usuarios'); msg = excluirPerfil(req.nome); extra.equipe = equipe(); break;
         case 'trocarSenha': msg = trocarMinhaSenha(req, conta); extra.semDados = true; break;
         case 'pendSalvar': pode('pendencias'); msg = pendSalvar(req.pend || {}, conta); extra.pendencias = true; break;
+        case 'guaritaSalvar': msg = guaSalvar(req, conta); extra.semDados = true; break;
+        case 'barcoSalvar': msg = barcoSalvar(req, conta); extra.semDados = true; break;
         case 'correspondenciaSalvar': corrExigir(conta); msg = corrSalvar(req, conta); extra.semDados = true; break;
         case 'fornSalvar': pode('pendencias'); msg = fornSalvar(req, conta); extra.forn = true; extra.semDados = true; break;
         case 'fornImportar': pode('pendencias'); msg = fornImportar(req, conta); extra.forn = true; extra.semDados = true; break;
@@ -1020,6 +1052,8 @@ const PERMISSOES = [
   ['un_editar', 'Editar unidades e moradores', 'Atualizar o cadastro das unidades, configurar blocos e unidades e importar a planilha (setor Administração)', 'Unidades'],
   ['med_lancar', 'Lançar medições', 'Lançar as leituras dos medidores e as contas de água, energia e gás, cadastrar medidores e importar planilha (setor Administração)', 'Medições'],
   ['med_ver', 'Ver relatórios de medições', 'Ver os medidores, os lançamentos e os relatórios de consumo (setor Administração)', 'Medições'],
+  ['gua_sul', 'Guarita Sul', 'Registrar a entrada e a saída de visitantes e prestadores na Guarita Sul (setor Guaritas)', 'Guaritas'],
+  ['gua_norte', 'Guarita Norte', 'Registrar a entrada e a saída de visitantes e prestadores na Guarita Norte (setor Guaritas)', 'Guaritas'],
   ['espacos', 'Espaços e reservas', 'Reservas do Espaço Gourmet e outros espaços, vistoria de entrega/devolução e cadastro dos espaços (setor Administração)', 'Espaços']
 ];
 const PADRAO_MANUTENCAO = ['painel', 'itens_ver', 'historico_ver', 'registrar_saida', 'registrar_entrada',
@@ -1469,7 +1503,9 @@ function garantirColunasPerfis(sh) {
     if (i === 0) return faltam.map(p => p[1]);
     if (!linhaDePerfil(r, head)) return faltam.map(() => '');
     const nome = String(r[0]).trim();
-    return faltam.map(p => nome === PERFIL_TOTAL || (nome === 'Manutenção' && PADRAO_MANUTENCAO.indexOf(p[0]) >= 0) ? 'Sim' : 'Não');
+    // as guaritas já chegam liberadas para a gerência (pedido de 04/11/2026)
+    return faltam.map(p => nome === PERFIL_TOTAL || (nome === 'Manutenção' && PADRAO_MANUTENCAO.indexOf(p[0]) >= 0)
+      || (/^gua_/.test(p[0]) && chaveNome(nome).indexOf('gerente') >= 0) ? 'Sim' : 'Não');
   });
   const necessarias = ncol + faltam.length;
   if (sh.getMaxColumns() < necessarias) sh.insertColumnsAfter(sh.getMaxColumns(), necessarias - sh.getMaxColumns());
@@ -1480,6 +1516,10 @@ function garantirColunasPerfis(sh) {
   sh.getRange(2, ncol + 1, 50, faltam.length).setDataValidation(
     SpreadsheetApp.newDataValidation().requireValueInList(['Sim', 'Não'], true).build()
   );
+  // quando as permissões das guaritas chegam, cria uma vez só o perfil Porteiro (só as duas guaritas; ajustável em Usuários)
+  if (faltam.some(p => p[0] === 'gua_sul') && !vals.some((r, i) => i > 0 && String(r[0]).trim() === 'Porteiro')) {
+    try { salvarPerfil({ nome: 'Porteiro', perms: { gua_sul: true, gua_norte: true } }); } catch (e) { /* o perfil pode ser criado depois em Usuários */ }
+  }
 }
 
 // Cria a aba "Usuarios" na primeira vez, com a administração e 3 funcionários.
@@ -3418,7 +3458,7 @@ function autorizar() {
   abaPerfis();
   tabela('itens');
   tabela('audit');
-  const limpeza = garantirLimpeza() + garantirSindico() + garantirGerente();
+  const limpeza = garantirLimpeza() + garantirSindico() + garantirGerente() + garantirPorteiro();
   abaEmails();
   garantirLinhaEmail('Segurança');
   Logger.log('Acionadores do projeto: ' + ScriptApp.getProjectTriggers().length + ' (a permissão para os lembretes automáticos fica autorizada).');
@@ -4900,7 +4940,7 @@ function limparFalhasLogin(usuario) { if (usuario) PropertiesService.getScriptPr
 
 // --- histórico de auditoria (aba Auditoria) ---
 const ACOES_AUDIT = {
-  cotSalvar: 'Cotação', cotArquivo: 'Arquivo de cotação',
+  cotSalvar: 'Cotação', cotArquivo: 'Arquivo de cotação', guaritaSalvar: 'Guarita (visitante/prestador)', barcoSalvar: 'Barco (passageiros)',
   prestSalvar: 'Prestador de serviço', prestVisita: 'Visita de prestador', prestDoc: 'Documento de prestador', prestDocRemover: 'Tirou documento de prestador', prestImportar: 'Importou planilha de prestadores',
   unSalvar: 'Unidade', unConfig: 'Configuração das unidades', unOcupadas: 'Marcou unidades ocupadas', unImportar: 'Importou cadastro de moradores',
   fornSalvar: 'Fornecedor', fornImportar: 'Importou planilha de fornecedores', fornDasCotacoes: 'Trouxe fornecedores das cotações',
@@ -5047,6 +5087,13 @@ function garantirGerente() {
   const perms = {}; PERMISSOES.forEach(p => { if (['usuarios', 'un_ver', 'un_editar', 'med_lancar', 'med_ver'].indexOf(p[0]) < 0) perms[p[0]] = true; });
   salvarPerfil({ nome: 'Gerente', perms });
   return ' Perfil Gerente criado.';
+}
+
+// Perfil "Porteiro": só as Guaritas Sul e Norte (criado uma vez só; ajustável na tela Usuários)
+function garantirPorteiro() {
+  if (lerPerfis()['Porteiro']) return '';
+  salvarPerfil({ nome: 'Porteiro', perms: { gua_sul: true, gua_norte: true } });
+  return ' Perfil Porteiro criado.';
 }
 
 // Perfil "Síndico": só o controle de pendências, com acesso completo (criado uma vez só)
@@ -5840,6 +5887,119 @@ function corrSalvar(req, conta) {
   }
   gravar(t,o,ja._row); AUDIT_DET = alvo+' · correspondência '+ja.id+' · '+ja.bloco+'/'+ja.unidade;
   return alvo === 'Entregue' ? 'Retirada registrada.' : 'Recebimento cancelado; histórico preservado.';
+}
+
+// ---------- Guaritas Sul e Norte: visitantes e prestadores de serviço ----------
+// Cada guarita tem a sua permissão (gua_sul / gua_norte); o perfil Porteiro é criado com as duas.
+const GUARITAS = { Sul: 'gua_sul', Norte: 'gua_norte' };
+const GUA_TIPOS = ['Visitante', 'Prestador de serviço', 'Entregador', 'Outro'];
+function guaExigir(conta, g) {
+  if (!GUARITAS[g]) throw falha('Guarita inválida.');
+  if (!conta || !conta.perms || !conta.perms[GUARITAS[g]]) throw falha('Seu perfil não tem acesso à Guarita ' + g + '.');
+}
+function guaPublica(x) { const o = Object.assign({}, x); delete o._row; delete o.operacaoId; return o; }
+// quem está dentro (qualquer data) e as entradas dos últimos dias (padrão 7, até 90)
+function guaLista(req, conta) {
+  const g = texto(req.guarita, 10); guaExigir(conta, g);
+  const dias = Math.min(90, Math.max(1, Math.floor(Number(req.dias)) || 7));
+  const desde = Utilities.formatDate(new Date(Date.now() - (dias - 1) * 864e5), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  const l = linhasOnde(tabela('gua'), ['guarita', 'status', 'entradaEm'], o => o.guarita === g && (o.status === 'Dentro' || String(o.entradaEm).slice(0, 10) >= desde));
+  return { guarita: g, dias, registros: l.map(guaPublica) };
+}
+function guaSalvar(req, conta) {
+  const g = texto(req.guarita, 10); guaExigir(conta, g);
+  const t = tabela('gua');
+  if (req.op === 'entrada') {
+    const operacaoId = texto(req.operacaoId, 80);
+    if (!/^[a-zA-Z0-9_-]{12,80}$/.test(operacaoId)) throw falha('Identificador da operação inválido.');
+    if (linhasOnde(t, ['operacaoId'], o => o.operacaoId === operacaoId).length) return 'Entrada já registrada.';
+    const v = req.registro || {};
+    const o = { guarita: g, tipo: texto(v.tipo, 30), nome: texto(v.nome, 100), documento: texto(v.documento, 30), empresa: texto(v.empresa, 100),
+      bloco: texto(v.bloco, 60), unidade: texto(v.unidade, 30), autorizadoPor: texto(v.autorizadoPor, 100), placa: texto(v.placa, 10).toUpperCase(), obs: texto(v.obs, 500) };
+    if (GUA_TIPOS.indexOf(o.tipo) < 0) throw falha('Tipo inválido.');
+    if (!o.nome || !o.bloco) throw falha('Informe o nome e o destino (bloco ou área).');
+    if (o.tipo === 'Prestador de serviço' && !o.empresa) throw falha('Informe a empresa ou o serviço do prestador.');
+    Object.assign(o, { id: novoId('GU'), operacaoId, status: 'Dentro', entradaEm: agora(), entradaPor: conta.nome, versao: 1 });
+    gravar(t, o);
+    AUDIT_DET = 'Entrada na Guarita ' + g + ' · ' + o.tipo + ' · ' + o.id;
+    return 'Entrada registrada.';
+  }
+  const id = String(req.id || '');
+  const ja = id ? linhasOnde(t, ['id'], o => o.id === id)[0] : null;
+  if (!ja || ja.guarita !== g) throw falha('Registro não encontrado. Atualize a lista.');
+  if (ja.status !== 'Dentro') throw falha('Este registro já foi finalizado. Atualize a lista.');
+  if (Number(req.versao) !== Number(ja.versao)) throw falha('O registro mudou. Atualize a lista antes de continuar.');
+  const o = { versao: Number(ja.versao) + 1 };
+  if (req.op === 'saida') { o.status = 'Saiu'; o.saidaEm = agora(); o.saidaPor = conta.nome; }
+  else if (req.op === 'cancelar') {
+    o.motivo = texto(req.motivo, 500);
+    if (!o.motivo) throw falha('Informe o motivo do cancelamento.');
+    o.status = 'Cancelado'; o.canceladoEm = agora(); o.canceladoPor = conta.nome;
+  } else throw falha('Operação inválida.');
+  gravar(t, o, ja._row);
+  AUDIT_DET = (o.status === 'Saiu' ? 'Saída' : 'Cancelou entrada') + ' · Guarita ' + g + ' · ' + ja.id;
+  return o.status === 'Saiu' ? 'Saída registrada.' : 'Registro cancelado; o histórico fica guardado.';
+}
+
+// ---------- Barco do condomínio (Guarita Sul): controle de passageiros por viagem ----------
+const BARCO_CATS = ['Morador(a)', 'Funcionário(a)', 'Pier', 'Visitante', 'Prestador de serviço'];
+const BARCO_GRADES = ['Dias úteis', 'Fim de semana e feriado'];
+function barcoData(v) { const d = texto(v, 10); if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) throw falha('Data inválida.'); return d; }
+function barcoPublica(x) { const o = Object.assign({}, x); delete o._row; delete o.operacaoId; return o; }
+function barcoDia(req, conta) {
+  guaExigir(conta, 'Sul');
+  const data = barcoData(req.data);
+  const passageiros = linhasOnde(tabela('barco'), ['data'], o => o.data === data).map(barcoPublica);
+  const dia = linhasOnde(tabela('barcod'), ['data'], o => o.data === data)[0] || null;
+  if (dia) delete dia._row;
+  return { data, passageiros, dia };
+}
+function barcoMes(req, conta) {
+  guaExigir(conta, 'Sul');
+  const mes = texto(req.mes, 7); if (!/^\d{4}-\d{2}$/.test(mes)) throw falha('Mês inválido.');
+  const passageiros = linhasOnde(tabela('barco'), ['data', 'status'], o => o.data.slice(0, 7) === mes && o.status !== 'Removido').map(barcoPublica);
+  const dias = linhasOnde(tabela('barcod'), ['data'], o => o.data.slice(0, 7) === mes).map(o => { delete o._row; return o; });
+  return { mes, passageiros, dias };
+}
+function barcoSalvar(req, conta) {
+  guaExigir(conta, 'Sul');
+  const data = barcoData(req.data);
+  if (req.op === 'passageiro') {
+    const t = tabela('barco'), operacaoId = texto(req.operacaoId, 80);
+    if (!/^[a-zA-Z0-9_-]{12,80}$/.test(operacaoId)) throw falha('Identificador da operação inválido.');
+    if (linhasOnde(t, ['operacaoId'], o => o.operacaoId === operacaoId).length) return 'Passageiro já registrado.';
+    const v = req.passageiro || {};
+    const o = { data, grade: texto(v.grade, 40), horario: texto(v.horario, 5), trajeto: texto(v.trajeto, 60), nome: texto(v.nome, 100), categoria: texto(v.categoria, 30),
+      blocoApto: texto(v.blocoApto, 30), qtd: Math.floor(Number(v.qtd) || 1), obs: texto(v.obs, 300) };
+    if (BARCO_GRADES.indexOf(o.grade) < 0) throw falha('Grade de horários inválida.');
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(o.horario) || !o.trajeto) throw falha('Informe o horário e o trajeto da viagem.');
+    if (BARCO_CATS.indexOf(o.categoria) < 0) throw falha('Escolha morador(a), funcionário(a), Pier, visitante ou prestador de serviço.');
+    if (!o.nome) throw falha('Informe o nome do passageiro.');
+    if (o.qtd < 1 || o.qtd > 50) throw falha('Quantidade inválida (1 a 50).');
+    Object.assign(o, { id: novoId('BA'), operacaoId, status: 'Ativo', registradoEm: agora(), registradoPor: conta.nome });
+    gravar(t, o);
+    AUDIT_DET = 'Barco ' + data + ' ' + o.horario + ' · ' + o.categoria + ' · ' + o.id;
+    return 'Passageiro registrado.';
+  }
+  if (req.op === 'remover') {
+    const t = tabela('barco'), id = String(req.id || '');
+    const ja = id ? linhasOnde(t, ['id'], o => o.id === id)[0] : null;
+    if (!ja || ja.data !== data) throw falha('Passageiro não encontrado. Atualize a tela.');
+    if (ja.status === 'Removido') return 'Este passageiro já tinha sido removido.';
+    gravar(t, { status: 'Removido', canceladoEm: agora(), canceladoPor: conta.nome }, ja._row);
+    AUDIT_DET = 'Removeu passageiro do barco ' + data + ' · ' + ja.id;
+    return 'Passageiro removido; o histórico fica guardado.';
+  }
+  if (req.op === 'dia') {
+    const t = tabela('barcod'), v = req.dia || {}, hora = h => { const s = texto(h, 5); if (s && !/^([01]\d|2[0-3]):[0-5]\d$/.test(s)) throw falha('Horário inválido: ' + s); return s; };
+    const o = { id: 'BD-' + data, data, operadorDia: texto(v.operadorDia, 100), operadorNoite: texto(v.operadorNoite, 100), almocoDe: hora(v.almocoDe), almocoAte: hora(v.almocoAte),
+      jantaDe: hora(v.jantaDe), jantaAte: hora(v.jantaAte), obs: texto(v.obs, 300), atualizadoEm: agora(), atualizadoPor: conta.nome };
+    const ja = linhasOnde(t, ['data'], x => x.data === data)[0];
+    gravar(t, o, ja ? ja._row : undefined);
+    AUDIT_DET = 'Turno do barco ' + data;
+    return 'Turno do dia salvo.';
+  }
+  throw falha('Operação inválida.');
 }
 
 // Ativação exclusiva da planilha oficial informada por Alexsandro.
