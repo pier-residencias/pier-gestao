@@ -33,14 +33,14 @@ const S = {
   tab:"painel", tipo:"saida", picked:null, iStatus:"", hTipo:"", histMes:mesDe(), ocupado:false, ultima:null,
   os:[], colab:[], oFiltro:"aberto", fotos:new Map(), dem:[], prev:[], dFiltro:"aberto", nfArq:[], nfAnexo:null, nfLida:null, nfAuto:null,
   iPer:{tipo:"", modo:"mes", mes:mesDe(), dia:hoje()}, mesesCarregados:[],
-  setores:["Manutenção"], setor:"Manutenção", empTodos:[], locais:{}, pend:null, adm:false
+  setores:["Manutenção"], setor:"Manutenção", empTodos:[], locais:{}, pend:null, adm:false, gua:false
 };
 const setorDe = x => (x && x.setor) || "Manutenção";
 const SETORES_PERM = [["Manutenção","setor_manutencao"],["Limpeza","setor_limpeza"]];
 const setoresDasPerms = p => { const l = SETORES_PERM.filter(x => p && p[x[1]]).map(x => x[0]); return l.length ? l : ["Manutenção"]; };
 const doSetor = x => setorDe(x) === S.setor;
 const can = p => p === "__perfil_administracao" ? S.perfil === "Administração" : !!(S.perms && S.perms[p]);
-const ABAS_PERM = {correspondencias:["__perfil_administracao"],contagem:["contagem_registrar","__perfil_administracao"],aprovacoes:["__perfil_administracao"],painel:["painel"], demandas:["dem_ver","dem_executar","dem_delegar"], os:["os_ver","os_abrir","os_atender","os_gerenciar"], registrar:["registrar_saida","registrar_entrada","registrar_troca","registrar_emprestimo"], itens:["itens_ver"], historico:["historico_ver"], emprestimos:["devolver","registrar_emprestimo"], dashboard:["dashboard"], indicadores:["dashboard"], categorias:["itens_ver"], prestadores:["os_ver","os_abrir","os_atender","os_gerenciar","dem_ver","dem_executar","dem_delegar"], equipe:["os_gerenciar","dem_delegar"], minhaequipe:["os_gerenciar","dem_delegar"], usuarios:["usuarios"], inicio:["pendencias","usuarios","acessos"], pendencias:["pendencias"], pdpainel:["pendencias"], rondas:["ronda_ver","ronda_fazer"], unidades:["un_ver","un_editar"], uncadastro:["un_ver","un_editar"], unconfig:["un_editar"], medlanc:["med_lancar"], medidores:["med_ver","med_lancar"], medrel:["med_ver","med_lancar"], medind:["med_ver","med_lancar"], esreservas:["espacos"], fornecedores:["pendencias"], esvistorias:["espacos"], esespacos:["espacos"], cotacoes:["pendencias"], acessos:["acessos"]};
+const ABAS_PERM = {gsul:["gua_sul"], gbarco:["gua_sul"], gnorte:["gua_norte"], correspondencias:["__perfil_administracao"],contagem:["contagem_registrar","__perfil_administracao"],aprovacoes:["__perfil_administracao"],painel:["painel"], demandas:["dem_ver","dem_executar","dem_delegar"], os:["os_ver","os_abrir","os_atender","os_gerenciar"], registrar:["registrar_saida","registrar_entrada","registrar_troca","registrar_emprestimo"], itens:["itens_ver"], historico:["historico_ver"], emprestimos:["devolver","registrar_emprestimo"], dashboard:["dashboard"], indicadores:["dashboard"], categorias:["itens_ver"], prestadores:["os_ver","os_abrir","os_atender","os_gerenciar","dem_ver","dem_executar","dem_delegar"], equipe:["os_gerenciar","dem_delegar"], minhaequipe:["os_gerenciar","dem_delegar"], usuarios:["usuarios"], inicio:["pendencias","usuarios","acessos"], pendencias:["pendencias"], pdpainel:["pendencias"], rondas:["ronda_ver","ronda_fazer"], unidades:["un_ver","un_editar"], uncadastro:["un_ver","un_editar"], unconfig:["un_editar"], medlanc:["med_lancar"], medidores:["med_ver","med_lancar"], medrel:["med_ver","med_lancar"], medind:["med_ver","med_lancar"], esreservas:["espacos"], fornecedores:["pendencias"], esvistorias:["espacos"], esespacos:["espacos"], cotacoes:["pendencias"], acessos:["acessos"]};
 // Se o navegador ainda estiver com a página antiga guardada, o menu Administração não existe nela:
 // o resto do sistema continua funcionando normalmente.
 const TEM_ADM = !!(document.getElementById("tab-adm") && document.getElementById("adm-menu") && document.getElementById("t-pendencias"));
@@ -56,13 +56,17 @@ const ESPACOS_ATIVO = false;
 if (!ESPACOS_ATIVO || !TEM_ADM || !document.getElementById("t-esreservas")) { delete ABAS_PERM.esreservas; delete ABAS_PERM.esvistorias; delete ABAS_PERM.esespacos; }
 if (!TEM_ADM || !document.getElementById("t-medlanc")) { delete ABAS_PERM.medlanc; delete ABAS_PERM.medidores; delete ABAS_PERM.medrel; delete ABAS_PERM.medind; }
 if (!document.getElementById("t-indicadores")) delete ABAS_PERM.indicadores;
+if (!document.getElementById("t-gsul")) { delete ABAS_PERM.gsul; delete ABAS_PERM.gbarco; delete ABAS_PERM.gnorte; }
 if (!TEM_ADM || !document.getElementById("t-acessos")) delete ABAS_PERM.acessos;
 // O que aparece depende de como a pessoa entrou: Manutenção (tudo do estoque, OS e demandas),
 // Limpeza (só o estoque da limpeza) ou Administração (só o menu Administração).
 // "inicio" primeiro: é a tela que abre ao entrar pela Administração
 const ABAS_ADM = ["inicio","correspondencias","aprovacoes","pendencias","pdpainel","cotacoes","rondas","unidades","uncadastro","unconfig","medlanc","medidores","medrel","medind","esreservas","esvistorias","esespacos","fornecedores","usuarios","acessos"];
+// Setor Guaritas (pedido de 04/11/2026): só as telas da Guarita Sul e da Guarita Norte; entra-se pela opção Guaritas
+const ABAS_GUA = ["gsul","gbarco","gnorte"];
+const podeGua = () => ABAS_GUA.some(t => (ABAS_PERM[t]||[]).some(can));
 const TIPOS_LIMPEZA = ["saida","entrada"];
-const modo = () => S.adm ? "Administração" : S.setor;
+const modo = () => S.gua ? "Guaritas" : S.adm ? "Administração" : S.setor;
 // Mesmo menu nos três setores (pedido de 24/10/2026); cada pessoa vê só o que o perfil permite.
 // O setor escolhido decide a página inicial (Home da Administração ou Painel do setor) e qual estoque e quais OS aparecem.
 // No setor Limpeza não há demandas nem empréstimos.
@@ -73,7 +77,7 @@ const modo = () => S.adm ? "Administração" : S.setor;
 // Central de medições (água, energia e gás): só no setor Administração (pedido de 24/10/2026)
 const SO_ADM = ["correspondencias","inicio","aprovacoes","pdpainel","pendencias","cotacoes","rondas","unidades","uncadastro","unconfig","medlanc","medidores","medrel","medind","esreservas","esvistorias","esespacos","fornecedores"], FORA_LIMPEZA = ["demandas","emprestimos","minhaequipe"], SO_MANUT = ["prestadores","contagem"];
 const naManut = () => !S.adm && S.setor !== "Limpeza";
-const abaNoModo = t => t === "painel" ? !S.adm : SO_ADM.includes(t) ? S.adm : SO_MANUT.includes(t) ? naManut() : !(!S.adm && S.setor === "Limpeza" && FORA_LIMPEZA.includes(t));
+const abaNoModo = t => ABAS_GUA.includes(t) ? !!S.gua : S.gua ? false : t === "painel" ? !S.adm : SO_ADM.includes(t) ? S.adm : SO_MANUT.includes(t) ? naManut() : !(!S.adm && S.setor === "Limpeza" && FORA_LIMPEZA.includes(t));
 const ehSindico = () => norm(S.perfil).includes("sindico");
 const ehGerente = () => norm(S.perfil).includes("gerente");
 // OS por ambiente: a Limpeza vê as OS da Limpeza; a Manutenção, as da Manutenção (inclui jardinagem e as antigas, sem setor)
@@ -82,7 +86,7 @@ const osDoAmb = o => (o.setor === "Limpeza" ? "Limpeza" : "Manutenção") === os
 const setoresReais = () => SETORES_PERM.filter(x => can(x[1])).map(x => x[0]);
 const podeAdm = () => ABAS_ADM.some(t => (ABAS_PERM[t]||[]).some(can));
 const podeAba = t => (ABAS_PERM[t]||[]).some(can) && abaNoModo(t);
-const primeiraAba = () => (S.adm ? ABAS_ADM.find(podeAba) : Object.keys(ABAS_PERM).find(podeAba)) || "painel";
+const primeiraAba = () => (S.gua ? ABAS_GUA.find(podeAba) : S.adm ? ABAS_ADM.find(podeAba) : Object.keys(ABAS_PERM).find(podeAba)) || "painel";
 const movsDoMes = ym => S.movs.filter(m => String(m.data).slice(0,7) === ym && doSetor(m));
 
 // descrição curta do aparelho, para o histórico de acessos
@@ -236,7 +240,7 @@ function mostrarLogin(msg){
   ($("#l-usuario").value ? $("#l-senha") : $("#l-usuario")).focus();
 }
 // sair encerra a sessão também no servidor: o código guardado no aparelho deixa de valer
-function encerrarLocal(msg){ rdQrLimpar(); RD.lista=null; RD.edit=null; RD.erro=""; INV_CT.val.clear(); INV_CT.msg=""; INV_AP.sel.clear(); INV_AP.ultimos=[]; INV_AP.aberto=null; S.contagens=[]; S.bloq=new Map(); S.token = ""; S.perms = {}; S.rel = null; S.eq = null; S.pend = null; unLimparMemoria(); mdLimpar(); miLimpar(); esLimpar(); FO.lista = null; fecharModal(); apagarSessao(); abrirMenuAdm(false); fecharMenu(); mostrarLogin(msg); renderMenu(); }
+function encerrarLocal(msg){ S.gua = false; GUA.Sul.lista = []; GUA.Norte.lista = []; BARCO.lista = []; BARCO.dia = null; BARCO.mes = null; BARCO.data = ""; rdQrLimpar(); RD.lista=null; RD.edit=null; RD.erro=""; INV_CT.val.clear(); INV_CT.msg=""; INV_AP.sel.clear(); INV_AP.ultimos=[]; INV_AP.aberto=null; S.contagens=[]; S.bloq=new Map(); S.token = ""; S.perms = {}; S.rel = null; S.eq = null; S.pend = null; unLimparMemoria(); mdLimpar(); miLimpar(); esLimpar(); FO.lista = null; fecharModal(); apagarSessao(); abrirMenuAdm(false); fecharMenu(); mostrarLogin(msg); renderMenu(); }
 function sair(msg){
   const tk = S.token;
   if (tk && API) { try { fetch(API, {method:"POST", body:JSON.stringify({acao:"sair", token:tk}), redirect:"follow", keepalive:true}).catch(()=>{}); } catch(e){} }
@@ -329,6 +333,20 @@ $("#f-login").addEventListener("submit", async ev => {
     const convidar = () => { if (rEntrar && rEntrar.senhaProvisoria) setTimeout(() => abrirMinhaSenha({provisoria:true, atual:senha}), 400); };
     const permitidos = setoresDasPerms(S.perms);
     try { localStorage.setItem("estoque-entrada", setorEscolhido); } catch(e){}
+    S.gua = false;
+    // Entrada pelas Guaritas: só as telas da Guarita Sul e da Guarita Norte que o perfil permite
+    if (setorEscolhido === "Guaritas") {
+      const aba = ABAS_GUA.find(t => (ABAS_PERM[t]||[]).some(can));
+      if (!aba) {
+        sair(""); $("#l-usuario").value = usuario;
+        msg.className = "hint err";
+        msg.textContent = "Este login não tem acesso às Guaritas. Peça à Administração para marcar Guarita Sul ou Guarita Norte no seu perfil.";
+        return;
+      }
+      S.setores = permitidos; S.setor = permitidos[0]; S.adm = true; S.gua = true; aplicarPermissoes();
+      guardar(); $("#login").hidden = true; renderMe(); setTab(aba); entradaDados(rEntrar); convidar();
+      return;
+    }
     // Entrada pela Administração: abre direto o menu Administração; o estoque fica no setor de sempre
     if (setorEscolhido === "Administração") {
       const aba = ABAS_ADM.find(t => (ABAS_PERM[t]||[]).some(can));
@@ -346,6 +364,7 @@ $("#f-login").addEventListener("submit", async ev => {
     }
     if (!setoresReais().length) {
       const soAdm = podeAdm();
+      if (!soAdm && podeGua()) { sair(""); $("#l-usuario").value = usuario; msg.className = "hint err"; msg.textContent = "Este login entra pela opção Guaritas, no campo Setor."; return; }
       sair(""); $("#l-usuario").value = usuario;
       msg.className = "hint err";
       msg.textContent = soAdm ? "Este login entra pela opção Administração, no campo Setor." : "Este login não tem acesso a nenhum setor.";
@@ -418,6 +437,8 @@ function setTab(t){
   if (t==="medind") { renderMI(); carregarMI(); carregarMed(); }
   if (t==="esreservas" || t==="esvistorias" || t==="esespacos") { renderEspTudo(); carregarEsp(); }
   if (t==="fornecedores") { renderForn(); carregarForn(); }
+  if (t==="gbarco") { barcoRender(); barcoCarregar(); }
+  if (t==="gsul" || t==="gnorte") { const g = t === "gsul" ? "Sul" : "Norte"; guaRender(g); guaCarregar(g); }
   if (t==="inicio") { renderInicio(); if (can("pendencias")) carregarPend(); }
   if (t==="acessos") carregarAcessos();
   if (t==="cotacoes") { renderCot(); carregarCot(); }
@@ -483,11 +504,12 @@ function proxCodigo(){
   return pre + String(max+1).padStart(pre === "MAN-" ? 4 : 3, "0");
 }
 // seletor de setor (Manutenção | Limpeza): aparece para quem vê mais de um
-function modosDisponiveis(){ return S.setores.filter(x => setoresReais().includes(x)).concat(TEM_ADM && podeAdm() ? ["Administração"] : []); }
+function modosDisponiveis(){ return S.setores.filter(x => setoresReais().includes(x)).concat(TEM_ADM && podeAdm() ? ["Administração"] : [], podeGua() ? ["Guaritas"] : []); }
 // ícones e descrições dos setores no seletor do cabeçalho
 const SETOR_INFO = {
   "Manutenção": {cls:"man", desc:"Estoque, OS e demandas", ico:'<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3.6 17.4a1.9 1.9 0 0 0 2.7 2.7l5.7-5.7a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.3-.3-2.4z"/>'},
   "Limpeza": {cls:"lim", desc:"Materiais de limpeza", ico:'<path d="M12 3.5c3 3.6 5.5 6.7 5.5 9.7a5.5 5.5 0 0 1-11 0c0-3 2.5-6.1 5.5-9.7z"/>'},
+  "Guaritas": {cls:"gua", desc:"Visitantes e prestadores", ico:'<path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6z"/><path d="m9 12 2 2 4-4"/>'},
   "Administração": {cls:"adm", desc:"Pendências, equipe e acessos", ico:'<rect x="3.5" y="7" width="17" height="12.5" rx="2"/><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7M3.5 12.5h17"/>'}
 };
 const icoSetor = s => `<svg viewBox="0 0 24 24" aria-hidden="true" class="ico">${(SETOR_INFO[s]||SETOR_INFO["Manutenção"]).ico}</svg>`;
@@ -564,6 +586,283 @@ function corrFormulario(op,id){
     finally{CORR.salvando=false;btn.disabled=false;}
   };
 }
+// ---------- Guaritas Sul e Norte: visitantes e prestadores de serviço (pedido de 04/11/2026) ----------
+// Cada guarita tem a sua tela (cores e lista próprias); as duas usam o mesmo registro na planilha (aba Guaritas).
+const GUA = {Sul:{lista:[], carregando:false, ger:0, erro:"", dias:7, filtro:"dentro", busca:""}, Norte:{lista:[], carregando:false, ger:0, erro:"", dias:7, filtro:"dentro", busca:""}, salvando:false};
+const GUA_INFO = {Sul:{aba:"gsul", outra:"Norte", desc:"Portaria Sul"}, Norte:{aba:"gnorte", outra:"Sul", desc:"Portaria Norte"}};
+const GUA_TIPOS = ["Visitante","Prestador de serviço","Entregador","Outro"];
+function guaHora(s){ s = String(s||""); if (!s) return ""; const d = s.slice(0,10), h = s.slice(11,16); return d === hoje() ? "hoje " + h : d.slice(8,10) + "/" + d.slice(5,7) + " " + h; }
+function guaTempo(s){ const t = Date.parse(String(s||"").replace(" ","T") + ":00-03:00"); if (!t) return ""; const m = Math.max(0, Math.round((Date.now() - t) / 60000)); return m < 60 ? m + " min" : Math.floor(m/60) + " h " + String(m%60).padStart(2,"0") + " min"; }
+function guaDoc(d){ d = String(d||"").trim(); return d.length > 4 ? "•••" + d.slice(-4) : d; }
+async function guaCarregar(g){
+  const st = GUA[g]; if (!S.token || !st || !podeAba(GUA_INFO[g].aba)) return;
+  const ger = ++st.ger, token = S.token; st.carregando = true; st.erro = ""; guaRender(g);
+  try { const r = await api("guaritas", {guarita:g, dias:st.dias}); if (S.token === token && ger === st.ger) st.lista = r.registros || []; }
+  catch(e){ if (S.token === token && ger === st.ger) st.erro = e.message || "Não foi possível carregar."; }
+  finally { if (S.token === token && ger === st.ger) { st.carregando = false; guaRender(g); } }
+}
+function guaRender(g){
+  const st = GUA[g], info = GUA_INFO[g], sec = document.getElementById("t-" + info.aba); if (!sec || !st) return;
+  if (!sec.dataset.pronto) {
+    sec.dataset.pronto = "1";
+    sec.innerHTML = `<div class="gua-hero"><div><p class="overline">GUARITAS · ${esc(info.desc.toUpperCase())}</p><h2>Guarita ${esc(g)}</h2><p>Entrada e saída de visitantes e prestadores de serviço.</p></div>
+      <div class="corr-acoes"><button type="button" class="btn primary" data-gua-nova="${g}">+ Registrar entrada</button>${g === "Sul" && podeAba("gbarco") ? `<button type="button" class="btn" data-go-barco>Barco do condomínio</button>` : ""}<button type="button" class="btn" data-gua-atualizar="${g}">Atualizar</button></div></div>
+      <div class="corr-resumo gua-resumo" data-gua-resumo></div>
+      <div class="panel stack"><div class="corr-filtros"><label>Buscar<input class="input" type="search" data-gua-busca placeholder="Nome, unidade, empresa, placa…"></label>
+        <label>Mostrar<select class="input" data-gua-filtro><option value="dentro">Dentro agora</option><option value="hoje">Entradas de hoje</option><option value="7">Últimos 7 dias</option><option value="30">Últimos 30 dias</option></select></label></div>
+        <p class="hint" data-gua-msg role="status"></p><div class="corr-lista" data-gua-lista></div></div>`;
+    sec.querySelector("[data-gua-busca]").addEventListener("input", e => { st.busca = e.target.value; guaRender(g); });
+    sec.querySelector("[data-gua-filtro]").addEventListener("change", e => {
+      st.filtro = e.target.value; const dias = st.filtro === "30" ? 30 : 7;
+      if (dias !== st.dias) { st.dias = dias; guaCarregar(g); } else guaRender(g);
+    });
+  }
+  const dentro = st.lista.filter(x => x.status === "Dentro"), deHoje = st.lista.filter(x => String(x.entradaEm).slice(0,10) === hoje() && x.status !== "Cancelado");
+  sec.querySelector("[data-gua-resumo]").innerHTML = [["Dentro agora", dentro.length], ["Entradas hoje", deHoje.length], ["Prestadores hoje", deHoje.filter(x => x.tipo === "Prestador de serviço").length]]
+    .map(x => `<div><span>${x[0]}</span><strong>${x[1]}</strong></div>`).join("");
+  const msg = sec.querySelector("[data-gua-msg]"), lista = sec.querySelector("[data-gua-lista]");
+  if (st.carregando && !st.lista.length) { msg.textContent = "Carregando…"; lista.innerHTML = ""; return; }
+  msg.textContent = st.erro;
+  const q = norm(st.busca).trim(), desde = st.filtro === "dentro" || st.filtro === "hoje" ? hoje() : "";
+  const l = st.lista.filter(x => (st.filtro === "dentro" ? x.status === "Dentro" : st.filtro === "hoje" ? String(x.entradaEm).slice(0,10) === desde : true)
+      && (!q || norm([x.nome, x.bloco, x.unidade, x.empresa, x.placa, x.autorizadoPor, x.tipo].join(" ")).includes(q)))
+    .sort((a,b) => (a.status === "Dentro") !== (b.status === "Dentro") ? (a.status === "Dentro" ? -1 : 1) : String(b.entradaEm).localeCompare(String(a.entradaEm)));
+  const vazio = st.filtro === "dentro" ? "Ninguém registrado dentro do condomínio por esta guarita." : "Nenhuma entrada no período.";
+  lista.innerHTML = l.length ? l.map(x => `<article class="corr-card gua-card ${x.status === "Dentro" ? "dentro" : ""}">
+      <div class="corr-card-top"><span class="corr-unidade">${esc(x.bloco)}${x.unidade ? " · Unidade " + esc(x.unidade) : ""}</span><span class="pill ${x.status === "Dentro" ? "p-entrada" : ""}">${esc(x.status)}</span></div>
+      <h3>${esc(x.nome)}</h3><p>${esc(x.tipo)}${x.empresa ? " · " + esc(x.empresa) : ""}</p>
+      <dl><div><dt>Entrada</dt><dd>${esc(guaHora(x.entradaEm))} · ${esc(x.entradaPor)}${x.status === "Dentro" ? ` <span class="gua-tempo">(há ${esc(guaTempo(x.entradaEm))})</span>` : ""}</dd></div>
+        ${x.saidaEm ? `<div><dt>Saída</dt><dd>${esc(guaHora(x.saidaEm))} · ${esc(x.saidaPor)}</dd></div>` : ""}
+        ${x.autorizadoPor ? `<div><dt>Autorizado por</dt><dd>${esc(x.autorizadoPor)}</dd></div>` : ""}
+        ${x.placa ? `<div><dt>Placa</dt><dd class="mono">${esc(x.placa)}</dd></div>` : ""}
+        ${x.documento ? `<div><dt>Documento</dt><dd class="mono">${esc(guaDoc(x.documento))}</dd></div>` : ""}</dl>
+      ${x.obs ? `<p class="hint">${esc(x.obs)}</p>` : ""}
+      ${x.status === "Dentro" ? `<div class="row-actions"><button type="button" class="btn primary" data-gua-saida="${esc(x.id)}" data-g="${g}">Registrar saída</button><button type="button" class="link" data-gua-cancelar="${esc(x.id)}" data-g="${g}">Cancelar (lançado por engano)</button></div>`
+        : x.status === "Cancelado" ? `<p class="corr-historico">Cancelado por ${esc(x.canceladoPor)} em ${esc(guaHora(x.canceladoEm))}: ${esc(x.motivo)}</p>` : ""}
+    </article>`).join("") : `<div class="empty">${vazio}</div>`;
+}
+function guaFormulario(g, op, id){
+  if (GUA.salvando || !podeAba(GUA_INFO[g].aba)) return;
+  const st = GUA[g], x = st.lista.find(v => v.id === id), novo = op === "entrada"; if (!novo && !x) return;
+  const operacaoId = typeof crypto.randomUUID === "function" ? crypto.randomUUID() : "GU-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2) + "-" + Math.random().toString(36).slice(2);
+  const campo = (n, rot, max, extra = "") => `<label>${rot}<input class="input" name="${n}" maxlength="${max}" ${extra}></label>`;
+  const box = $("#modal-box"); box.classList.add("largo");
+  box.innerHTML = `<h3>${novo ? "Registrar entrada · Guarita " + esc(g) : op === "saida" ? "Registrar saída" : "Cancelar registro"}</h3><form id="gua-form"><div class="corr-form-grid">${novo
+      ? `<label>Tipo<select class="input" name="tipo">${GUA_TIPOS.map(t => `<option>${t}</option>`).join("")}</select></label>`
+        + campo("nome", "Nome *", 100, "required autocomplete=\"off\"") + campo("documento", "Documento (RG ou CPF)", 30, "autocomplete=\"off\"")
+        + `<label data-gua-emp>Empresa / serviço<input class="input" name="empresa" maxlength="100" autocomplete="off"></label>`
+        + campo("bloco", "Destino (bloco ou área) *", 60, "required placeholder=\"Ex.: Bloco 3 ou Área comum\"") + campo("unidade", "Unidade", 30, "inputmode=\"numeric\"")
+        + campo("autorizadoPor", "Autorizado por", 100, "placeholder=\"Morador ou administração\"") + campo("placa", "Placa do veículo", 10, "autocapitalize=\"characters\"")
+        + `<label class="full">Observação<input class="input" name="obs" maxlength="500"></label>`
+      : `<p class="full"><b>${esc(x.nome)}</b> · ${esc(x.tipo)} · ${esc(x.bloco)}${x.unidade ? " / " + esc(x.unidade) : ""}<br><span class="hint">Entrada ${esc(guaHora(x.entradaEm))}</span></p>`
+        + (op === "cancelar" ? `<label class="full">Motivo do cancelamento *<input class="input" name="motivo" maxlength="500" required></label>` : `<p class="full">Confirma a saída agora?</p>`)}
+    </div><p class="hint err" id="gua-form-msg" role="alert"></p><div class="actions"><button type="submit" class="btn primary">${novo ? "Registrar entrada" : op === "saida" ? "Registrar saída" : "Cancelar registro"}</button><button type="button" class="btn" id="gua-form-voltar">Voltar</button></div></form>`;
+  $("#modal").hidden = false;
+  const form = $("#gua-form");
+  $("#gua-form-voltar").onclick = () => { if (!GUA.salvando) fecharModal(); };
+  if (novo) {
+    const tipo = form.querySelector("[name=tipo]"), emp = form.querySelector("[name=empresa]"), rot = form.querySelector("[data-gua-emp]");
+    const ajustar = () => { const p = tipo.value === "Prestador de serviço"; emp.required = p; rot.firstChild.textContent = p ? "Empresa / serviço *" : "Empresa / serviço"; };
+    tipo.addEventListener("change", ajustar); ajustar();
+    form.querySelector("[name=nome]").focus();
+  } else (form.querySelector("input") || form.querySelector("[type=submit]")).focus();
+  form.onsubmit = async e => {
+    e.preventDefault(); if (GUA.salvando || !form.reportValidity()) return;
+    const v = Object.fromEntries(new FormData(form)), btn = form.querySelector("[type=submit]"); GUA.salvando = true; btn.disabled = true;
+    try {
+      const req = novo ? {op, guarita:g, operacaoId, registro:v} : {op, guarita:g, id:x.id, versao:x.versao, motivo:v.motivo || ""};
+      const r = await api("guaritaSalvar", req); fecharModal(); toast(r.msg || "Registro salvo."); await guaCarregar(g);
+    } catch(err){ $("#gua-form-msg").textContent = err.message || "Não foi possível salvar. Atualize a lista e tente de novo."; }
+    finally { GUA.salvando = false; btn.disabled = false; }
+  };
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-gua-nova],[data-gua-atualizar],[data-gua-saida],[data-gua-cancelar]"); if (!b) return;
+  if (b.dataset.guaNova) guaFormulario(b.dataset.guaNova, "entrada");
+  else if (b.dataset.guaAtualizar) guaCarregar(b.dataset.guaAtualizar);
+  else if (b.dataset.guaSaida) guaFormulario(b.dataset.g, "saida", b.dataset.guaSaida);
+  else if (b.dataset.guaCancelar) guaFormulario(b.dataset.g, "cancelar", b.dataset.guaCancelar);
+});
+// ---------- Barco do condomínio (Guarita Sul): controle de passageiros (pedido de 04/11/2026, modelo "CONTROLE BARCO - PADRÃO") ----------
+// Grades de horário da planilha da administração: dias úteis e sábado/domingo/feriado. "ALMOÇO" marca a parada do meio-dia.
+const BARCO_GRADE = {
+  "Dias úteis": "07:00 P>M|07:20 M>P|07:30 P>M|07:50 M>P|08:00 P>M|08:20 M>P|08:30 P>M|08:50 M>P|09:00 P>M|09:20 M>P|09:30 P>M|09:50 M>P|10:00 P>M|10:20 M>P|10:30 P>M|10:50 M>P|11:00 P>M|11:50 M>P|12:00 P>M|ALMOÇO|13:00 P>M|13:50 M>P|14:00 P>M|14:50 M>P|15:00 P>M|15:50 M>P|16:00 P>M|16:20 M>P|16:30 P>M|17:00 P>M|17:20 M>P|17:30 P>M|17:50 M>P|18:00 P>M|18:20 M>P|18:30 P>M|18:50 M>P|19:00 P>M|19:20 M>P|19:30 P>M|19:50 M>P|20:00 P>M|20:20 M>P|20:30 P>M",
+  "Fim de semana e feriado": "09:00 P>M|09:40 W>M|09:50 M>P|10:00 P>M|10:40 W>M|10:50 M>P|11:00 C>M|11:40 W>M|11:50 M>P|12:00 P>M|ALMOÇO|13:00 P>M|13:40 W>M|13:50 M>P|14:00 P>M|14:40 W>M|14:50 M>P|15:00 P>M|15:40 W>M|15:50 M>P|16:00 P>M|16:40 W>M|16:50 M>P|17:00 P>M|17:40 W>M|17:50 M>P|18:00 P>M"
+};
+const BARCO_TRAJ = {"P>M":"PIER > METRÔ", "M>P":"METRÔ > PIER", "W>M":"PRAIA (WINDSOR) > METRÔ", "C>M":"CPR > METRÔ"};
+const BARCO_CATS = ["Morador(a)","Funcionário(a)","Pier","Visitante","Prestador de serviço"];
+const BARCO_DIAS = ["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"];
+const BARCO = {data:"", grade:"", lista:[], dia:null, mes:null, carregando:false, ger:0, gerMes:0, erro:"", salvando:false};
+const barcoDow = d => new Date(d + "T12:00:00").getDay();
+const barcoGradePadrao = d => [0,6].includes(barcoDow(d)) ? "Fim de semana e feriado" : "Dias úteis";
+const barcoFmt = d => d ? d.slice(8,10) + "/" + d.slice(5,7) + "/" + d.slice(0,4) : "";
+function barcoViagens(){
+  const base = BARCO_GRADE[BARCO.grade].split("|").map(s => s === "ALMOÇO" ? {almoco:true} : {horario:s.slice(0,5), trajeto:BARCO_TRAJ[s.slice(6)]});
+  const chave = v => v.horario + "|" + v.trajeto, tem = new Set(base.filter(v => !v.almoco).map(chave));
+  // viagens fora da grade (extras) que já têm passageiros
+  const extras = [...new Map(BARCO.lista.filter(p => p.status !== "Removido" && !tem.has(chave(p))).map(p => [chave(p), {horario:p.horario, trajeto:p.trajeto, extra:true}])).values()];
+  const k = v => v.almoco ? "12:30" : v.horario;
+  return base.concat(extras).sort((a, b) => k(a).localeCompare(k(b)) || (a.extra ? 1 : 0) - (b.extra ? 1 : 0));
+}
+function barcoSomas(lista){ const s = {}; BARCO_CATS.forEach(c => s[c] = 0); lista.filter(p => p.status !== "Removido").forEach(p => { s[p.categoria] = (s[p.categoria] || 0) + (Number(p.qtd) || 1); }); s.total = BARCO_CATS.reduce((t, c) => t + s[c], 0); return s; }
+async function barcoCarregar(){
+  if (!S.token || !podeAba("gbarco")) return;
+  if (!BARCO.data) { BARCO.data = hoje(); BARCO.grade = barcoGradePadrao(BARCO.data); }
+  const ger = ++BARCO.ger, token = S.token, data = BARCO.data; BARCO.carregando = true; BARCO.erro = ""; barcoRender();
+  try { const r = await api("barco", {data}); if (S.token === token && ger === BARCO.ger) { BARCO.lista = r.passageiros || []; BARCO.dia = r.dia; const g = BARCO.lista.find(p => p.status !== "Removido"); if (g && BARCO_GRADE[g.grade]) BARCO.grade = g.grade; } }
+  catch(e){ if (S.token === token && ger === BARCO.ger) BARCO.erro = e.message || "Não foi possível carregar."; }
+  finally { if (S.token === token && ger === BARCO.ger) { BARCO.carregando = false; barcoRender(); } }
+  barcoCarregarMes();
+}
+async function barcoCarregarMes(){
+  const mes = BARCO.data.slice(0,7), ger = ++BARCO.gerMes, token = S.token;
+  try { const r = await api("barcoMes", {mes}); if (S.token === token && ger === BARCO.gerMes) { BARCO.mes = r; barcoRenderMes(); } } catch(e){ /* a totalização é só um resumo */ }
+}
+function barcoRender(){
+  const sec = document.getElementById("t-gbarco"); if (!sec) return;
+  if (!sec.dataset.pronto) {
+    sec.dataset.pronto = "1";
+    sec.innerHTML = `<div class="gua-hero"><div><p class="overline">GUARITA SUL · BARCO DO CONDOMÍNIO</p><h2>Controle de passageiros</h2><p>Relatório diário de passageiros do táxi boat, viagem por viagem.</p></div>
+      <div class="corr-acoes"><button type="button" class="btn" id="ba-excel">Exportar mês (Excel)</button><button type="button" class="btn" id="ba-atualizar">Atualizar</button></div></div>
+      <div class="panel stack"><div class="ba-topo">
+        <label>Data<input class="input" type="date" id="ba-data"></label>
+        <label>Grade de horários<select class="input" id="ba-grade">${Object.keys(BARCO_GRADE).map(g => `<option>${g}</option>`).join("")}</select></label>
+        <p class="hint" id="ba-diasem"></p></div>
+        <details class="ba-turno" id="ba-turno"><summary>Operador responsável e rendições <span class="hint" id="ba-turno-res"></span></summary>
+          <form id="ba-turno-form" class="corr-form-grid">
+            <label>Operador diurno (07h às 19h)<input class="input" name="operadorDia" maxlength="100"></label>
+            <label>Operador noturno (19h às 07h)<input class="input" name="operadorNoite" maxlength="100"></label>
+            <label>Rendição p/ almoço — de<input class="input" type="time" name="almocoDe"></label><label>até<input class="input" type="time" name="almocoAte"></label>
+            <label>Rendição p/ janta — de<input class="input" type="time" name="jantaDe"></label><label>até<input class="input" type="time" name="jantaAte"></label>
+            <label class="full">Observação<input class="input" name="obs" maxlength="300"></label>
+            <div class="full actions"><button type="submit" class="btn primary">Salvar turno</button><span class="hint" id="ba-turno-msg" role="status"></span></div>
+          </form></details></div>
+      <div class="ba-resumo" id="ba-resumo"></div>
+      <div class="panel stack"><div class="ba-cab"><h3>Viagens do dia</h3><button type="button" class="btn" id="ba-extra">+ Viagem extra</button></div>
+        <p class="hint" id="ba-msg" role="status"></p><div id="ba-viagens" class="ba-viagens"></div></div>
+      <div class="panel stack"><h3 id="ba-mes-tit">Totalização do mês</h3><div id="ba-mes"></div></div>`;
+    $("#ba-data").addEventListener("change", e => { if (!e.target.value) return; BARCO.data = e.target.value; BARCO.grade = barcoGradePadrao(BARCO.data); BARCO.lista = []; BARCO.dia = null; barcoCarregar(); });
+    $("#ba-grade").addEventListener("change", e => { BARCO.grade = e.target.value; barcoRender(); });
+    $("#ba-atualizar").addEventListener("click", barcoCarregar);
+    $("#ba-excel").addEventListener("click", barcoExcel);
+    $("#ba-extra").addEventListener("click", () => barcoPassageiro(null));
+    $("#ba-turno-form").addEventListener("submit", barcoSalvarTurno);
+  }
+  if (!BARCO.data) { BARCO.data = hoje(); BARCO.grade = barcoGradePadrao(BARCO.data); }
+  $("#ba-data").value = BARCO.data; $("#ba-grade").value = BARCO.grade;
+  const fds = [0,6].includes(barcoDow(BARCO.data));
+  $("#ba-diasem").textContent = BARCO_DIAS[barcoDow(BARCO.data)] + (BARCO.grade !== barcoGradePadrao(BARCO.data) ? (fds ? "" : " · grade de fim de semana/feriado") : "");
+  const dia = BARCO.dia || {}, f = $("#ba-turno-form");
+  if (!f.dataset.data || f.dataset.data !== BARCO.data + "|" + (dia.atualizadoEm || "")) {
+    f.dataset.data = BARCO.data + "|" + (dia.atualizadoEm || "");
+    ["operadorDia","operadorNoite","almocoDe","almocoAte","jantaDe","jantaAte","obs"].forEach(k => f.elements[k].value = dia[k] || "");
+  }
+  $("#ba-turno-res").textContent = dia.operadorDia || dia.operadorNoite ? "· " + [dia.operadorDia, dia.operadorNoite].filter(Boolean).join(" / ") : "· não informado";
+  const s = barcoSomas(BARCO.lista);
+  $("#ba-resumo").innerHTML = BARCO_CATS.map(c => `<div><span>${c}</span><strong>${s[c]}</strong></div>`).join("") + `<div class="tot"><span>Total do dia</span><strong>${s.total}</strong></div>`;
+  $("#ba-msg").textContent = BARCO.carregando && !BARCO.lista.length ? "Carregando…" : BARCO.erro; $("#ba-msg").hidden = !$("#ba-msg").textContent;
+  const agora = BARCO.data === hoje() ? new Date(Date.now() - 3*3600e3).toISOString().slice(11,16) : "";
+  const viagens = barcoViagens(), prox = agora ? viagens.find(v => !v.almoco && v.horario >= agora) : null;
+  $("#ba-viagens").innerHTML = viagens.map(v => {
+    if (v.almoco) return `<div class="ba-almoco">Horário de almoço</div>`;
+    const ps = BARCO.lista.filter(p => p.horario === v.horario && p.trajeto === v.trajeto && p.status !== "Removido"), n = ps.reduce((t, p) => t + (Number(p.qtd) || 1), 0);
+    return `<article class="ba-viagem${v === prox ? " prox" : ""}${n ? " tem" : ""}"><div class="ba-v-cab"><span class="ba-hora mono">${esc(v.horario)}</span><span class="ba-traj">${esc(v.trajeto)}${v.extra ? ' <span class="pill">extra</span>' : ""}${v === prox ? ' <span class="pill p-entrada">próxima</span>' : ""}</span>
+      <span class="ba-n" title="passageiros">${n}</span><button type="button" class="btn small" data-ba-add="${esc(v.horario + "|" + v.trajeto)}">+ Passageiro</button></div>
+      ${ps.length ? `<ul class="ba-ps">${ps.map(p => `<li><b>${esc(p.nome)}</b><span>${esc(p.categoria)}${p.blocoApto ? " · " + esc(p.blocoApto) : ""}${Number(p.qtd) > 1 ? " · " + Number(p.qtd) + " pessoas" : ""}</span><button type="button" class="link" data-ba-rem="${esc(p.id)}" aria-label="Remover ${esc(p.nome)}">Remover</button></li>`).join("")}</ul>` : ""}</article>`;
+  }).join("");
+  barcoRenderMes();
+}
+function barcoRenderMes(){
+  const box = $("#ba-mes"); if (!box) return;
+  const M = BARCO.mes, mes = BARCO.data.slice(0,7);
+  $("#ba-mes-tit").textContent = "Totalização do mês · " + mes.slice(5,7) + "/" + mes.slice(0,4);
+  if (!M || M.mes !== mes) { box.innerHTML = `<div class="empty">Carregando…</div>`; return; }
+  const uteis = barcoSomas(M.passageiros.filter(p => p.grade === "Dias úteis")), fds = barcoSomas(M.passageiros.filter(p => p.grade !== "Dias úteis")), tot = barcoSomas(M.passageiros);
+  box.innerHTML = `<div class="tablebox"><table class="ba-tab"><thead><tr><th>Categoria</th><th class="n">Dias úteis</th><th class="n">Fins de semana e feriados</th><th class="n">Total</th></tr></thead><tbody>
+    ${BARCO_CATS.map(c => `<tr><td>${c}</td><td class="n">${uteis[c]}</td><td class="n">${fds[c]}</td><td class="n"><b>${tot[c]}</b></td></tr>`).join("")}
+    <tr class="ba-tot"><td><b>Total</b></td><td class="n"><b>${uteis.total}</b></td><td class="n"><b>${fds.total}</b></td><td class="n"><b>${tot.total}</b></td></tr></tbody></table></div>`;
+}
+function barcoPassageiro(chave){
+  if (BARCO.salvando) return;
+  const [horario, trajeto] = chave ? chave.split("|") : ["", ""];
+  const box = $("#modal-box"); box.classList.add("largo");
+  const opTraj = Object.values(BARCO_TRAJ).map(t => `<option>${t}</option>`).join("");
+  box.innerHTML = `<h3>${chave ? `Passageiro · ${esc(horario)} ${esc(trajeto)}` : "Viagem extra (fora da grade)"}</h3><p class="hint">${esc(barcoFmt(BARCO.data))} · ${esc(BARCO_DIAS[barcoDow(BARCO.data)])}</p>
+    <form id="ba-form"><div class="corr-form-grid">
+      ${chave ? "" : `<label>Horário *<input class="input" type="time" name="horario" required></label><label>Trajeto *<input class="input" name="trajeto" list="ba-dl-traj" maxlength="60" required></label><datalist id="ba-dl-traj">${opTraj}</datalist>`}
+      <label class="full">Nome do passageiro *<input class="input" name="nome" maxlength="100" required autocomplete="off"></label>
+      <fieldset class="full ba-cats"><legend>Morador / Visitante / Pier / Funcionário(a) *</legend>${BARCO_CATS.map((c, i) => `<label><input type="radio" name="categoria" value="${c}" ${i === 0 ? "checked" : ""}> ${c}</label>`).join("")}</fieldset>
+      <label>Bloco / apartamento<input class="input" name="blocoApto" maxlength="30" placeholder="Ex.: 3/302"></label>
+      <label>Quantidade<input class="input" type="number" name="qtd" min="1" max="50" value="1" required></label>
+      <label class="full">Observação<input class="input" name="obs" maxlength="300"></label>
+    </div><p class="hint" id="ba-form-ok" role="status"></p><p class="hint err" id="ba-form-msg" role="alert"></p>
+    <div class="actions"><button type="submit" class="btn primary">Adicionar</button><button type="button" class="btn" id="ba-form-fim">Concluir</button></div></form>`;
+  $("#modal").hidden = false;
+  const form = $("#ba-form"); $("#ba-form-fim").onclick = () => { if (!BARCO.salvando) fecharModal(); };
+  (form.elements.horario || form.elements.nome).focus();
+  form.onsubmit = async e => {
+    e.preventDefault(); if (BARCO.salvando || !form.reportValidity()) return;
+    const v = Object.fromEntries(new FormData(form)), btn = form.querySelector("[type=submit]");
+    const pas = {grade:BARCO.grade, horario:chave ? horario : v.horario, trajeto:chave ? trajeto : String(v.trajeto).trim().toUpperCase(), nome:v.nome, categoria:v.categoria, blocoApto:v.blocoApto, qtd:v.qtd, obs:v.obs};
+    const operacaoId = typeof crypto.randomUUID === "function" ? crypto.randomUUID() : "BA-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2) + "-" + Math.random().toString(36).slice(2);
+    BARCO.salvando = true; btn.disabled = true; $("#ba-form-msg").textContent = "";
+    try {
+      await api("barcoSalvar", {op:"passageiro", data:BARCO.data, operacaoId, passageiro:pas});
+      $("#ba-form-ok").textContent = `✓ ${v.nome} adicionado(a). Pode lançar o próximo.`;
+      ["nome","blocoApto","obs"].forEach(k => form.elements[k].value = ""); form.elements.qtd.value = "1"; form.elements.nome.focus();
+      barcoCarregar();
+    } catch(err){ $("#ba-form-msg").textContent = err.message || "Não foi possível salvar."; }
+    finally { BARCO.salvando = false; btn.disabled = false; }
+  };
+}
+function barcoRemover(id){
+  const p = BARCO.lista.find(x => x.id === id); if (!p || BARCO.salvando) return;
+  const box = $("#modal-box"); box.classList.remove("largo");
+  box.innerHTML = `<h3>Remover passageiro?</h3><p><b>${esc(p.nome)}</b> · ${esc(p.categoria)} · ${esc(p.horario)} ${esc(p.trajeto)}</p><p class="hint">O registro sai da contagem, mas fica guardado no histórico.</p>
+    <p class="hint err" id="ba-rem-msg" role="alert"></p><div class="actions"><button type="button" class="btn danger" id="ba-rem-ok">Remover</button><button type="button" class="btn" id="ba-rem-no">Voltar</button></div>`;
+  $("#modal").hidden = false; $("#ba-rem-no").onclick = fecharModal; $("#ba-rem-no").focus();
+  $("#ba-rem-ok").onclick = async () => {
+    BARCO.salvando = true; $("#ba-rem-ok").disabled = true;
+    try { const r = await api("barcoSalvar", {op:"remover", data:BARCO.data, id}); fecharModal(); toast(r.msg || "Removido."); barcoCarregar(); }
+    catch(e){ $("#ba-rem-msg").textContent = e.message || "Não foi possível remover."; $("#ba-rem-ok").disabled = false; }
+    finally { BARCO.salvando = false; }
+  };
+}
+async function barcoSalvarTurno(e){
+  e.preventDefault(); if (BARCO.salvando) return;
+  const f = e.target, btn = f.querySelector("[type=submit]"); BARCO.salvando = true; btn.disabled = true;
+  try { const r = await api("barcoSalvar", {op:"dia", data:BARCO.data, dia:Object.fromEntries(new FormData(f))}); $("#ba-turno-msg").textContent = r.msg || "Salvo."; barcoCarregar(); }
+  catch(err){ $("#ba-turno-msg").textContent = err.message || "Não foi possível salvar."; }
+  finally { BARCO.salvando = false; btn.disabled = false; }
+}
+function barcoExcel(){
+  const M = BARCO.mes, mes = BARCO.data.slice(0,7);
+  if (!M || M.mes !== mes) { toast("Aguarde a totalização do mês carregar.", true); return; }
+  try {
+    const X = xlsxMini(), cab = {b:true, cor:"FFFFFFFF", fill:"FF1F4E79", wrap:false}, tit = {b:true, wrap:false}, num = {h:"right"};
+    let r = 1;
+    X.cel(r++, 1, "CONDOMÍNIO RESIDENCIAL PIER", tit);
+    X.cel(r++, 1, `Controle de passageiros do táxi boat — ${mes.slice(5,7)}/${mes.slice(0,4)}`, tit); r++;
+    X.cel(r++, 1, "Totalização do mês", tit);
+    ["Morador / Visitante / Pier / Funcionário(a)", "Dias úteis", "Fins de semana e feriados", "Total"].forEach((c, j) => X.cel(r, j + 1, c, cab)); r++;
+    const u = barcoSomas(M.passageiros.filter(p => p.grade === "Dias úteis")), w = barcoSomas(M.passageiros.filter(p => p.grade !== "Dias úteis")), t = barcoSomas(M.passageiros);
+    BARCO_CATS.concat(["total"]).forEach(c => { X.cel(r, 1, c === "total" ? "TOTAL" : c.toUpperCase(), c === "total" ? tit : {}); [u[c], w[c], t[c]].forEach((v, j) => X.cel(r, j + 2, v, num)); r++; });
+    r++; X.cel(r++, 1, "Passageiros por viagem", tit);
+    ["Data", "Dia", "Horário", "Trajeto", "Nome do passageiro", "Morador / Visitante / Pier / Funcionário(a)", "Bloco / apartamento", "Quantidade", "Operador diurno", "Operador noturno", "Registrado por"].forEach((c, j) => X.cel(r, j + 1, c, cab)); r++;
+    const dias = new Map((M.dias || []).map(d => [d.data, d]));
+    M.passageiros.slice().sort((a, b) => (a.data + a.horario).localeCompare(b.data + b.horario)).forEach(p => {
+      const d = dias.get(p.data) || {};
+      [barcoFmt(p.data), BARCO_DIAS[barcoDow(p.data)], p.horario, p.trajeto, p.nome, p.categoria, p.blocoApto, Number(p.qtd) || 1, d.operadorDia || "", d.operadorNoite || "", p.registradoPor].forEach((v, j) => X.cel(r, j + 1, v, j === 7 ? num : {})); r++;
+    });
+    [12, 10, 9, 24, 28, 22, 14, 11, 20, 20, 20].forEach((l, j) => X.col(j + 1, l)); X.col(1, 40);
+    mdBaixar(X.gerar("Barco"), `Controle do barco - ${mes}.xlsx`);
+  } catch(e){ toast(e.message || "Não foi possível gerar a planilha.", true); }
+}
+document.addEventListener("click", e => {
+  if (e.target.closest("[data-go-barco]")) { setTab("gbarco"); return; }
+  const a = e.target.closest("[data-ba-add],[data-ba-rem]"); if (!a) return;
+  if (a.dataset.baAdd) barcoPassageiro(a.dataset.baAdd); else barcoRemover(a.dataset.baRem);
+});
 document.getElementById('menu-busca')?.addEventListener('input',filtrarMenuPier);
 document.getElementById('corr-nova')?.addEventListener('click',()=>corrFormulario('receber'));
 document.getElementById('corr-atualizar')?.addEventListener('click',carregarCorrespondencias);
@@ -585,6 +884,8 @@ const MENU = [
     {t:"os", rot:"Ordens de serviço (OS)", b:"b-os"}]}, // "Demandas" saiu do menu (02/11/2026); a Manutenção preventiva continua abrindo a tela
   {g:"Compras e pendências", ico:'<path d="M8 5h11M8 12h11M8 19h11M4 5h.01M4 12h.01M4 19h.01"/>', itens:[
     {t:"pendencias", rot:"Controle de pendências", b:"b-adm"}, {t:"pendencias", acao:"nova", rot:"Incluir pendência"}, {t:"cotacoes", rot:"Cotações"}, {t:"fornecedores", rot:"Fornecedores"}]},
+  {g:"Guaritas", ico:'<path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6z"/>', itens:[
+    {t:"gsul", rot:"Guarita Sul"}, {t:"gbarco", rot:"Barco (Guarita Sul)"}, {t:"gnorte", rot:"Guarita Norte"}]},
   {t:"correspondencias",rot:"Correspondências",ico:'<path d="M3 6h18v12H3zM3 6l9 7 9-7"/>'},
   {g:"Unidades", ico:'<path d="M5 21V4h10v17M15 9h4v12M8 8h1M11 8h1M8 12h1M11 12h1M8 16h1M11 16h1M3 21h18"/>', itens:[
     {t:"unidades", rot:"Lista de unidades"}, {t:"uncadastro", rot:"Atualização cadastral"}, {t:"unconfig", rot:"Configurações"}]},
@@ -701,8 +1002,9 @@ if ($("#side")) {
 }
 function mudarModo(x){
   if (x === modo()) return;
-  if (x === "Administração") { if (!TEM_ADM || !podeAdm()) return; S.adm = true; }
-  else { if (!S.setores.includes(x)) return; S.adm = false; mudarSetor(x); }
+  if (x === "Guaritas") { if (!podeGua()) return; S.adm = true; S.gua = true; }
+  else if (x === "Administração") { if (!TEM_ADM || !podeAdm()) return; S.adm = true; S.gua = false; }
+  else { if (!S.setores.includes(x)) return; S.adm = false; S.gua = false; mudarSetor(x); }
   try { localStorage.setItem("estoque-entrada", x); } catch(e){}
   aplicarPermissoes(); renderSetorSel();
   setTab(podeAba(S.tab) ? S.tab : primeiraAba()); renderMenu();
@@ -8739,8 +9041,8 @@ const sess = lerSessao();
 if (sess && sess.senha) apagarSessao(); // versão antiga guardava a senha no aparelho: apaga e pede para entrar de novo
 if (sess && sess.token && sess.usuario) {
   S.usuario = sess.usuario || ""; S.token = sess.token;
-  try { S.setor = localStorage.getItem("estoque-setor") || S.setor; S.adm = localStorage.getItem("estoque-entrada") === "Administração"; } catch(e){}
-  api("entrar", {registro:{motivo:"retorno", entrada:S.adm ? "Administração" : S.setor, aparelho:aparelho()}, comDados:true, comPend:pedirPend(S.adm)}).then(r => { entradaPend(r); if (S.adm && !(TEM_ADM && podeAdm())) S.adm = false; if (!S.adm && !setoresReais().length && TEM_ADM && podeAdm()) S.adm = true; aplicarPermissoes(); renderMe(); setTab(rdQrDestino(podeAba(S.tab) ? S.tab : primeiraAba())); entradaDados(r); }).catch(e => { mostrarLogin(e.message || "Não foi possível restaurar sua sessão. Entre novamente."); }).finally(concluirInicioPier);
+  try { S.setor = localStorage.getItem("estoque-setor") || S.setor; const ent = localStorage.getItem("estoque-entrada"); S.gua = ent === "Guaritas"; S.adm = ent === "Administração" || S.gua; } catch(e){}
+  api("entrar", {registro:{motivo:"retorno", entrada:S.gua ? "Guaritas" : S.adm ? "Administração" : S.setor, aparelho:aparelho()}, comDados:true, comPend:pedirPend(S.adm)}).then(r => { entradaPend(r); if (S.gua && !podeGua()) { S.gua = false; S.adm = false; } if (S.adm && !S.gua && !(TEM_ADM && podeAdm())) S.adm = false; if (!S.adm && !setoresReais().length && TEM_ADM && podeAdm()) S.adm = true; if (!S.adm && !setoresReais().length && podeGua()) { S.adm = true; S.gua = true; } aplicarPermissoes(); renderMe(); setTab(rdQrDestino(podeAba(S.tab) ? S.tab : primeiraAba())); entradaDados(r); }).catch(e => { mostrarLogin(e.message || "Não foi possível restaurar sua sessão. Entre novamente."); }).finally(concluirInicioPier);
 } else {
   if(RQ.codigo) $("#l-setor").value="Administração";
   mostrarLogin("");

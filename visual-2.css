@@ -173,3 +173,30 @@
  body.com-menu header.top #menu-btn:not([hidden]) {width:38px;min-width:38px;height:38px;padding:8px;}
  @media(min-width:1024px) {body.com-menu:not(.menu-recolhido) header.top #menu-btn:not([hidden]) {display:none!important;}}
 }
+/* Guaritas Sul e Norte (04/11/2026): cada guarita com a sua cor */
+.setor-btn.gua,.setor-menu .gua{--c:var(--warn);--cb:color-mix(in srgb,var(--warn) 12%,var(--surface))}
+.gua-sul{--gua:var(--teal)}.gua-norte{--gua:var(--warn)}
+.gua-hero{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:25px;border:1px solid var(--line);border-left:6px solid var(--gua);border-radius:15px;background:linear-gradient(110deg,var(--surface),color-mix(in srgb,var(--gua) 14%,var(--surface)));}
+.gua-hero h2{font-size:28px;margin:7px 0;}.gua-hero p{margin:5px 0;color:var(--muted);}.gua-hero .overline{color:var(--gua);}
+.gua-resumo>div:first-child strong{color:var(--gua);}
+.gua-card.dentro{border-left:4px solid var(--gua);}.gua-tempo{color:var(--muted);}
+.gua-card .row-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;}
+@media(max-width:1100px){.gua-hero{align-items:start;flex-direction:column;}}
+@media(max-width:600px){.gua-hero{padding:19px;}.gua-hero h2{font-size:24px;}}
+/* Barco do condomínio (Guarita Sul) */
+.ba-topo{display:flex;gap:14px;align-items:end;flex-wrap:wrap}.ba-topo label{display:grid;gap:6px;font-size:12px}.ba-topo .hint{margin:0 0 10px}
+.ba-turno summary{cursor:pointer;font-weight:600;padding:6px 0}.ba-turno .corr-form-grid{margin-top:10px}
+.ba-resumo{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}.ba-resumo>div{display:grid;gap:8px;background:var(--surface);border:1px solid var(--line);padding:14px;border-radius:12px;min-width:0}
+.ba-resumo span{color:var(--muted);font-size:12px}.ba-resumo strong{font-size:26px;font-variant-numeric:tabular-nums}.ba-resumo .tot{border-color:var(--gua)}.ba-resumo .tot strong{color:var(--gua)}
+.ba-cab{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}.ba-cab h3{margin:0}
+.ba-viagens{display:grid;gap:8px}.ba-viagem{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--bg);min-width:0}
+.ba-viagem.tem{border-left:4px solid var(--gua)}.ba-viagem.prox{box-shadow:0 0 0 2px color-mix(in srgb,var(--gua) 60%,transparent)}
+.ba-v-cab{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.ba-hora{font-weight:700;font-size:16px;min-width:48px}.ba-traj{flex:1;min-width:140px;font-size:13px}
+.ba-n{min-width:30px;text-align:center;font-weight:700;border-radius:999px;padding:2px 8px;background:color-mix(in srgb,var(--gua) 16%,var(--surface))}
+.ba-ps{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:4px}.ba-ps li{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;font-size:13px;padding:4px 0;border-top:1px dashed var(--line)}.ba-ps li span{color:var(--muted);flex:1}
+.ba-almoco{text-align:center;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:6px;border:1px dashed var(--line);border-radius:10px}
+.ba-cats{display:flex;flex-wrap:wrap;gap:8px 16px;border:1px solid var(--line);border-radius:10px;padding:10px 12px}.ba-cats legend{font-size:12px;padding:0 4px}.ba-cats label{display:flex;gap:6px;align-items:center;font-size:13px}
+.ba-tot td{border-top:2px solid var(--line)}
+@media(max-width:1100px){.ba-resumo{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:600px){.ba-resumo{grid-template-columns:repeat(2,minmax(0,1fr))}.ba-topo label{width:100%}}
+.ba-tab th{white-space:normal}

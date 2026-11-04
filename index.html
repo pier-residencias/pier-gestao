@@ -12,7 +12,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap"></noscript>
 <link rel="stylesheet" href="estilo.css?v=20261102lote">
-<link rel="stylesheet" href="visual-2.css?v=20261102producao">
+<link rel="stylesheet" href="visual-2.css?v=20261104guaritas">
 <style>
 html.pier-iniciando body>main,html.pier-iniciando body>header,html.pier-iniciando body>aside,html.pier-iniciando #side-fundo {visibility:hidden;}
 #pier-inicio{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;background:#0c1117;color:#e9f0f5;padding:24px;font:14px system-ui,sans-serif;text-align:center;}
@@ -34,7 +34,7 @@ html.pier-iniciando body>main,html.pier-iniciando body>header,html.pier-iniciand
       </picture>
       <h2>Pier Gestão</h2>
       <p>Escolha o setor e entre com o seu usuário e a sua senha.</p>
-      <div class="field"><label for="l-setor">Setor</label><select class="input" id="l-setor"><option>Manutenção</option><option>Limpeza</option><option>Administração</option></select></div>
+      <div class="field"><label for="l-setor">Setor</label><select class="input" id="l-setor"><option>Manutenção</option><option>Limpeza</option><option>Administração</option><option>Guaritas</option></select></div>
       <div class="field"><label for="l-usuario">Usuário</label><input class="input" id="l-usuario" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Ex.: funcionario1"></div>
       <div class="field"><label for="l-senha">Senha</label><input class="input" id="l-senha" type="password" autocomplete="current-password"></div>
       <div class="actions"><button class="btn primary" type="submit" id="l-entrar">Entrar</button><span class="hint" id="l-msg"></span></div>
@@ -789,6 +789,9 @@ html.pier-iniciando body>main,html.pier-iniciando body>header,html.pier-iniciand
     <div id="pd-body"><div class="empty">Carregando pendências…</div></div>
     <datalist id="pd-resps"><option value="Auxiliar"></option><option value="Fornecedor"></option><option value="Gerência"></option><option value="Jardinagem"></option><option value="Limpeza"></option><option value="Manutenção"></option><option value="Piscina"></option><option value="Síndico"></option><option value="Supervisor"></option></datalist>
   </section>
+<section id="t-gsul" class="stack gua-tela gua-sul" hidden></section>
+<section id="t-gbarco" class="stack gua-tela gua-sul" hidden></section>
+<section id="t-gnorte" class="stack gua-tela gua-norte" hidden></section>
 <section id="t-correspondencias" class="stack" hidden>
  <div class="corr-hero"><div><p class="overline">ADMINISTRAÇÃO · RECEBIMENTOS</p><h2>Correspondências</h2><p>Receba, localize e acompanhe cada retirada.</p></div><div class="corr-acoes"><a class="btn" href="https://drop.armariosinteligentes.com/dashdrop" target="_blank" rel="noopener noreferrer">Abrir DROP ↗</a><button class="btn primary" id="corr-nova">Registrar recebimento</button></div></div>
  <p class="hint">Controle manual. Os registros desta tela não são sincronizados com o armário inteligente.</p>
@@ -806,7 +809,7 @@ html.pier-iniciando body>main,html.pier-iniciando body>header,html.pier-iniciand
 <script src="config.js"></script>
 <script src="nfe.js?v=20261101os5"></script>
 <script src="vendor/qrcode.js?v=2.0.4"></script>
-<script src="app.js?v=20261102oculta"></script>
+<script src="app.js?v=20261104guaritas"></script>
 
 </body>
 </html>
