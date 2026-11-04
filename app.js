@@ -165,7 +165,7 @@ async function api(acao, extra, opc){
   let r;
   try {
     // importações grandes podem levar mais que os 30 s padrão
-    r = await buscarJsonPier(API, {method:"POST", body:JSON.stringify(corpo), redirect:"follow"}, /importar|Importar/.test(acao) ? 180000 : 30000);
+    r = await buscarJsonPier(API, {method:"POST", body:JSON.stringify(corpo), redirect:"follow"}, /importar|Importar|pendAnexo/.test(acao) ? 180000 : 30000);
   } catch(e){
     throw {paraUsuario:true, message:e.message || "Sem conexão com a planilha. Verifique a internet e tente de novo."};
   }
@@ -4433,11 +4433,12 @@ function pdAtualizar(p){
   const quando = p.atualizadoEm ? `Atualizado em ${fData(p.atualizadoEm)} ${String(p.atualizadoEm).slice(11,16)}${p.atualizadoPor ? " por "+p.atualizadoPor : ""}` : "";
   const fimPrazo = !cst && p.status === "Concluído" && p.concluidoEm && p.prazo ? pdDias(p.prazo, p.concluidoEm) : null;
   const etapa = pdV2() ? pdEtapa(p) : null;
-  const assinatura = [nova, p.criadaPor, quando, ehSindico(), ehGerente(), cst, p.ultimaVez, sub, pdTemNovos(), fimPrazo, etapa && etapa.tipo, etapa && etapa.etapa, p.conclData, p.os, p.osStatus, pdV3(), p.cotNumero, p.cotStatus].join("|");
+  const assinatura = [nova, p.criadaPor, quando, ehSindico(), ehGerente(), cst, p.ultimaVez, sub, pdTemNovos(), fimPrazo, etapa && etapa.tipo, etapa && etapa.etapa, p.conclData, p.os, p.osStatus, pdV3(), p.cotNumero, p.cotStatus, pdPodeComprov(p), (p.anexos || []).length].join("|");
   if (f.meta.dataset.a !== assinatura) {
     f.meta.dataset.a = assinatura;
     f.meta.innerHTML = (nova ? `<span class="pd-nova-pill">Nova do síndico</span>${ehSindico() ? "" : `<button type="button" class="btn small pd-ciente" data-ciente="${esc(p.id)}">Ciente</button>`}` : "")
       + (etapa ? pdAprovHtml(p, etapa) : "")
+      + pcBotao(p)
       + (p.cotNumero ? `<button type="button" class="pd-ospill pd-cotpill" data-cot="${esc(p.cotId)}" title="Abrir a cotação desta pendência">${esc(p.cotNumero)} · ${esc(p.cotStatus)}</button>` : "")
       + (p.os ? `<span class="pd-ospill ${p.osStatus === "Concluída" ? "ok" : p.osStatus === "Cancelada" ? "canc" : ""}" title="OS criada a partir desta pendência">${esc(p.os)}${p.osSetor ? " · " + esc(p.osSetor) : ""}${p.osStatus ? " · " + esc(p.osStatus) : ""}</span>` : "")
       + (fimPrazo !== null ? `<span class="pd-fim ${fimPrazo > 0 ? "atraso" : "ok"}">${fimPrazo > 0 ? `Concluída ${fimPrazo} dia${fimPrazo===1?"":"s"} após o prazo` : "Concluída no prazo"}</span>` : "")
@@ -4484,8 +4485,9 @@ function pdPedirConclusao(id, sugestao){
     if (!d) { toast("Informe a data de conclusão.", true); data.focus(); return; }
     if (d > hoje()) { toast("A data de conclusão não pode ser depois de hoje.", true); data.focus(); return; }
     box.remove();
-    if (pdV2()) pdEnviar("pendSalvar", {pend:{id, status:"Concluído", concluidoEm:d}});
-    else pdSalvar(id, {status:"Concluído", concluidoEm:d});
+    const depois = () => setTimeout(() => { if ($("#modal").hidden && pdPodeComprov(pdAchar(id))) pcAbrir(id, true); }, 300);
+    if (pdV2()) pdEnviar("pendSalvar", {pend:{id, status:"Concluído", concluidoEm:d}}).then(r => { if (r) depois(); });
+    else { const x = pdSalvar(id, {status:"Concluído", concluidoEm:d}); if (x && x.then) x.then(r => { if (r) depois(); }); }
   };
   nao.onclick = () => box.remove();
   box.append(sim, nao, dica); r.el.append(box); data.focus();
@@ -4754,10 +4756,91 @@ function pdTextoEmail(){
   L.push("Fico à disposição.", "", "Atenciosamente,", S.nome || "");
   return L.join("\n");
 }
+// ---------- comprovação da conclusão das pendências (pedido de 04/11/2026): fotos, PDF e Excel ----------
+const PC = {id:"", enviando:false, ver:null};
+const pdPodeComprov = p => !!p && !pdConst(p) && (p.status === "Concluído" || pdConclPend(p));
+const pcIco = m => /^image\//.test(m) ? "🖼️" : m === "application/pdf" ? "📄" : "📊";
+const PC_EXT = {pdf:"application/pdf", xlsx:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", xls:"application/vnd.ms-excel", jpg:"image/jpeg", jpeg:"image/jpeg", png:"image/png", webp:"image/webp"};
+function pcBotao(p){
+  if (!pdPodeComprov(p)) return "";
+  const n = (p.anexos || []).length;
+  return `<button type="button" class="pd-comprov${n ? " tem" : ""}" data-comprov="${esc(p.id)}" title="${n ? "Ver a comprovação da conclusão" : "Anexar fotos ou documentos que comprovam a conclusão"}"><span aria-hidden="true">📎</span>${n ? `Comprovação (${n})` : "Anexar comprovação"}</button>`;
+}
+function pcAbrir(id, aposConcluir){
+  const p = pdAchar(id); if (!p) return;
+  PC.id = id; PC.ver = null;
+  const box = $("#modal-box"); box.classList.add("largo");
+  box.innerHTML = `<h3>Comprovação da conclusão</h3><p class="hint pc-tit">${esc((p.numero ? p.numero + " · " : "") + p.titulo)}</p>
+    ${aposConcluir ? '<p class="pc-aviso">✓ Conclusão registrada. Se tiver, anexe agora as fotos ou documentos que comprovam o serviço.</p>' : ""}
+    <label class="pc-caixa" for="pc-arq"><span class="pc-ico" aria-hidden="true">📷</span><b>Anexar fotos ou documentos</b><span class="hint">Fotos (JPG, PNG), PDF ou Excel · até 7 MB cada · pode escolher vários</span>
+      <input type="file" id="pc-arq" multiple accept="image/*,.pdf,.xlsx,.xls,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"></label>
+    <p class="hint" id="pc-msg" role="status"></p><div id="pc-lista" class="pc-lista"></div><div id="pc-ver" class="pc-ver" hidden></div>
+    <div class="actions"><button type="button" class="btn" id="pc-fechar">Fechar</button></div>`;
+  $("#modal").hidden = false;
+  $("#pc-fechar").onclick = () => { if (!PC.enviando) fecharModal(); };
+  $("#pc-arq").addEventListener("change", e => pcEnviar([...e.target.files]));
+  const cx = box.querySelector(".pc-caixa");
+  cx.addEventListener("dragover", e => { e.preventDefault(); cx.classList.add("sobre"); });
+  cx.addEventListener("dragleave", () => cx.classList.remove("sobre"));
+  cx.addEventListener("drop", e => { e.preventDefault(); cx.classList.remove("sobre"); pcEnviar([...e.dataTransfer.files]); });
+  pcLista();
+}
+function pcLista(){
+  const p = pdAchar(PC.id), el = $("#pc-lista"); if (!el || !p) return;
+  const l = p.anexos || [];
+  el.innerHTML = l.length ? l.map(a => `<div class="pc-item"><span class="pc-tipo" aria-hidden="true">${pcIco(a.mime)}</span><span class="pc-nome"><b>${esc(a.nome)}</b><span class="hint">${esc(a.por || "")} · ${esc(fData(a.em))} ${esc(String(a.em || "").slice(11,16))}</span></span>
+    <button type="button" class="btn small" data-pc-abrir="${esc(a.id)}">${/^image\//.test(a.mime) ? "Ver" : "Baixar"}</button><button type="button" class="link" data-pc-tirar="${esc(a.id)}">Tirar</button></div>`).join("")
+    : '<div class="empty">Nenhum arquivo ainda.</div>';
+}
+async function pcEnviar(files){
+  if (PC.enviando || !files.length) return;
+  const id = PC.id, msg = $("#pc-msg"); PC.enviando = true; $("#pc-fechar").disabled = true;
+  let ok = 0;
+  try {
+    for (const [i, file] of files.entries()) {
+      const ext = String(file.name.split(".").pop() || "").toLowerCase(), foto = /^image\//.test(file.type) || /^(jpe?g|png|webp|heic)$/.test(ext);
+      const mime = foto ? "image/jpeg" : PC_EXT[ext] || file.type;
+      if (!foto && !["application/pdf", PC_EXT.xlsx, PC_EXT.xls].includes(mime)) { toast(`"${file.name}": envie foto, PDF ou Excel.`, true); continue; }
+      if (!foto && file.size > 7 * 1024 * 1024) { toast(`"${file.name}" passa de 7 MB.`, true); continue; }
+      msg.textContent = `Enviando ${i + 1} de ${files.length}: ${file.name}…`;
+      const b64 = foto ? await reduzirFoto(file, 2000, 0.85) : await lerBase64(file);
+      const nome = foto ? file.name.replace(/\.[^.]+$/, "") + ".jpg" : file.name;
+      const r = await pdEnviar("pendAnexo", {id, op:"adicionar", mime, b64, nome});
+      if (!r) break; ok++; pcLista();
+    }
+  } catch(e){ toast(e.message || "Não foi possível anexar.", true); }
+  finally { PC.enviando = false; if ($("#pc-fechar")) $("#pc-fechar").disabled = false; if ($("#pc-arq")) $("#pc-arq").value = ""; if (msg) msg.textContent = ok ? `${ok} arquivo${ok > 1 ? "s" : ""} anexado${ok > 1 ? "s" : ""}.` : ""; pcLista(); }
+}
+async function pcAbrirArq(fileId){
+  const p = pdAchar(PC.id), a = p && (p.anexos || []).find(x => x.id === fileId); if (!a) return;
+  $("#pc-msg").textContent = "Abrindo…";
+  try {
+    const r = await api("pendVerAnexo", {id:PC.id, fileId});
+    const bin = atob(r.arquivo.b64), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([u8], {type:r.arquivo.mime}));
+    $("#pc-msg").textContent = "";
+    if (/^image\//.test(r.arquivo.mime)) { const v = $("#pc-ver"); v.hidden = false; v.innerHTML = `<img src="${url}" alt="${esc(a.nome)}"><button type="button" class="btn small" id="pc-ver-x">Fechar foto</button>`; $("#pc-ver-x").onclick = () => { v.hidden = true; v.innerHTML = ""; URL.revokeObjectURL(url); }; v.scrollIntoView({block:"nearest"}); return; }
+    const l = document.createElement("a"); l.href = url; l.download = a.nome || "arquivo"; document.body.appendChild(l); l.click(); setTimeout(() => { URL.revokeObjectURL(url); l.remove(); }, 1500);
+  } catch(e){ $("#pc-msg").textContent = e.message || "Não foi possível abrir."; }
+}
+function pcTirar(fileId, btn){
+  const item = btn.closest(".pc-item"); if (!item || item.querySelector(".pc-conf")) return;
+  const c = document.createElement("span"); c.className = "pc-conf";
+  c.innerHTML = `Tirar este arquivo? <button type="button" class="btn small danger">Tirar</button><button type="button" class="btn small">Manter</button>`;
+  const [sim, nao] = c.querySelectorAll("button");
+  nao.onclick = () => c.remove();
+  sim.onclick = async () => { sim.disabled = true; const r = await pdEnviar("pendAnexo", {id:PC.id, op:"remover", fileId}); if (r) pcLista(); else c.remove(); };
+  item.append(c);
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-pc-abrir],[data-pc-tirar]"); if (!b) return;
+  if (b.dataset.pcAbrir) pcAbrirArq(b.dataset.pcAbrir); else pcTirar(b.dataset.pcTirar, b);
+});
 if (TEM_ADM) {
 $("#pd-nova").addEventListener("click", () => pdAbrirNova());
 $("#pd-body").addEventListener("click", e => {
-  const b = e.target.closest("[data-ciente],[data-feito],[data-sub],[data-editar],[data-aprovar],[data-recusar],[data-os],[data-cot],[data-novacot]"); if (!b) return;
+  const b = e.target.closest("[data-ciente],[data-feito],[data-sub],[data-editar],[data-aprovar],[data-recusar],[data-os],[data-cot],[data-novacot],[data-comprov]"); if (!b) return;
+  if (b.dataset.comprov) { pcAbrir(b.dataset.comprov); return; }
   if (b.dataset.cot) { const id = b.dataset.cot; CT.abrirDepois = () => { const c = (CT.lista || []).find(x => x.id === id); if (c) ctAbrir(c); }; setTab("cotacoes"); return; }
   if (b.dataset.novacot) { const p = pdAchar(b.dataset.novacot) || {}; CT.edit = null; CT.abrirDepois = () => ctNova({pendencia:p.id, finalidade:p.titulo, titulo:p.titulo}); setTab("cotacoes"); return; }
   if (b.dataset.os) { pdAbrirOS(b.dataset.os); return; }
