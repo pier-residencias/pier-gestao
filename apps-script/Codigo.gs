@@ -420,7 +420,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-04 Pier Gestão 2.0 — comprovação das pendências';
+const VERSAO = '2026-11-08 Pier Gestão 2.0 — reforço de segurança';
 
 function doGet() {
   TABS = {};
@@ -459,6 +459,7 @@ function doPost(e) {
       conta = login.conta;
       if (!conta) {
         const travou = login.travou;
+        falhaLoginGlobal(usuarioDig, (req.registro || {}).aparelho);
         registrarAcesso(null, usuarioDig, Object.assign({}, req.registro || {}, { motivo: 'falha' }));
         if (travou) {
           auditar({ usuario: usuarioDig, nome: '', perfil: '' }, 'Login bloqueado', SEG.tentativas + ' senhas erradas seguidas; bloqueado por ' + SEG.bloqueioMin + ' min.', 'Negado');
@@ -468,6 +469,7 @@ function doPost(e) {
       }
       token = abrirSessao(conta, req.registro);
     } else {
+      if (limiteSessaoExcedido(req.token)) return json({ ok: false, codigo: 'limite', erro: 'Muitas requisições em pouco tempo. Aguarde um minuto e tente de novo.' });
       conta = contaDaSessao(req.token);
       // código 'senha' também faz as versões antigas do site voltarem para a tela de entrada
       if (!conta) return json({ ok: false, codigo: 'senha', sessao: 'fim', erro: 'Sua sessão terminou. Entre de novo.' });
@@ -1118,7 +1120,7 @@ function trocarMinhaSenha(r, conta) {
     if (travou) alertaSeguranca('bloqueio', usuario, 'Login bloqueado por ' + SEG.bloqueioMin + ' min: senha atual errada ' + SEG.tentativas + ' vezes ao tentar trocar a senha.', '', conta.nome);
     throw falha(travou ? 'Senha atual errada de novo. Por segurança, novas entradas deste login ficaram bloqueadas por ' + SEG.bloqueioMin + ' min.' : 'A senha atual não confere.');
   }
-  if (nova.length < SEG.senhaMin) throw falha('A nova senha precisa ter pelo menos ' + SEG.senhaMin + ' caracteres.');
+  if (senhaFracaMotivo(nova, usuario)) throw falha(senhaFracaMotivo(nova, usuario));
   if (nova === atual) throw falha('A nova senha precisa ser diferente da atual.');
   if (nova.toLowerCase() === usuario) throw falha('A senha não pode ser igual ao usuário.');
   if (/^(.)\1+$/.test(nova)) throw falha('Escolha uma senha menos óbvia (não use o mesmo caractere repetido).');
@@ -1196,9 +1198,7 @@ function redefinirComCodigo(r) {
     const U = lerUsuarios();
     const us = U.lista.find(z => z.usuario === u);
     if (!us || !us.ativo) throw falha(invalido);
-    if (nova.length < SEG.senhaMin) throw falha('A nova senha precisa ter pelo menos ' + SEG.senhaMin + ' caracteres.');
-    if (nova.toLowerCase() === u) throw falha('A senha não pode ser igual ao usuário.');
-    if (/^(.)\1+$/.test(nova)) throw falha('Escolha uma senha menos óbvia (não use o mesmo caractere repetido).');
+    if (senhaFracaMotivo(nova, u)) throw falha(senhaFracaMotivo(nova, u));
     garantirColunaProvisoria();
     const U2 = lerUsuarios();
     U2.sh.getRange(us.row, U2.c['Senha'] + 1).setNumberFormat('@').setValue(hashSenha(nova));
@@ -1841,7 +1841,7 @@ function nfEnviar(r, conta) {
   if (!b64 || b64.length > 10000000) throw falha('O arquivo da nota fiscal está muito grande (máximo de 7 MB).');
   const partes = ['NF', texto(r.nf, 30) || 'sem número', texto(r.fornecedor, 60), hoje()].filter(Boolean);
   const nomeArq = partes.join(' - ').replace(/[\\/:*?"<>|]/g, '-') + ' - ' + conta.usuario + '.' + ext;
-  const f = pastaNF().createFile(Utilities.newBlob(Utilities.base64Decode(b64), r.mime, nomeArq));
+  const f = pastaNF().createFile(blobConferido(b64, r.mime, nomeArq));
   return { id: f.getId(), mime: r.mime };
 }
 
@@ -1862,7 +1862,7 @@ function osFoto(r, conta) {
   const b64 = String(r.b64 || '');
   if (!b64 || b64.length > 8000000) throw falha('A foto está muito grande.');
   const ext = mime === 'image/png' ? 'png' : mime === 'image/webp' ? 'webp' : 'jpg';
-  const blob = Utilities.newBlob(Utilities.base64Decode(b64), mime, o.numero + '-' + fase + '-' + (ids.length + 1) + '.' + ext);
+  const blob = blobConferido(b64, mime, o.numero + '-' + fase + '-' + (ids.length + 1) + '.' + ext);
   const f = pastaFotos().createFile(blob);
   ids.push(f.getId());
   const upd = { atualizadoEm: agora(), andamento: osAndamento(o.andamento, conta.nome, 'Pôs uma foto de ' + fase) };
@@ -2282,7 +2282,7 @@ function prestDoc(r, conta) {
   const validade = texto(r.validade, 10);
   if (validade && !dataOk(validade)) throw falha('Validade inválida.');
   const arq = (x.nome + ' - ' + nome).replace(/[\\/:*?"<>|]/g, '-').slice(0, 120) + '.' + ext;
-  const f = pastaPrestadores().createFile(Utilities.newBlob(Utilities.base64Decode(b64), r.mime, arq));
+  const f = pastaPrestadores().createFile(blobConferido(b64, r.mime, arq));
   docs.push({ id: f.getId(), nome, validade, mime: r.mime, em: agora(), por: conta.nome });
   gravar(t, { docs: JSON.stringify(docs), atualizadoEm: agora(), atualizadoPor: conta.nome }, x._row);
   AUDIT_DET = 'Anexou "' + nome + '" ao prestador ' + x.nome;
@@ -3182,7 +3182,7 @@ function rondaFoto(r, conta) {
   const b64 = String(r.b64 || '');
   if (!b64 || b64.length > 4000000) throw falha('A foto está muito grande.');
   const nome = (x.numero + ' - ' + (it.g ? it.g + ' - ' : '') + it.r).replace(/[\\/:*?"<>|]/g, '-').slice(0, 110) + ' - ' + ((it.f || []).length + 1) + '.jpg';
-  const f = pastaRondas().createFile(Utilities.newBlob(Utilities.base64Decode(b64), 'image/jpeg', nome));
+  const f = pastaRondas().createFile(blobConferido(b64, 'image/jpeg', nome));
   it.f = (it.f || []).concat(f.getId());
   gravar(t, { itens: JSON.stringify(itens), atualizadoEm: agora(), atualizadoPor: conta.nome }, x._row);
   AUDIT_DET = 'Foto na ronda ' + x.numero + ': ' + (it.g ? it.g + ' · ' : '') + it.r;
@@ -3818,7 +3818,7 @@ function pendAnexo(r, conta) {
   const b64 = String(r.b64 || '');
   if (!b64 || b64.length > 10000000) throw falha('O arquivo está muito grande (máximo de 7 MB).');
   const nome = ('Pendência ' + (p.numero || '') + ' - ' + String(p.titulo || '').slice(0, 50) + ' - comprovação ' + (l.length + 1)).replace(/[\\/:*?"<>|]/g, '-') + '.' + ext;
-  const f = pastaComprovacoes().createFile(Utilities.newBlob(Utilities.base64Decode(b64), r.mime, nome));
+  const f = pastaComprovacoes().createFile(blobConferido(b64, r.mime, nome));
   l.push({ id: f.getId(), nome: texto(r.nome, 120) || nome, mime: r.mime, em: agora(), por: conta.nome, u: conta.usuario });
   gravar(t, { anexos: JSON.stringify(l), atualizadoEm: agora(), atualizadoPor: conta.nome }, p._row);
   AUDIT_DET = 'Anexou comprovação na pendência ' + (p.numero || p.id);
@@ -4549,7 +4549,7 @@ function cotArquivo(r, conta) {
   if (r.tipo === 'mapa') {
     if (r.mime !== 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') throw falha('Mapa inválido.');
     const nome = ('Mapa de cotação ' + c.numero + ' - ' + String(c.finalidade).slice(0, 60)).replace(/[\\/:*?"<>|]/g, '-') + '.xlsx';
-    const f = pastaCotacoes().createFile(Utilities.newBlob(Utilities.base64Decode(b64), r.mime, nome));
+    const f = pastaCotacoes().createFile(blobConferido(b64, r.mime, nome));
     if (c.mapaId) { try { fotoDaPasta(c.mapaId, pastaCotacoes()).setTrashed(true); } catch (e) {} }
     gravar(t, { mapaId: f.getId(), mapaEm: agora() }, c._row);
     AUDIT_DET = 'Salvou o mapa da ' + c.numero + ' no Drive';
@@ -4563,7 +4563,7 @@ function cotArquivo(r, conta) {
   if (!forn) throw falha('Salve a cotação com este fornecedor antes de anexar o orçamento.');
   if (forn.anexos.length >= COT_MAX.anexos) throw falha('Este fornecedor já tem ' + COT_MAX.anexos + ' arquivos.');
   const nome = ('Orçamento ' + c.numero + ' - ' + (forn.empresa || 'fornecedor') + ' - ' + (forn.anexos.length + 1)).replace(/[\\/:*?"<>|]/g, '-') + '.' + ext;
-  const f = pastaCotacoes().createFile(Utilities.newBlob(Utilities.base64Decode(b64), r.mime, nome));
+  const f = pastaCotacoes().createFile(blobConferido(b64, r.mime, nome));
   forn.anexos.push({ id: f.getId(), nome: cotTxt(r.nome, 120) || nome, mime: r.mime });
   gravar(t, { dados: JSON.stringify(dados), atualizadoEm: agora(), atualizadoPor: conta.nome }, c._row);
   AUDIT_DET = 'Anexou orçamento de ' + (forn.empresa || 'fornecedor') + ' na ' + c.numero;
@@ -4619,7 +4619,7 @@ function alertaSeguranca(tipo, usuario, detalhe, aparelho, nome) {
     const dest = emailsDoSetor('Segurança');
     if (!dest.length) { garantirLinhaEmail('Segurança'); return; }
     props.setProperty(chave, String(Date.now()));
-    const titulo = { bloqueio: 'login bloqueado', negado: 'acesso negado', senha: 'senha trocada', usuario: 'usuário criado ou alterado' }[tipo] || tipo;
+    const titulo = { bloqueio: 'login bloqueado', negado: 'acesso negado', senha: 'senha trocada', usuario: 'usuário criado ou alterado', ataque: 'muitas senhas erradas em vários logins' }[tipo] || tipo;
     const quando = agora();
     const corpo = [
       'Alerta de segurança do Pier Gestão: ' + titulo + '.',
@@ -4950,6 +4950,66 @@ function contarSessoes() {
   const t = Date.now(), out = {};
   todasSessoes().forEach(x => { if (x.s && t - x.s.v <= SEG.sessaoInativa && t - x.s.c <= SEG.sessaoMax) out[x.s.u] = (out[x.s.u] || 0) + 1; });
   return out;
+}
+
+// --- limites de requisições (CacheService: contadores que somem sozinhos) ---
+// por sessão: no máximo 150 pedidos por minuto (o uso normal fica bem abaixo disso)
+// no sistema todo: mais de 40 senhas erradas em 10 min (em logins diferentes) atrasa cada nova tentativa e avisa a Segurança
+const LIMITE = { porSessaoMin: 150, falhasGlobais: 40, janelaFalhasMin: 10 };
+function limiteSessaoExcedido(token) {
+  if (!/^[0-9a-f]{64}$/.test(String(token || ''))) return false;
+  try {
+    const c = CacheService.getScriptCache(), k = 'RL_S_' + chaveSessao(token).slice(5, 29) + '_' + Math.floor(Date.now() / 60000);
+    const n = Number(c.get(k) || 0) + 1;
+    c.put(k, String(n), 120);
+    return n > LIMITE.porSessaoMin;
+  } catch (e) { return false; }
+}
+function falhaLoginGlobal(usuario, aparelho) {
+  try {
+    const c = CacheService.getScriptCache(), k = 'RL_F_' + Math.floor(Date.now() / (LIMITE.janelaFalhasMin * 60000));
+    const n = Number(c.get(k) || 0) + 1;
+    c.put(k, String(n), LIMITE.janelaFalhasMin * 60 + 60);
+    if (n <= LIMITE.falhasGlobais) return;
+    Utilities.sleep(Math.min(5000, 1000 + (n - LIMITE.falhasGlobais) * 100));
+    if (n === LIMITE.falhasGlobais + 1) {
+      auditar({ usuario: usuario || '—', nome: '', perfil: '' }, 'Muitas senhas erradas', 'Mais de ' + LIMITE.falhasGlobais + ' senhas erradas em ' + LIMITE.janelaFalhasMin + ' min no sistema todo.', 'Negado');
+      alertaSeguranca('ataque', 'vários logins', 'Mais de ' + LIMITE.falhasGlobais + ' senhas erradas em ' + LIMITE.janelaFalhasMin + ' minutos, em logins diferentes. Pode ser alguém tentando adivinhar senhas. As tentativas seguintes ficam mais lentas.', aparelho);
+    }
+  } catch (e) { /* o limite é uma proteção a mais; não pode impedir a entrada */ }
+}
+
+// --- arquivos enviados: o conteúdo precisa ser do tipo informado (não basta o nome ou o tipo dito pelo navegador) ---
+function conteudoConfere(b64, mime) {
+  let b;
+  try { b = Utilities.base64Decode(String(b64 || '').replace(/[^A-Za-z0-9+/=]/g, '').slice(0, mime === 'application/pdf' ? 1368 : 24)); } catch (e) { return false; }
+  b = b.map(x => x & 255);
+  const comeca = sig => sig.every((v, i) => b[i] === v);
+  if (mime === 'image/jpeg') return comeca([0xFF, 0xD8, 0xFF]);
+  if (mime === 'image/png') return comeca([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+  if (mime === 'image/webp') return comeca([0x52, 0x49, 0x46, 0x46]) && [0x57, 0x45, 0x42, 0x50].every((v, i) => b[8 + i] === v);
+  if (mime === 'application/pdf') return String.fromCharCode.apply(null, b).indexOf('%PDF-') >= 0;
+  if (mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') return comeca([0x50, 0x4B, 0x03, 0x04]);
+  if (mime === 'application/vnd.ms-excel') return comeca([0xD0, 0xCF, 0x11, 0xE0]);
+  return false;
+}
+function blobConferido(b64, mime, nome) {
+  if (!conteudoConfere(b64, mime)) throw falha('O conteúdo do arquivo não confere com o tipo (foto, PDF ou Excel). Escolha o arquivo original.');
+  return Utilities.newBlob(Utilities.base64Decode(b64), mime, nome);
+}
+// senhas novas: além do tamanho mínimo, recusa as muito comuns ou fáceis de adivinhar
+const SENHAS_COMUNS = ['1234567890', '12345678910', '0123456789', '1234512345', '1234554321', '9876543210', '0987654321', '1122334455',
+  'senha12345', 'senha123456', 'senha@1234', 'password123', 'qwertyuiop', 'qwerty1234', 'asdfghjklç', 'abcdefghij', 'abc1234567',
+  '1q2w3e4r5t', 'q1w2e3r4t5', 'pier123456', 'pier@12345', 'pierresidencias', 'pierresidencia', 'condominio', 'condominio123',
+  'administracao', 'manutencao', 'portaria123', 'brasil1234', 'mudar12345', 'trocar1234', 'iloveyou12'];
+function senhaFracaMotivo(nova, usuario) {
+  const s = String(nova || ''), b = s.toLowerCase();
+  if (s.length < SEG.senhaMin) return 'A nova senha precisa ter pelo menos ' + SEG.senhaMin + ' caracteres.';
+  if (usuario && String(usuario).length >= 4 && b.indexOf(String(usuario).toLowerCase()) >= 0) return 'A senha não pode conter o seu usuário.';
+  if (/^(.)\1+$/.test(s)) return 'Escolha uma senha menos óbvia (não use o mesmo caractere repetido).';
+  if (SENHAS_COMUNS.indexOf(b) >= 0 || /^\d+$/.test(s) && '01234567890123456789'.indexOf(s) >= 0 || /^\d+$/.test(s) && '98765432109876543210'.indexOf(s) >= 0)
+    return 'Essa senha é muito comum. Use uma frase ou misture palavras, números e símbolos.';
+  return '';
 }
 
 // --- tentativas de login: 5 senhas erradas seguidas bloqueiam o login por 15 minutos ---

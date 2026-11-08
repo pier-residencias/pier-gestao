@@ -1,3 +1,13 @@
+// Segurança (08/11/2026): sempre por HTTPS e nunca dentro de uma moldura de outro site (proteção contra "clickjacking")
+(() => {
+  const local = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+  if (location.protocol === 'http:' && !local) { location.replace('https://' + location.host + location.pathname + location.search + location.hash); return; }
+  if (window.top !== window.self) {
+    // dentro de moldura: esconde tudo e tenta abrir o site na janela inteira
+    document.documentElement.style.display = 'none';
+    try { window.top.location.replace(window.self.location.href); } catch (e) { /* o navegador pode impedir; o site continua escondido */ }
+  }
+})();
 (() => {
   const root = document.documentElement;
   const button = document.getElementById('tema-alternar');

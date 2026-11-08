@@ -1606,7 +1606,7 @@ function abrirEstorno(id){
 $("#h-csv").addEventListener("click", () => {
   const list = movsDoMes(S.histMes).sort(ordMov);
   const cols = ["Data","Tipo","Código","Item","Quantidade","Unidade","Efeito no estoque","Responsável","Destino","OS / motivo","Peça retirada","Fornecedor","NF","Valor unitário","Previsão devolução","Estado na devolução","Observação","Registrado por","Estornado","Nota fiscal (link)"];
-  const cell = v => { const s = String(v ?? ""); return /[";\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; };
+  const cell = v => { let s = String(v ?? ""); if (/^[=+\-@\t\r]/.test(s) && !/^-?\d+([.,]\d+)?$/.test(s)) s = "'" + s; return /[";\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; }; // "'" na frente: o Excel não roda fórmula vinda do texto
   const n = v => v===""||v==null ? "" : String(v).replace(".",",");
   const lines = [cols.join(";")].concat(list.map(m => [fData(m.data), TIPOS[m.tipo]?.nome||m.tipo, m.itemCodigo, m.itemNome, n(m.qtd), m.unidade, n(m.delta), m.responsavel, m.destino, m.motivo, m.velhoDestino, m.fornecedor, m.nf, n(m.valorUnit), m.previsao?fData(m.previsao):"", m.estadoDevolucao, m.obs, m.registradoPor, m.estornado?"sim":"", String(m.nfFotos||"").split(/\s+/).filter(Boolean).join(" ")].map(cell).join(";")));
   const blob = new Blob(["﻿"+lines.join("\r\n")], {type:"text/csv;charset=utf-8"});
@@ -1895,7 +1895,7 @@ let resizeT; window.addEventListener("resize", () => { clearTimeout(resizeT); re
 $("#d-mais").addEventListener("click", () => { S.detTodos = !S.detTodos; renderDash(); });
 $("#d-csv").addEventListener("click", () => {
   const R = S.rel; if (!R || !S.detalhe) return;
-  const cell = v => { const s = String(v ?? ""); return /[";\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; };
+  const cell = v => { let s = String(v ?? ""); if (/^[=+\-@\t\r]/.test(s) && !/^-?\d+([.,]\d+)?$/.test(s)) s = "'" + s; return /[";\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; }; // "'" na frente: o Excel não roda fórmula vinda do texto
   const n = v => v ? String(v).replace(".",",") : "0";
   const linhas = [["Código","Item","Categoria","Saídas","Trocas","Empréstimos","Entradas","Compras (R$)","Estoque atual","Unidade","Último movimento"].join(";")]
     .concat(S.detalhe.map(d => [d.codigo, d.nome, d.cat, n(d.saida), n(d.troca), n(d.emp), n(d.entrada), n(Math.round(d.gasto*100)/100), d.estoque===undefined?"":n(d.estoque), d.unidade, d.ultimo?fData(d.ultimo):""].map(cell).join(";")));
@@ -2883,7 +2883,7 @@ async function lerNotaPDF(file){
   let dados = null, erro = "";
   try {
     const lib = await carregarPDFjs();
-    const doc = await lib.getDocument({data: new Uint8Array(await file.arrayBuffer())}).promise;
+    const doc = await lib.getDocument({data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false}).promise;
     const pags = [];
     for (let i = 1; i <= Math.min(doc.numPages, 10); i++) { const p = await doc.getPage(i); pags.push((await p.getTextContent()).items); }
     dados = LeitorNF.lerDanfe(LeitorNF.montarLinhas(pags));
@@ -7791,7 +7791,7 @@ async function miLerArquivo(file){
     return {tipo:"?", erro:"Não achei a tabela da Exista (TIPO, UNIDADE, BLOCO… CONSUMO EM M³) nesta planilha."};
   }
   if (/\.pdf$/i.test(file.name)) {
-    const lib = await carregarPDFjs(), doc = await lib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise, pags = [];
+    const lib = await carregarPDFjs(), doc = await lib.getDocument({data:new Uint8Array(await file.arrayBuffer()), isEvalSupported:false}).promise, pags = [];
     for (let i = 1; i <= Math.min(doc.numPages, 200); i++) { const pg = await doc.getPage(i); pags.push((await pg.getTextContent()).items); }
     const linhas = LeitorNF.montarLinhas(pags);
     const g = miLerGlobal(linhas); if (g) return {tipo:"global", r:g};
@@ -8822,7 +8822,7 @@ async function esImportarPDF(file){
   if (!/\.pdf$/i.test(file.name)) { toast("Escolha o PDF de solicitações do site da administradora.", true); return; }
   let lista;
   try {
-    const lib = await carregarPDFjs(), doc = await lib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise, pags = [];
+    const lib = await carregarPDFjs(), doc = await lib.getDocument({data:new Uint8Array(await file.arrayBuffer()), isEvalSupported:false}).promise, pags = [];
     for (let i = 1; i <= Math.min(doc.numPages, 30); i++) { const pg = await doc.getPage(i); pags.push((await pg.getTextContent()).items); }
     lista = esLerBCF(LeitorNF.montarLinhas(pags));
   } catch(e){ toast("Não consegui ler este PDF.", true); return; }

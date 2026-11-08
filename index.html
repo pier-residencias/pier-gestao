@@ -3,14 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<!-- Segurança (08/11/2026): o GitHub Pages não deixa configurar cabeçalhos, então a política vai aqui. Só roda script do próprio site
+     e das duas bibliotecas usadas (cdnjs e jsdelivr); nada de script embutido na página. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net 'wasm-unsafe-eval' blob:; worker-src 'self' blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https: data: blob:; frame-src 'self' blob: data:; media-src 'self' blob: data:; object-src 'none'; base-uri 'self'; form-action 'self'; manifest-src 'self'; upgrade-insecure-requests">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <title>Pier Gestão 2.0</title>
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#0c1117">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%233a7ba0'/%3E%3Ctext x='16' y='23' font-family='Georgia,serif' font-size='20' text-anchor='middle' fill='white'%3EP%3C/text%3E%3Cpath d='M5 26c7-3 15-3 22-1' stroke='white' stroke-width='1.6' fill='none'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
-<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap"></noscript>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="estilo.css?v=20261102lote">
 <link rel="stylesheet" href="visual-2.css?v=20261104comprov">
 <style>
@@ -805,11 +808,11 @@ html.pier-iniciando body>main,html.pier-iniciando body>header,html.pier-iniciand
 
 
 
-<script src="tema.js"></script>
+<script src="tema.js?v=20261108seg"></script>
 <script src="config.js"></script>
 <script src="nfe.js?v=20261101os5"></script>
 <script src="vendor/qrcode.js?v=2.0.4"></script>
-<script src="app.js?v=20261104comprov"></script>
+<script src="app.js?v=20261108seg"></script>
 
 </body>
 </html>
