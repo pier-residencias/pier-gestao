@@ -420,7 +420,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-08 Pier Gestão 2.0 — reforço de segurança';
+const VERSAO = '2026-11-09 Pier Gestão 2.0 — sem e-mail de alteração para o síndico';
 
 function doGet() {
   TABS = {};
@@ -4063,7 +4063,9 @@ function pendSalvar(v, conta) {
     const depois = Object.assign({}, atual, obj);
     let avS = '';
     if (pedidoConclusao) avS = pendAvisarSindico(depois, 'Foi pedida a conclusão da pendência (em ' + String(obj.conclData).split('-').reverse().join('/') + '); ela aguarda a sua aprovação e a do gerente', [], conta);
-    else if (!(aviso && chaveNome(respNovo) === 'sindico') && (pendAcompanhadaPeloSindico(atual) || pendAcompanhadaPeloSindico(depois))) {
+    // aviso de "pendência alterada" para o síndico: desligado a pedido (09/11/2026) — mandava um e-mail a cada edição.
+    // Continuam indo: pedido de conclusão e as aprovações que dependem dele. Para voltar, troque PEND_AVISAR_ALTERACOES para true.
+    else if (PEND_AVISAR_ALTERACOES && !(aviso && chaveNome(respNovo) === 'sindico') && (pendAcompanhadaPeloSindico(atual) || pendAcompanhadaPeloSindico(depois))) {
       const mud = pendMudancas(atual, obj);
       if (mud.length) avS = pendAvisarSindico(depois, 'A pendência que você acompanha foi alterada', mud, conta);
     }
@@ -4737,6 +4739,7 @@ function emailsDoSetor(resp) {
 // (as que ele incluiu ou que estão com o Síndico como responsável). Quem fez a mudança sendo o próprio síndico, não sai e-mail.
 // Uma falha no e-mail nunca desfaz a gravação.
 function pendAcompanhadaPeloSindico(p) { return p.origem === 'Síndico' || chaveNome(p.responsavel) === 'sindico'; }
+const PEND_AVISAR_ALTERACOES = false;
 function pendAvisarSindico(p, motivo, mudancas, conta) {
   try {
     if (ehSindico(conta)) return '';
