@@ -421,7 +421,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-11 Pier Gestão 2.0 — barco: horários fixos e maré alta';
+const VERSAO = '2026-11-11 Pier Gestão 2.0 — barco: busca do morador pela inicial';
 
 function doGet() {
   TABS = {};
@@ -500,6 +500,7 @@ function doPost(e) {
     if (req.acao === 'avisos') return json(Object.assign(base, avLista(conta)));
     if (req.acao === 'barco') return json(Object.assign(base, barcoDia(req, conta)));
     if (req.acao === 'barcoMes') return json(Object.assign(base, barcoMes(req, conta)));
+    if (req.acao === 'barcoMoradores') return json(Object.assign(base, barcoMoradores(conta)));
     if (req.acao === 'barcoUnidades') return json(Object.assign(base, barcoUnidades(conta)));
     if (req.acao === 'correspondencias') { corrExigir(conta); return json(Object.assign(base, {correspondencias:linhas(tabela('correspondencias')).map(corrPublica)})); }
     if (req.acao === 'pendVerAnexo') { pode('pendencias'); const f = pendVerAnexo(req); auditar(conta, 'Abriu comprovação de pendência', f.nome); return json(Object.assign(base, { arquivo: f })); }
@@ -6155,6 +6156,16 @@ function barcoUnidades(conta) {
   const cmp = (a, b) => (Number(a) || 0) - (Number(b) || 0) || String(a).localeCompare(String(b), 'pt-BR');
   const blocos = unBlocos(us).filter(b => por[b]).map(b => { const m = /^\s*(\d+)/.exec(b); return { bloco: b, curto: m ? m[1] : b, unidades: por[b].slice().sort(cmp) }; });
   return { blocos };
+}
+// Nomes dos moradores para a busca por inicial no lançamento do passageiro (pedido de 11/11/2026).
+// Sai só o nome, o bloco, a unidade e se tem acesso ao barco — nada de contatos, documentos ou parentesco.
+function barcoMoradores(conta) {
+  guaExigir(conta, 'Sul');
+  const l = linhas(tabela('unp')).map(m => {
+    const bloco = String(m.bloco || '').trim(), mm = /^\s*(\d+)/.exec(bloco);
+    return { nome: String(m.nome || '').trim(), bloco, curto: mm ? mm[1] : bloco, numero: String(m.numero || '').trim(), barco: /^s/i.test(String(m.barco || '')) };
+  }).filter(m => m.nome && m.bloco);
+  return { moradores: l };
 }
 function barcoSalvar(req, conta) {
   guaExigir(conta, 'Sul');
