@@ -232,7 +232,8 @@ const ABAS = {
     nome: 'Barco - dias',
     criar: true,
     cols: [['id', 'ID'], ['data', 'Data'], ['operadorDia', 'Operador diurno (07h às 19h)'], ['operadorNoite', 'Operador noturno (19h às 07h)'], ['almocoDe', 'Rendição almoço de'], ['almocoAte', 'Rendição almoço até'],
-      ['jantaDe', 'Rendição janta de'], ['jantaAte', 'Rendição janta até'], ['obs', 'Observação'], ['atualizadoEm', 'Atualizado em'], ['atualizadoPor', 'Atualizado por']],
+      ['jantaDe', 'Rendição janta de'], ['jantaAte', 'Rendição janta até'], ['obs', 'Observação'], ['atualizadoEm', 'Atualizado em'], ['atualizadoPor', 'Atualizado por'],
+      ['mare', 'Maré alta (viagens que não saíram)']],
     num: []
   },
   // medição individual de água por unidade (relatório mensal da Exista) e o resumo de cada período (conta da concessionária)
@@ -420,7 +421,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-09 Pier Gestão 2.0 — sem e-mail de alteração para o síndico';
+const VERSAO = '2026-11-11 Pier Gestão 2.0 — barco: horários fixos e maré alta';
 
 function doGet() {
   TABS = {};
@@ -499,6 +500,7 @@ function doPost(e) {
     if (req.acao === 'avisos') return json(Object.assign(base, avLista(conta)));
     if (req.acao === 'barco') return json(Object.assign(base, barcoDia(req, conta)));
     if (req.acao === 'barcoMes') return json(Object.assign(base, barcoMes(req, conta)));
+    if (req.acao === 'barcoUnidades') return json(Object.assign(base, barcoUnidades(conta)));
     if (req.acao === 'correspondencias') { corrExigir(conta); return json(Object.assign(base, {correspondencias:linhas(tabela('correspondencias')).map(corrPublica)})); }
     if (req.acao === 'pendVerAnexo') { pode('pendencias'); const f = pendVerAnexo(req); auditar(conta, 'Abriu comprovação de pendência', f.nome); return json(Object.assign(base, { arquivo: f })); }
     if (req.acao === 'fornecedores') { pode('pendencias'); return json(Object.assign(base, fornLista())); }
@@ -6143,6 +6145,17 @@ function barcoMes(req, conta) {
   const dias = linhasOnde(tabela('barcod'), ['data'], o => o.data.slice(0, 7) === mes).map(o => { delete o._row; return o; });
   return { mes, passageiros, dias };
 }
+// Blocos e números de apartamento para o menu suspenso do passageiro. Só bloco e número saem daqui (nenhum dado de morador),
+// por isso basta ter a Guarita Sul. A fonte é o cadastro de unidades da Administração.
+function barcoUnidades(conta) {
+  guaExigir(conta, 'Sul');
+  const us = linhas(tabela('un')).map(u => ({ bloco: String(u.bloco || '').trim(), numero: String(u.numero || '').trim() })).filter(u => u.bloco && u.numero);
+  const por = {};
+  us.forEach(u => { (por[u.bloco] = por[u.bloco] || []).push(u.numero); });
+  const cmp = (a, b) => (Number(a) || 0) - (Number(b) || 0) || String(a).localeCompare(String(b), 'pt-BR');
+  const blocos = unBlocos(us).filter(b => por[b]).map(b => { const m = /^\s*(\d+)/.exec(b); return { bloco: b, curto: m ? m[1] : b, unidades: por[b].slice().sort(cmp) }; });
+  return { blocos };
+}
 function barcoSalvar(req, conta) {
   guaExigir(conta, 'Sul');
   const data = barcoData(req.data);
@@ -6180,6 +6193,20 @@ function barcoSalvar(req, conta) {
     gravar(t, o, ja ? ja._row : undefined);
     AUDIT_DET = 'Turno do barco ' + data;
     return 'Turno do dia salvo.';
+  }
+  // viagem que não saiu por maré alta: marcar ou desmarcar (fica em vermelho na tela)
+  if (req.op === 'mare') {
+    const t = tabela('barcod'), horario = texto(req.horario, 5), trajeto = texto(req.trajeto, 60);
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(horario) || !trajeto) throw falha('Informe o horário e o trajeto da viagem.');
+    const ja = linhasOnde(t, ['data'], x => x.data === data)[0];
+    let l = []; try { l = JSON.parse((ja && ja.mare) || '[]'); if (!Array.isArray(l)) l = []; } catch (e) { l = []; }
+    const chave = horario + '|' + trajeto, tinha = l.some(x => x.v === chave);
+    if (req.ativo && !tinha) l.push({ v: chave, por: conta.nome, em: agora() });
+    if (!req.ativo) l = l.filter(x => x.v !== chave);
+    const o = { mare: JSON.stringify(l), atualizadoEm: agora(), atualizadoPor: conta.nome };
+    if (ja) gravar(t, o, ja._row); else gravar(t, Object.assign({ id: 'BD-' + data, data }, o));
+    AUDIT_DET = (req.ativo ? 'Maré alta' : 'Desfez maré alta') + ' · barco ' + data + ' ' + horario;
+    return req.ativo ? 'Viagem marcada como MARÉ ALTA.' : 'Marcação de maré alta retirada.';
   }
   throw falha('Operação inválida.');
 }
