@@ -695,7 +695,7 @@ const BARCO_GRADE = {
 const BARCO_TRAJ = {"P>M":"PIER > METRÔ", "M>P":"METRÔ > PIER", "W>M":"PRAIA (WINDSOR) > METRÔ", "C>M":"CPR > METRÔ"};
 const BARCO_CATS = ["Morador(a)","Funcionário(a)","Pier","Visitante","Prestador de serviço"];
 const BARCO_DIAS = ["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"];
-const BARCO = {data:"", grade:"", lista:[], dia:null, mes:null, carregando:false, ger:0, gerMes:0, erro:"", salvando:false};
+const BARCO = {data:"", grade:"", lista:[], dia:null, mes:null, carregando:false, ger:0, gerMes:0, erro:"", salvando:false, unid:null, unidEm:0};
 const barcoDow = d => new Date(d + "T12:00:00").getDay();
 const barcoGradePadrao = d => [0,6].includes(barcoDow(d)) ? "Fim de semana e feriado" : "Dias úteis";
 const barcoFmt = d => d ? d.slice(8,10) + "/" + d.slice(5,7) + "/" + d.slice(0,4) : "";
@@ -715,7 +715,13 @@ async function barcoCarregar(){
   try { const r = await api("barco", {data}); if (S.token === token && ger === BARCO.ger) { BARCO.lista = r.passageiros || []; BARCO.dia = r.dia; const g = BARCO.lista.find(p => p.status !== "Removido"); if (g && BARCO_GRADE[g.grade]) BARCO.grade = g.grade; } }
   catch(e){ if (S.token === token && ger === BARCO.ger) BARCO.erro = e.message || "Não foi possível carregar."; }
   finally { if (S.token === token && ger === BARCO.ger) { BARCO.carregando = false; barcoRender(); } }
-  barcoCarregarMes();
+  barcoCarregarMes(); barcoCarregarUnidades();
+}
+// blocos e apartamentos para o menu suspenso (se o Apps Script ainda for o antigo, o campo continua livre)
+async function barcoCarregarUnidades(){
+  if (BARCO.unid && Date.now() - BARCO.unidEm < 600000) return;
+  const token = S.token;
+  try { const r = await api("barcoUnidades"); if (S.token === token && Array.isArray(r.blocos) && r.blocos.length) { BARCO.unid = r.blocos; BARCO.unidEm = Date.now(); } } catch(e){ /* sem a lista, o campo fica livre */ }
 }
 async function barcoCarregarMes(){
   const mes = BARCO.data.slice(0,7), ger = ++BARCO.gerMes, token = S.token;
@@ -795,24 +801,34 @@ function barcoPassageiro(chave){
       ${chave ? "" : `<label>Horário *<input class="input" type="time" name="horario" required></label><label>Trajeto *<input class="input" name="trajeto" list="ba-dl-traj" maxlength="60" required></label><datalist id="ba-dl-traj">${opTraj}</datalist>`}
       <label class="full">Nome do passageiro *<input class="input" name="nome" maxlength="100" required autocomplete="off"></label>
       <fieldset class="full ba-cats"><legend>Morador / Visitante / Pier / Funcionário(a) *</legend>${BARCO_CATS.map((c, i) => `<label><input type="radio" name="categoria" value="${c}" ${i === 0 ? "checked" : ""}> ${c}</label>`).join("")}</fieldset>
-      <label>Bloco / apartamento<input class="input" name="blocoApto" maxlength="30" placeholder="Ex.: 3/302"></label>
+      ${BARCO.unid ? `<div class="field"><label for="ba-bloco">Bloco / apartamento</label><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <select class="input" id="ba-bloco" name="blocoSel" aria-label="Bloco"><option value="">Bloco</option>${BARCO.unid.map((b, i) => `<option value="${i}">${esc(b.bloco)}</option>`).join("")}</select>
+        <select class="input" id="ba-apto" name="aptoSel" aria-label="Apartamento" disabled><option value="">Apto</option></select></div></div>`
+        : `<label>Bloco / apartamento<input class="input" name="blocoApto" maxlength="30" placeholder="Ex.: 3/302"></label>`}
       <label>Quantidade<input class="input" type="number" name="qtd" min="1" max="50" value="1" required></label>
       <label class="full">Observação<input class="input" name="obs" maxlength="300"></label>
     </div><p class="hint" id="ba-form-ok" role="status"></p><p class="hint err" id="ba-form-msg" role="alert"></p>
     <div class="actions"><button type="submit" class="btn primary">Adicionar</button><button type="button" class="btn" id="ba-form-fim">Concluir</button></div></form>`;
   $("#modal").hidden = false;
   const form = $("#ba-form"); $("#ba-form-fim").onclick = () => { if (!BARCO.salvando) fecharModal(); };
+  const selB = form.elements.blocoSel, selA = form.elements.aptoSel;
+  if (selB && selA) selB.addEventListener("change", () => {
+    const b = BARCO.unid[Number(selB.value)];
+    selA.innerHTML = `<option value="">Apto</option>` + (b ? b.unidades.map(u => `<option>${esc(u)}</option>`).join("") : "");
+    selA.disabled = !b; selA.value = "";
+  });
+  const blocoApto = v => { if (!selB) return v.blocoApto || ""; const b = BARCO.unid[Number(v.blocoSel)]; return b ? (b.curto + (v.aptoSel ? "/" + v.aptoSel : "")) : ""; };
   (form.elements.horario || form.elements.nome).focus();
   form.onsubmit = async e => {
     e.preventDefault(); if (BARCO.salvando || !form.reportValidity()) return;
     const v = Object.fromEntries(new FormData(form)), btn = form.querySelector("[type=submit]");
-    const pas = {grade:BARCO.grade, horario:chave ? horario : v.horario, trajeto:chave ? trajeto : String(v.trajeto).trim().toUpperCase(), nome:v.nome, categoria:v.categoria, blocoApto:v.blocoApto, qtd:v.qtd, obs:v.obs};
+    const pas = {grade:BARCO.grade, horario:chave ? horario : v.horario, trajeto:chave ? trajeto : String(v.trajeto).trim().toUpperCase(), nome:v.nome, categoria:v.categoria, blocoApto:blocoApto(v), qtd:v.qtd, obs:v.obs};
     const operacaoId = typeof crypto.randomUUID === "function" ? crypto.randomUUID() : "BA-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2) + "-" + Math.random().toString(36).slice(2);
     BARCO.salvando = true; btn.disabled = true; $("#ba-form-msg").textContent = "";
     try {
       await api("barcoSalvar", {op:"passageiro", data:BARCO.data, operacaoId, passageiro:pas});
       $("#ba-form-ok").textContent = `✓ ${v.nome} adicionado(a). Pode lançar o próximo.`;
-      ["nome","blocoApto","obs"].forEach(k => form.elements[k].value = ""); form.elements.qtd.value = "1"; form.elements.nome.focus();
+      ["nome","blocoApto","obs"].forEach(k => { if (form.elements[k]) form.elements[k].value = ""; }); if (selB) { selB.value = ""; selA.innerHTML = `<option value="">Apto</option>`; selA.disabled = true; } form.elements.qtd.value = "1"; form.elements.nome.focus();
       barcoCarregar();
     } catch(err){ $("#ba-form-msg").textContent = err.message || "Não foi possível salvar."; }
     finally { BARCO.salvando = false; btn.disabled = false; }
