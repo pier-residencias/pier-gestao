@@ -689,10 +689,10 @@ document.addEventListener("click", e => {
   else if (b.dataset.guaCancelar) guaFormulario(b.dataset.g, "cancelar", b.dataset.guaCancelar);
 });
 // ---------- Barco do condomínio (Guarita Sul): controle de passageiros (pedido de 04/11/2026, modelo "CONTROLE BARCO - PADRÃO") ----------
-// Grades de horário: quadro "Horário Fixo do Barco" (atualizado em 11/11/2026), dias úteis e sábado/domingo/feriado. "ALMOÇO" marca a parada do meio-dia.
+// Grades de horário: quadro "Horário Fixo do Barco" (11/11/2026). Só as saídas do Pier (Pier > Metrô): a guarita não controla as voltas. "ALMOÇO" marca a parada do meio-dia.
 const BARCO_GRADE = {
-  "Dias úteis": "07:00 P>M|07:20 M>P|07:30 P>M|07:50 M>P|08:00 P>M|08:20 M>P|08:30 P>M|08:50 M>P|09:00 P>M|09:20 M>P|09:30 P>M|09:50 M>P|10:00 P>M|10:20 M>P|10:30 P>M|10:50 M>P|11:00 P>M|11:50 M>P|12:00 P>M|ALMOÇO|13:00 P>M|13:50 M>P|14:00 P>M|14:50 M>P|15:00 P>M|15:50 M>P|16:00 P>M|16:20 M>P|16:30 P>M|16:50 M>P|17:00 P>M|17:20 M>P|17:30 P>M|17:50 M>P|18:00 P>M|18:20 M>P|18:30 P>M|18:50 M>P|19:00 P>M|19:20 M>P|19:30 P>M|19:50 M>P|20:00 P>M|20:20 M>P|20:30 P>M",
-  "Fim de semana e feriado": "09:00 P>M|09:30 W>M|09:35 M>P|09:45 P>M|10:15 W>M|10:20 M>P|10:30 P>M|11:00 W>M|11:05 M>P|11:15 P>M|11:45 W>M|11:50 M>P|12:00 P>M|ALMOÇO|13:15 W>M|13:20 M>P|13:30 P>M|14:00 W>M|14:05 M>P|14:15 P>M|14:45 W>M|14:50 M>P|15:00 P>M|15:30 W>M|15:35 M>P|15:45 P>M|16:15 W>M|16:20 M>P|16:30 P>M|17:00 W>M|17:05 M>P|17:15 P>M|17:45 W>M|17:50 M>P|18:00 P>M"
+  "Dias úteis": "07:00 P>M|07:30 P>M|08:00 P>M|08:30 P>M|09:00 P>M|09:30 P>M|10:00 P>M|10:30 P>M|11:00 P>M|12:00 P>M|ALMOÇO|13:00 P>M|14:00 P>M|15:00 P>M|16:00 P>M|16:30 P>M|17:00 P>M|17:30 P>M|18:00 P>M|18:30 P>M|19:00 P>M|19:30 P>M|20:00 P>M|20:30 P>M",
+  "Fim de semana e feriado": "09:00 P>M|09:45 P>M|10:30 P>M|11:15 P>M|12:00 P>M|ALMOÇO|13:30 P>M|14:15 P>M|15:00 P>M|15:45 P>M|16:30 P>M|17:15 P>M|18:00 P>M"
 };
 const BARCO_TRAJ = {"P>M":"PIER > METRÔ", "M>P":"METRÔ > PIER", "W>M":"PRAIA (WINDSOR) > METRÔ", "C>M":"CPR > METRÔ"};
 const BARCO_CATS = ["Morador(a)","Funcionário(a)","Pier","Visitante","Prestador de serviço"];
