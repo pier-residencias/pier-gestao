@@ -236,3 +236,22 @@
 .ba-mare-tag{display:inline-block;margin-left:6px;padding:2px 8px;border-radius:6px;background:#D92D20;color:#fff;font-size:11px;font-weight:800;letter-spacing:.06em}
 .ba-btn-mare{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 45%,var(--line))}
 .ba-mare-res{margin:0;padding:8px 12px;border-radius:10px;background:color-mix(in srgb,var(--crit) 12%,var(--surface));color:var(--crit);font-weight:700;font-size:13px}
+/* Barco: grades separadas — dias úteis (verde-água) × fins de semana e feriados (âmbar) (12/11/2026) */
+.ba-grades{display:flex;gap:6px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:5px}
+.ba-grade{display:grid;gap:2px;text-align:left;border:0;border-radius:9px;background:none;color:var(--muted);font:inherit;padding:8px 14px;cursor:pointer;min-width:0}
+.ba-grade b{font-size:13px}.ba-grade small{font-size:11px}
+.ba-grade.uteis[aria-pressed=true]{background:color-mix(in srgb,var(--teal) 20%,var(--surface));color:var(--fg);box-shadow:inset 0 -3px 0 var(--teal)}
+.ba-grade.fds[aria-pressed=true]{background:color-mix(in srgb,var(--warn) 20%,var(--surface));color:var(--fg);box-shadow:inset 0 -3px 0 var(--warn)}
+.ba-grade-tag{display:inline-block;margin-left:8px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;vertical-align:middle}
+.ba-grade-tag.uteis{background:color-mix(in srgb,var(--teal) 20%,var(--surface));color:var(--teal)}
+.ba-grade-tag.fds{background:color-mix(in srgb,var(--warn) 22%,var(--surface));color:var(--warn)}
+.ba-lista-grade{border-top:4px solid var(--teal)}.ba-lista-grade.fds{border-top-color:var(--warn)}
+.ba-lista-grade.fds .ba-viagem.tem{border-left-color:var(--warn)}
+.ba-quadro{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.ba-q{--q:var(--teal);border:1px solid var(--line);border-top:4px solid var(--q);border-radius:12px;padding:14px;opacity:.7}
+.ba-q.fds{--q:var(--warn)}.ba-q.atual{opacity:1;background:color-mix(in srgb,var(--q) 8%,var(--bg))}
+.ba-q h4{margin:0;color:var(--q);font-size:15px}.ba-q small{color:var(--muted);font-size:12px}
+.ba-q ol{list-style:none;margin:10px 0 0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px}
+.ba-q li{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:13px;text-align:center;padding:5px 0;border-radius:8px;background:var(--surface);border:1px solid var(--line)}
+.ba-q li.alm{grid-column:1/-1;font-family:inherit;font-weight:400;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);border-style:dashed;background:none}
+@media(max-width:700px){.ba-quadro{grid-template-columns:1fr}.ba-grades{flex-direction:column;width:100%}.ba-grade{width:100%}}
