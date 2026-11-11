@@ -57,13 +57,15 @@ if (!ESPACOS_ATIVO || !TEM_ADM || !document.getElementById("t-esreservas")) { de
 if (!TEM_ADM || !document.getElementById("t-medlanc")) { delete ABAS_PERM.medlanc; delete ABAS_PERM.medidores; delete ABAS_PERM.medrel; delete ABAS_PERM.medind; }
 if (!document.getElementById("t-indicadores")) delete ABAS_PERM.indicadores;
 if (!document.getElementById("t-gsul")) { delete ABAS_PERM.gsul; delete ABAS_PERM.gbarco; delete ABAS_PERM.gnorte; }
+delete ABAS_PERM.gsul; // tela de visitantes da Guarita Sul fora do sistema (11/11/2026)
 if (!TEM_ADM || !document.getElementById("t-acessos")) delete ABAS_PERM.acessos;
 // O que aparece depende de como a pessoa entrou: Manutenção (tudo do estoque, OS e demandas),
 // Limpeza (só o estoque da limpeza) ou Administração (só o menu Administração).
 // "inicio" primeiro: é a tela que abre ao entrar pela Administração
 const ABAS_ADM = ["inicio","correspondencias","aprovacoes","pendencias","pdpainel","cotacoes","rondas","unidades","uncadastro","unconfig","medlanc","medidores","medrel","medind","esreservas","esvistorias","esespacos","fornecedores","usuarios","acessos"];
 // Setor Guaritas (pedido de 04/11/2026): só as telas da Guarita Sul e da Guarita Norte; entra-se pela opção Guaritas
-const ABAS_GUA = ["gsul","gbarco","gnorte"];
+// "Guarita Sul" (visitantes) saiu do menu a pedido (11/11/2026): na Sul fica só o Barco. Os registros antigos continuam na planilha.
+const ABAS_GUA = ["gbarco","gnorte"];
 const podeGua = () => ABAS_GUA.some(t => (ABAS_PERM[t]||[]).some(can));
 const TIPOS_LIMPEZA = ["saida","entrada"];
 const modo = () => S.gua ? "Guaritas" : S.adm ? "Administração" : S.setor;
@@ -687,10 +689,10 @@ document.addEventListener("click", e => {
   else if (b.dataset.guaCancelar) guaFormulario(b.dataset.g, "cancelar", b.dataset.guaCancelar);
 });
 // ---------- Barco do condomínio (Guarita Sul): controle de passageiros (pedido de 04/11/2026, modelo "CONTROLE BARCO - PADRÃO") ----------
-// Grades de horário da planilha da administração: dias úteis e sábado/domingo/feriado. "ALMOÇO" marca a parada do meio-dia.
+// Grades de horário: quadro "Horário Fixo do Barco" (atualizado em 11/11/2026), dias úteis e sábado/domingo/feriado. "ALMOÇO" marca a parada do meio-dia.
 const BARCO_GRADE = {
-  "Dias úteis": "07:00 P>M|07:20 M>P|07:30 P>M|07:50 M>P|08:00 P>M|08:20 M>P|08:30 P>M|08:50 M>P|09:00 P>M|09:20 M>P|09:30 P>M|09:50 M>P|10:00 P>M|10:20 M>P|10:30 P>M|10:50 M>P|11:00 P>M|11:50 M>P|12:00 P>M|ALMOÇO|13:00 P>M|13:50 M>P|14:00 P>M|14:50 M>P|15:00 P>M|15:50 M>P|16:00 P>M|16:20 M>P|16:30 P>M|17:00 P>M|17:20 M>P|17:30 P>M|17:50 M>P|18:00 P>M|18:20 M>P|18:30 P>M|18:50 M>P|19:00 P>M|19:20 M>P|19:30 P>M|19:50 M>P|20:00 P>M|20:20 M>P|20:30 P>M",
-  "Fim de semana e feriado": "09:00 P>M|09:40 W>M|09:50 M>P|10:00 P>M|10:40 W>M|10:50 M>P|11:00 C>M|11:40 W>M|11:50 M>P|12:00 P>M|ALMOÇO|13:00 P>M|13:40 W>M|13:50 M>P|14:00 P>M|14:40 W>M|14:50 M>P|15:00 P>M|15:40 W>M|15:50 M>P|16:00 P>M|16:40 W>M|16:50 M>P|17:00 P>M|17:40 W>M|17:50 M>P|18:00 P>M"
+  "Dias úteis": "07:00 P>M|07:20 M>P|07:30 P>M|07:50 M>P|08:00 P>M|08:20 M>P|08:30 P>M|08:50 M>P|09:00 P>M|09:20 M>P|09:30 P>M|09:50 M>P|10:00 P>M|10:20 M>P|10:30 P>M|10:50 M>P|11:00 P>M|11:50 M>P|12:00 P>M|ALMOÇO|13:00 P>M|13:50 M>P|14:00 P>M|14:50 M>P|15:00 P>M|15:50 M>P|16:00 P>M|16:20 M>P|16:30 P>M|16:50 M>P|17:00 P>M|17:20 M>P|17:30 P>M|17:50 M>P|18:00 P>M|18:20 M>P|18:30 P>M|18:50 M>P|19:00 P>M|19:20 M>P|19:30 P>M|19:50 M>P|20:00 P>M|20:20 M>P|20:30 P>M",
+  "Fim de semana e feriado": "09:00 P>M|09:30 W>M|09:35 M>P|09:45 P>M|10:15 W>M|10:20 M>P|10:30 P>M|11:00 W>M|11:05 M>P|11:15 P>M|11:45 W>M|11:50 M>P|12:00 P>M|ALMOÇO|13:15 W>M|13:20 M>P|13:30 P>M|14:00 W>M|14:05 M>P|14:15 P>M|14:45 W>M|14:50 M>P|15:00 P>M|15:30 W>M|15:35 M>P|15:45 P>M|16:15 W>M|16:20 M>P|16:30 P>M|17:00 W>M|17:05 M>P|17:15 P>M|17:45 W>M|17:50 M>P|18:00 P>M"
 };
 const BARCO_TRAJ = {"P>M":"PIER > METRÔ", "M>P":"METRÔ > PIER", "W>M":"PRAIA (WINDSOR) > METRÔ", "C>M":"CPR > METRÔ"};
 const BARCO_CATS = ["Morador(a)","Funcionário(a)","Pier","Visitante","Prestador de serviço"];
@@ -706,6 +708,15 @@ function barcoViagens(){
   const extras = [...new Map(BARCO.lista.filter(p => p.status !== "Removido" && !tem.has(chave(p))).map(p => [chave(p), {horario:p.horario, trajeto:p.trajeto, extra:true}])).values()];
   const k = v => v.almoco ? "12:30" : v.horario;
   return base.concat(extras).sort((a, b) => k(a).localeCompare(k(b)) || (a.extra ? 1 : 0) - (b.extra ? 1 : 0));
+}
+// viagens marcadas como MARÉ ALTA no dia (não saíram)
+function barcoMare(dia){ try { const l = JSON.parse((dia || {}).mare || "[]"); return Array.isArray(l) ? l : []; } catch(e){ return []; } }
+async function barcoMarcarMare(chave, ativo){
+  if (BARCO.salvando) return; const [horario, trajeto] = chave.split("|");
+  BARCO.salvando = true;
+  try { const r = await api("barcoSalvar", {op:"mare", data:BARCO.data, horario, trajeto, ativo}); toast(r.msg); await barcoCarregar(); }
+  catch(e){ toast(e.message || "Não foi possível marcar.", true); }
+  finally { BARCO.salvando = false; }
 }
 function barcoSomas(lista){ const s = {}; BARCO_CATS.forEach(c => s[c] = 0); lista.filter(p => p.status !== "Removido").forEach(p => { s[p.categoria] = (s[p.categoria] || 0) + (Number(p.qtd) || 1); }); s.total = BARCO_CATS.reduce((t, c) => t + s[c], 0); return s; }
 async function barcoCarregar(){
@@ -748,6 +759,7 @@ function barcoRender(){
           </form></details></div>
       <div class="ba-resumo" id="ba-resumo"></div>
       <div class="panel stack"><div class="ba-cab"><h3>Viagens do dia</h3><button type="button" class="btn" id="ba-extra">+ Viagem extra</button></div>
+        <p class="ba-mare-res" id="ba-mare-res" role="status" hidden></p>
         <p class="hint" id="ba-msg" role="status"></p><div id="ba-viagens" class="ba-viagens"></div></div>
       <div class="panel stack"><h3 id="ba-mes-tit">Totalização do mês</h3><div id="ba-mes"></div></div>`;
     $("#ba-data").addEventListener("change", e => { if (!e.target.value) return; BARCO.data = e.target.value; BARCO.grade = barcoGradePadrao(BARCO.data); BARCO.lista = []; BARCO.dia = null; barcoCarregar(); });
@@ -771,12 +783,15 @@ function barcoRender(){
   $("#ba-resumo").innerHTML = BARCO_CATS.map(c => `<div><span>${c}</span><strong>${s[c]}</strong></div>`).join("") + `<div class="tot"><span>Total do dia</span><strong>${s.total}</strong></div>`;
   $("#ba-msg").textContent = BARCO.carregando && !BARCO.lista.length ? "Carregando…" : BARCO.erro; $("#ba-msg").hidden = !$("#ba-msg").textContent;
   const agora = BARCO.data === hoje() ? new Date(Date.now() - 3*3600e3).toISOString().slice(11,16) : "";
-  const viagens = barcoViagens(), prox = agora ? viagens.find(v => !v.almoco && v.horario >= agora) : null;
+  const mares = barcoMare(BARCO.dia), mare = new Map(mares.map(x => [x.v, x]));
+  const viagens = barcoViagens(), prox = agora ? viagens.find(v => !v.almoco && v.horario >= agora && !mare.has(v.horario + "|" + v.trajeto)) : null;
+  $("#ba-mare-res").hidden = !mares.length; $("#ba-mare-res").textContent = mares.length ? `🌊 Maré alta: ${mares.length} ${mares.length === 1 ? "viagem não saiu" : "viagens não saíram"} neste dia` : "";
   $("#ba-viagens").innerHTML = viagens.map(v => {
     if (v.almoco) return `<div class="ba-almoco">Horário de almoço</div>`;
     const ps = BARCO.lista.filter(p => p.horario === v.horario && p.trajeto === v.trajeto && p.status !== "Removido"), n = ps.reduce((t, p) => t + (Number(p.qtd) || 1), 0);
-    return `<article class="ba-viagem${v === prox ? " prox" : ""}${n ? " tem" : ""}"><div class="ba-v-cab"><span class="ba-hora mono">${esc(v.horario)}</span><span class="ba-traj">${esc(v.trajeto)}${v.extra ? ' <span class="pill">extra</span>' : ""}${v === prox ? ' <span class="pill p-entrada">próxima</span>' : ""}</span>
-      <span class="ba-n" title="passageiros">${n}</span><button type="button" class="btn small" data-ba-add="${esc(v.horario + "|" + v.trajeto)}">+ Passageiro</button></div>
+    const mk = mare.get(v.horario + "|" + v.trajeto);
+    return `<article class="ba-viagem${v === prox ? " prox" : ""}${n ? " tem" : ""}${mk ? " mare" : ""}"><div class="ba-v-cab"><span class="ba-hora mono">${esc(v.horario)}</span><span class="ba-traj">${esc(v.trajeto)}${mk ? ` <span class="ba-mare-tag" title="Marcado por ${esc(mk.por || "")}">MARÉ ALTA</span>` : ""}${v.extra ? ' <span class="pill">extra</span>' : ""}${v === prox ? ' <span class="pill p-entrada">próxima</span>' : ""}</span>
+      <span class="ba-n" title="passageiros">${n}</span>${mk ? "" : `<button type="button" class="btn small" data-ba-add="${esc(v.horario + "|" + v.trajeto)}">+ Passageiro</button>`}<button type="button" class="${mk ? "link" : "btn small ba-btn-mare"}" data-ba-mare="${esc(v.horario + "|" + v.trajeto)}" data-ativo="${mk ? "0" : "1"}">${mk ? "Desfazer maré alta" : "Maré alta"}</button></div>
       ${ps.length ? `<ul class="ba-ps">${ps.map(p => `<li><b>${esc(p.nome)}</b><span>${esc(p.categoria)}${p.blocoApto ? " · " + esc(p.blocoApto) : ""}${Number(p.qtd) > 1 ? " · " + Number(p.qtd) + " pessoas" : ""}</span><button type="button" class="link" data-ba-rem="${esc(p.id)}" aria-label="Remover ${esc(p.nome)}">Remover</button></li>`).join("")}</ul>` : ""}</article>`;
   }).join("");
   barcoRenderMes();
@@ -866,6 +881,10 @@ function barcoExcel(){
     ["Morador / Visitante / Pier / Funcionário(a)", "Dias úteis", "Fins de semana e feriados", "Total"].forEach((c, j) => X.cel(r, j + 1, c, cab)); r++;
     const u = barcoSomas(M.passageiros.filter(p => p.grade === "Dias úteis")), w = barcoSomas(M.passageiros.filter(p => p.grade !== "Dias úteis")), t = barcoSomas(M.passageiros);
     BARCO_CATS.concat(["total"]).forEach(c => { X.cel(r, 1, c === "total" ? "TOTAL" : c.toUpperCase(), c === "total" ? tit : {}); [u[c], w[c], t[c]].forEach((v, j) => X.cel(r, j + 2, v, num)); r++; });
+    const mareMes = (M.dias || []).flatMap(d => barcoMare(d).map(x => [d.data, x])).sort((a, b) => (a[0] + a[1].v).localeCompare(b[0] + b[1].v));
+    r++; X.cel(r++, 1, `Viagens que não saíram por maré alta (${mareMes.length})`, tit);
+    if (mareMes.length) { ["Data", "Dia", "Horário", "Trajeto", "Marcado por"].forEach((c, j) => X.cel(r, j + 1, c, cab)); r++;
+      mareMes.forEach(([d, x]) => { const [h, t] = x.v.split("|"); [barcoFmt(d), BARCO_DIAS[barcoDow(d)], h, t, x.por || ""].forEach((v, j) => X.cel(r, j + 1, v, {})); r++; }); }
     r++; X.cel(r++, 1, "Passageiros por viagem", tit);
     ["Data", "Dia", "Horário", "Trajeto", "Nome do passageiro", "Morador / Visitante / Pier / Funcionário(a)", "Bloco / apartamento", "Quantidade", "Operador diurno", "Operador noturno", "Registrado por"].forEach((c, j) => X.cel(r, j + 1, c, cab)); r++;
     const dias = new Map((M.dias || []).map(d => [d.data, d]));
@@ -879,6 +898,7 @@ function barcoExcel(){
 }
 document.addEventListener("click", e => {
   if (e.target.closest("[data-go-barco]")) { setTab("gbarco"); return; }
+  const m = e.target.closest("[data-ba-mare]"); if (m) { barcoMarcarMare(m.dataset.baMare, m.dataset.ativo === "1"); return; }
   const a = e.target.closest("[data-ba-add],[data-ba-rem]"); if (!a) return;
   if (a.dataset.baAdd) barcoPassageiro(a.dataset.baAdd); else barcoRemover(a.dataset.baRem);
 });
@@ -1030,7 +1050,7 @@ const MENU = [
   {g:"Compras e pendências", ico:'<path d="M8 5h11M8 12h11M8 19h11M4 5h.01M4 12h.01M4 19h.01"/>', itens:[
     {t:"pendencias", rot:"Controle de pendências", b:"b-adm"}, {t:"pendencias", acao:"nova", rot:"Incluir pendência"}, {t:"cotacoes", rot:"Cotações"}, {t:"fornecedores", rot:"Fornecedores"}]},
   {g:"Guaritas", ico:'<path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6z"/>', itens:[
-    {t:"gsul", rot:"Guarita Sul"}, {t:"gbarco", rot:"Barco (Guarita Sul)"}, {t:"gnorte", rot:"Guarita Norte"}]},
+    {t:"gbarco", rot:"Barco (Guarita Sul)"}, {t:"gnorte", rot:"Guarita Norte"}]},
   {t:"correspondencias",rot:"Correspondências",ico:'<path d="M3 6h18v12H3zM3 6l9 7 9-7"/>'},
   {g:"Unidades", ico:'<path d="M5 21V4h10v17M15 9h4v12M8 8h1M11 8h1M8 12h1M11 12h1M8 16h1M11 16h1M3 21h18"/>', itens:[
     {t:"unidades", rot:"Lista de unidades"}, {t:"uncadastro", rot:"Atualização cadastral"}, {t:"unconfig", rot:"Configurações"}]},
