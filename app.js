@@ -242,7 +242,7 @@ function mostrarLogin(msg){
   ($("#l-usuario").value ? $("#l-senha") : $("#l-usuario")).focus();
 }
 // sair encerra a sessão também no servidor: o código guardado no aparelho deixa de valer
-function encerrarLocal(msg){ S.gua = false; AV.lista = []; AV.carregado = false; AV.mostrados.clear(); AV.vista = "avisos"; { const f = document.getElementById("av-faixa"); if (f) f.hidden = true; } GUA.Sul.lista = []; GUA.Norte.lista = []; BARCO.lista = []; BARCO.dia = null; BARCO.mes = null; BARCO.data = ""; rdQrLimpar(); RD.lista=null; RD.edit=null; RD.erro=""; INV_CT.val.clear(); INV_CT.msg=""; INV_AP.sel.clear(); INV_AP.ultimos=[]; INV_AP.aberto=null; S.contagens=[]; S.bloq=new Map(); S.token = ""; S.perms = {}; S.rel = null; S.eq = null; S.pend = null; unLimparMemoria(); mdLimpar(); miLimpar(); esLimpar(); FO.lista = null; fecharModal(); apagarSessao(); abrirMenuAdm(false); fecharMenu(); mostrarLogin(msg); renderMenu(); }
+function encerrarLocal(msg){ S.gua = false; AV.lista = []; AV.carregado = false; AV.mostrados.clear(); AV.vista = "avisos"; { const f = document.getElementById("av-faixa"); if (f) f.hidden = true; } GUA.Sul.lista = []; GUA.Norte.lista = []; BARCO.lista = []; BARCO.dia = null; BARCO.mes = null; BARCO.data = ""; BARCO.mor = null; BARCO.unid = null; rdQrLimpar(); RD.lista=null; RD.edit=null; RD.erro=""; INV_CT.val.clear(); INV_CT.msg=""; INV_AP.sel.clear(); INV_AP.ultimos=[]; INV_AP.aberto=null; S.contagens=[]; S.bloq=new Map(); S.token = ""; S.perms = {}; S.rel = null; S.eq = null; S.pend = null; unLimparMemoria(); mdLimpar(); miLimpar(); esLimpar(); FO.lista = null; fecharModal(); apagarSessao(); abrirMenuAdm(false); fecharMenu(); mostrarLogin(msg); renderMenu(); }
 function sair(msg){
   const tk = S.token;
   if (tk && API) { try { fetch(API, {method:"POST", body:JSON.stringify({acao:"sair", token:tk}), redirect:"follow", keepalive:true}).catch(()=>{}); } catch(e){} }
@@ -697,7 +697,7 @@ const BARCO_GRADE = {
 const BARCO_TRAJ = {"P>M":"PIER > METRÔ", "M>P":"METRÔ > PIER", "W>M":"PRAIA (WINDSOR) > METRÔ", "C>M":"CPR > METRÔ"};
 const BARCO_CATS = ["Morador(a)","Funcionário(a)","Pier","Visitante","Prestador de serviço"];
 const BARCO_DIAS = ["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"];
-const BARCO = {data:"", grade:"", lista:[], dia:null, mes:null, carregando:false, ger:0, gerMes:0, erro:"", salvando:false, unid:null, unidEm:0};
+const BARCO = {data:"", grade:"", lista:[], dia:null, mes:null, carregando:false, ger:0, gerMes:0, erro:"", salvando:false, unid:null, unidEm:0, mor:null};
 const barcoDow = d => new Date(d + "T12:00:00").getDay();
 const barcoGradePadrao = d => [0,6].includes(barcoDow(d)) ? "Fim de semana e feriado" : "Dias úteis";
 const barcoFmt = d => d ? d.slice(8,10) + "/" + d.slice(5,7) + "/" + d.slice(0,4) : "";
@@ -736,6 +736,16 @@ async function barcoCarregarUnidades(){
   if (BARCO.unid && Date.now() - BARCO.unidEm < 600000) return;
   const token = S.token;
   try { const r = await api("barcoUnidades"); if (S.token === token && Array.isArray(r.blocos) && r.blocos.length) { BARCO.unid = r.blocos; BARCO.unidEm = Date.now(); } } catch(e){ /* sem a lista, o campo fica livre */ }
+  // moradores para a busca pela inicial (se o Apps Script ainda for o antigo, o nome continua só digitado)
+  try { const r = await api("barcoMoradores"); if (S.token === token && Array.isArray(r.moradores)) BARCO.mor = r.moradores; } catch(e){}
+}
+// sugestões: palavras do nome que começam com o que foi digitado (quem tem acesso ao barco aparece primeiro)
+function barcoSugestoes(q){
+  q = norm(q).trim(); if (!q || !BARCO.mor) return [];
+  const partes = q.split(/\s+/);
+  return BARCO.mor.map(m => { const ws = norm(m.nome).split(/\s+/), ini = norm(m.nome).startsWith(q);
+      const ok = partes.every(p => ws.some(w => w.startsWith(p))); return ok ? {m, nota:(ini ? 0 : 1) + (m.barco ? 0 : 2)} : null; })
+    .filter(Boolean).sort((a, b) => a.nota - b.nota || a.m.nome.localeCompare(b.m.nome, "pt-BR")).slice(0, 8).map(x => x.m);
 }
 async function barcoCarregarMes(){
   const mes = BARCO.data.slice(0,7), ger = ++BARCO.gerMes, token = S.token;
@@ -833,8 +843,9 @@ function barcoPassageiro(chave){
   box.innerHTML = `<h3>${chave ? `Passageiro · ${esc(horario)} ${esc(trajeto)}` : "Viagem extra (fora da grade)"}</h3><p class="hint">${esc(barcoFmt(BARCO.data))} · ${esc(BARCO_DIAS[barcoDow(BARCO.data)])}</p>
     <form id="ba-form"><div class="corr-form-grid">
       ${chave ? "" : `<label>Horário *<input class="input" type="time" name="horario" required></label><label>Trajeto *<input class="input" name="trajeto" list="ba-dl-traj" maxlength="60" required></label><datalist id="ba-dl-traj">${opTraj}</datalist>`}
-      <label class="full">Nome do passageiro *<input class="input" name="nome" maxlength="100" required autocomplete="off"></label>
       <fieldset class="full ba-cats"><legend>Morador / Visitante / Pier / Funcionário(a) *</legend>${BARCO_CATS.map((c, i) => `<label><input type="radio" name="categoria" value="${c}" ${i === 0 ? "checked" : ""}> ${c}</label>`).join("")}</fieldset>
+      <div class="full ba-nome-box"><label for="ba-nome">Nome do passageiro *</label><input class="input" id="ba-nome" name="nome" maxlength="100" required autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="ba-sug" placeholder="${BARCO.mor ? "Morador: digite a inicial para buscar no cadastro" : ""}">
+        <div class="ba-sug" id="ba-sug" role="listbox" hidden></div></div>
       ${BARCO.unid ? `<div class="field"><label for="ba-bloco">Bloco / apartamento</label><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         <select class="input" id="ba-bloco" name="blocoSel" aria-label="Bloco"><option value="">Bloco</option>${BARCO.unid.map((b, i) => `<option value="${i}">${esc(b.bloco)}</option>`).join("")}</select>
         <select class="input" id="ba-apto" name="aptoSel" aria-label="Apartamento" disabled><option value="">Apto</option></select></div></div>`
@@ -851,6 +862,34 @@ function barcoPassageiro(chave){
     selA.innerHTML = `<option value="">Apto</option>` + (b ? b.unidades.map(u => `<option>${esc(u)}</option>`).join("") : "");
     selA.disabled = !b; selA.value = "";
   });
+  // busca do morador pela inicial: escolher preenche nome, categoria Morador(a), bloco e apartamento
+  const inNome = form.elements.nome, sug = $("#ba-sug"); let sugL = [], sugI = -1;
+  const fecharSug = () => { sug.hidden = true; sug.innerHTML = ""; sugL = []; sugI = -1; inNome.setAttribute("aria-expanded", "false"); };
+  const marcarSug = i => { sugI = i; sug.querySelectorAll("[role=option]").forEach((o, j) => o.setAttribute("aria-selected", j === i ? "true" : "false")); if (i >= 0) inNome.setAttribute("aria-activedescendant", "ba-sug-" + i); else inNome.removeAttribute("aria-activedescendant"); };
+  const escolher = m => {
+    inNome.value = m.nome; const cat = form.querySelector('[name=categoria][value="Morador(a)"]'); if (cat) cat.checked = true;
+    if (selB) { const bi = BARCO.unid.findIndex(b => b.bloco === m.bloco); if (bi >= 0) { selB.value = String(bi); selB.dispatchEvent(new Event("change")); selA.value = m.numero; } }
+    else if (form.elements.blocoApto) form.elements.blocoApto.value = m.curto + (m.numero ? "/" + m.numero : "");
+    fecharSug(); (form.elements.qtd || inNome).focus();
+  };
+  // a busca no cadastro só vale para Morador(a): prestador, funcionário, Pier e visitante são digitados livres
+  // e ficam só no controle do barco (nada é gravado na ficha de moradores)
+  const ehMorador = () => (form.querySelector("[name=categoria]:checked") || {}).value === "Morador(a)";
+  form.querySelectorAll("[name=categoria]").forEach(r => r.addEventListener("change", () => { fecharSug(); inNome.placeholder = ehMorador() && BARCO.mor ? "Morador: digite a inicial para buscar no cadastro" : "Digite o nome completo"; }));
+  inNome.addEventListener("input", () => {
+    sugL = ehMorador() ? barcoSugestoes(inNome.value) : []; if (!sugL.length) return fecharSug();
+    sug.innerHTML = sugL.map((m, i) => `<div role="option" id="ba-sug-${i}" class="ba-sug-op" data-i="${i}" aria-selected="false"><b>${esc(m.nome)}</b><span>${esc(m.bloco)}${m.numero ? " · apto " + esc(m.numero) : ""}</span>${m.barco ? '<i class="ba-sug-barco">acesso ao barco</i>' : ""}</div>`).join("");
+    sug.hidden = false; inNome.setAttribute("aria-expanded", "true"); marcarSug(0);
+  });
+  inNome.addEventListener("keydown", e => {
+    if (sug.hidden || !sugL.length) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); marcarSug((sugI + 1) % sugL.length); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); marcarSug((sugI - 1 + sugL.length) % sugL.length); }
+    else if (e.key === "Enter" && sugI >= 0) { e.preventDefault(); escolher(sugL[sugI]); }
+    else if (e.key === "Escape") { e.preventDefault(); fecharSug(); }
+  });
+  sug.addEventListener("mousedown", e => { const o = e.target.closest("[data-i]"); if (o) { e.preventDefault(); escolher(sugL[Number(o.dataset.i)]); } });
+  inNome.addEventListener("blur", () => setTimeout(fecharSug, 150));
   const blocoApto = v => { if (!selB) return v.blocoApto || ""; const b = BARCO.unid[Number(v.blocoSel)]; return b ? (b.curto + (v.aptoSel ? "/" + v.aptoSel : "")) : ""; };
   (form.elements.horario || form.elements.nome).focus();
   form.onsubmit = async e => {

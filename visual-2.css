@@ -255,3 +255,9 @@
 .ba-q li{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:13px;text-align:center;padding:5px 0;border-radius:8px;background:var(--surface);border:1px solid var(--line)}
 .ba-q li.alm{grid-column:1/-1;font-family:inherit;font-weight:400;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);border-style:dashed;background:none}
 @media(max-width:700px){.ba-quadro{grid-template-columns:1fr}.ba-grades{flex-direction:column;width:100%}.ba-grade{width:100%}}
+/* Barco: busca do morador pela inicial (11/11/2026) */
+.ba-nome-box{position:relative;display:grid;gap:6px}.ba-nome-box>label{font-size:12px}
+.ba-sug{position:absolute;left:0;right:0;top:100%;z-index:30;margin-top:4px;max-height:300px;overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:4px}
+.ba-sug-op{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;padding:9px 12px;border-radius:9px;cursor:pointer}
+.ba-sug-op span{color:var(--muted);font-size:12px}.ba-sug-op[aria-selected=true],.ba-sug-op:hover{background:color-mix(in srgb,var(--teal) 16%,var(--surface))}
+.ba-sug-barco{font-style:normal;font-size:11px;font-weight:700;color:var(--teal);margin-left:auto}
