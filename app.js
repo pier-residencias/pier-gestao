@@ -705,7 +705,10 @@ function barcoViagens(){
   const base = BARCO_GRADE[BARCO.grade].split("|").map(s => s === "ALMOÇO" ? {almoco:true} : {horario:s.slice(0,5), trajeto:BARCO_TRAJ[s.slice(6)]});
   const chave = v => v.horario + "|" + v.trajeto, tem = new Set(base.filter(v => !v.almoco).map(chave));
   // viagens fora da grade (extras) que já têm passageiros
-  const extras = [...new Map(BARCO.lista.filter(p => p.status !== "Removido" && !tem.has(chave(p))).map(p => [chave(p), {horario:p.horario, trajeto:p.trajeto, extra:true}])).values()];
+  // viagens fora da grade que têm passageiro ou marcação de maré alta aparecem como "extra"
+  const fora = BARCO.lista.filter(p => p.status !== "Removido").map(p => ({horario:p.horario, trajeto:p.trajeto}))
+    .concat(barcoMare(BARCO.dia).map(x => { const [horario, trajeto] = x.v.split("|"); return {horario, trajeto}; })).filter(v => !tem.has(chave(v)));
+  const extras = [...new Map(fora.map(v => [chave(v), Object.assign(v, {extra:true})])).values()];
   const k = v => v.almoco ? "12:30" : v.horario;
   return base.concat(extras).sort((a, b) => k(a).localeCompare(k(b)) || (a.extra ? 1 : 0) - (b.extra ? 1 : 0));
 }
@@ -746,7 +749,9 @@ function barcoRender(){
       <div class="corr-acoes"><button type="button" class="btn" id="ba-excel">Exportar mês (Excel)</button><button type="button" class="btn" id="ba-atualizar">Atualizar</button></div></div>
       <div class="panel stack"><div class="ba-topo">
         <label>Data<input class="input" type="date" id="ba-data"></label>
-        <label>Grade de horários<select class="input" id="ba-grade">${Object.keys(BARCO_GRADE).map(g => `<option>${g}</option>`).join("")}</select></label>
+        <div class="ba-grades" role="group" aria-label="Grade de horários">
+          <button type="button" class="ba-grade uteis" data-ba-grade="Dias úteis"><b>Dias úteis</b><small>segunda a sexta</small></button>
+          <button type="button" class="ba-grade fds" data-ba-grade="Fim de semana e feriado"><b>Fins de semana e feriados</b><small>sábado, domingo e feriado</small></button></div>
         <p class="hint" id="ba-diasem"></p></div>
         <details class="ba-turno" id="ba-turno"><summary>Operador responsável e rendições <span class="hint" id="ba-turno-res"></span></summary>
           <form id="ba-turno-form" class="corr-form-grid">
@@ -758,19 +763,26 @@ function barcoRender(){
             <div class="full actions"><button type="submit" class="btn primary">Salvar turno</button><span class="hint" id="ba-turno-msg" role="status"></span></div>
           </form></details></div>
       <div class="ba-resumo" id="ba-resumo"></div>
-      <div class="panel stack"><div class="ba-cab"><h3>Viagens do dia</h3><button type="button" class="btn" id="ba-extra">+ Viagem extra</button></div>
+      <div class="panel stack ba-lista-grade" id="ba-lista-grade"><div class="ba-cab"><h3 id="ba-viagens-tit">Saídas do Pier</h3><button type="button" class="btn" id="ba-extra">+ Viagem extra</button></div>
         <p class="ba-mare-res" id="ba-mare-res" role="status" hidden></p>
         <p class="hint" id="ba-msg" role="status"></p><div id="ba-viagens" class="ba-viagens"></div></div>
+      <div class="panel stack"><h3>Quadro de horários fixos</h3><div class="ba-quadro" id="ba-quadro"></div></div>
       <div class="panel stack"><h3 id="ba-mes-tit">Totalização do mês</h3><div id="ba-mes"></div></div>`;
     $("#ba-data").addEventListener("change", e => { if (!e.target.value) return; BARCO.data = e.target.value; BARCO.grade = barcoGradePadrao(BARCO.data); BARCO.lista = []; BARCO.dia = null; barcoCarregar(); });
-    $("#ba-grade").addEventListener("change", e => { BARCO.grade = e.target.value; barcoRender(); });
+    sec.querySelectorAll("[data-ba-grade]").forEach(b => b.addEventListener("click", () => { BARCO.grade = b.dataset.baGrade; barcoRender(); }));
     $("#ba-atualizar").addEventListener("click", barcoCarregar);
     $("#ba-excel").addEventListener("click", barcoExcel);
     $("#ba-extra").addEventListener("click", () => barcoPassageiro(null));
     $("#ba-turno-form").addEventListener("submit", barcoSalvarTurno);
   }
   if (!BARCO.data) { BARCO.data = hoje(); BARCO.grade = barcoGradePadrao(BARCO.data); }
-  $("#ba-data").value = BARCO.data; $("#ba-grade").value = BARCO.grade;
+  $("#ba-data").value = BARCO.data;
+  // grades separadas: dias úteis × fins de semana e feriados (12/11/2026)
+  const fdsG = BARCO.grade !== "Dias úteis";
+  document.querySelectorAll("#t-gbarco [data-ba-grade]").forEach(b => b.setAttribute("aria-pressed", b.dataset.baGrade === BARCO.grade ? "true" : "false"));
+  $("#ba-lista-grade").classList.toggle("fds", fdsG);
+  $("#ba-viagens-tit").innerHTML = `Saídas do Pier <span class="ba-grade-tag ${fdsG ? "fds" : "uteis"}">${fdsG ? "Fins de semana e feriados" : "Dias úteis"}</span>`;
+  barcoRenderQuadro();
   const fds = [0,6].includes(barcoDow(BARCO.data));
   $("#ba-diasem").textContent = BARCO_DIAS[barcoDow(BARCO.data)] + (BARCO.grade !== barcoGradePadrao(BARCO.data) ? (fds ? "" : " · grade de fim de semana/feriado") : "");
   const dia = BARCO.dia || {}, f = $("#ba-turno-form");
@@ -795,6 +807,13 @@ function barcoRender(){
       ${ps.length ? `<ul class="ba-ps">${ps.map(p => `<li><b>${esc(p.nome)}</b><span>${esc(p.categoria)}${p.blocoApto ? " · " + esc(p.blocoApto) : ""}${Number(p.qtd) > 1 ? " · " + Number(p.qtd) + " pessoas" : ""}</span><button type="button" class="link" data-ba-rem="${esc(p.id)}" aria-label="Remover ${esc(p.nome)}">Remover</button></li>`).join("")}</ul>` : ""}</article>`;
   }).join("");
   barcoRenderMes();
+}
+// quadro fixo, como o impresso na guarita: as duas grades lado a lado (a do dia em destaque)
+function barcoRenderQuadro(){
+  const box = $("#ba-quadro"); if (!box) return;
+  const col = (g, cls, tit, sub) => { const hs = BARCO_GRADE[g].split("|").map(s => s === "ALMOÇO" ? '<li class="alm">almoço</li>' : `<li>${esc(s.slice(0,5))}</li>`).join("");
+    return `<section class="ba-q ${cls}${BARCO.grade === g ? " atual" : ""}"><h4>${tit}</h4><small>${sub}</small><ol>${hs}</ol></section>`; };
+  box.innerHTML = col("Dias úteis", "uteis", "Dias úteis", "segunda a sexta · Pier → Metrô") + col("Fim de semana e feriado", "fds", "Fins de semana e feriados", "sábado, domingo e feriado · Pier → Metrô");
 }
 function barcoRenderMes(){
   const box = $("#ba-mes"); if (!box) return;
