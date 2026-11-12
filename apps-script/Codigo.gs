@@ -421,7 +421,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-11 Pier Gestão 2.0 — barco: busca do morador pela inicial';
+const VERSAO = '2026-11-11 Pier Gestão 2.0 — avisos também no Telegram (teste)';
 
 function doGet() {
   TABS = {};
@@ -6111,7 +6111,7 @@ function avSalvar(req, conta) {
     Object.assign(o, { id: novoId('AV'), status: 'Ativo', criadoEm: agora(), criadoPor: conta.nome, cientes: '[]', versao: 1 });
     gravar(t, o);
     AUDIT_DET = 'Publicou aviso ' + o.id;
-    return 'Aviso publicado. Os porteiros serão avisados na tela.';
+    return 'Aviso publicado. Os porteiros serão avisados na tela.' + telegramAvisar(o, 'Novo aviso');
   }
   if (req.op === 'editar') {
     const x = linhasOnde(t, ['id'], q => q.id === String(req.id || ''))[0];
@@ -6121,9 +6121,65 @@ function avSalvar(req, conta) {
     Object.assign(o, { editadoEm: agora(), editadoPor: conta.nome, cientes: '[]', versao: Number(x.versao) + 1 });
     gravar(t, o, x._row);
     AUDIT_DET = 'Alterou aviso ' + x.id;
-    return 'Aviso alterado. Os porteiros serão avisados de novo.';
+    return 'Aviso alterado. Os porteiros serão avisados de novo.' + telegramAvisar(Object.assign({}, x, o), 'Aviso alterado');
   }
   throw falha('Operação inválida.');
+}
+
+// ---------- Telegram: avisos no celular (teste com o Telegram do Auxiliar, 11/11/2026) ----------
+// Configuração (feita uma vez, no editor do Apps Script — o código do robô NUNCA vai para o GitHub nem para o chat):
+//  1. No Telegram, fale com @BotFather → /newbot → escolha nome e usuário do robô; ele entrega um código (token).
+//  2. Aqui: Configurações do projeto → Propriedades do script → Adicionar: TELEGRAM_TOKEN = (o código do robô).
+//  3. No Telegram, abra o robô novo e mande /start.
+//  4. Aqui no editor, escolha a função telegramConectar e clique em Executar (autorize o acesso a serviços externos).
+//     Ela grava quem mandou /start e manda uma mensagem de teste. Para recomeçar a lista: telegramDesconectarTodos.
+function telegramToken() { return String(PropertiesService.getScriptProperties().getProperty('TELEGRAM_TOKEN') || '').trim(); }
+function telegramChats() { try { const l = JSON.parse(PropertiesService.getScriptProperties().getProperty('TELEGRAM_CHATS') || '[]'); return Array.isArray(l) ? l : []; } catch (e) { return []; } }
+function telegramApi(metodo, dados) {
+  const tk = telegramToken();
+  if (!/^\d+:[A-Za-z0-9_-]{30,}$/.test(tk)) throw new Error('TELEGRAM_TOKEN ausente ou inválido nas Propriedades do script.');
+  const r = UrlFetchApp.fetch('https://api.telegram.org/bot' + tk + '/' + metodo, { method: 'post', contentType: 'application/json', payload: JSON.stringify(dados || {}), muteHttpExceptions: true });
+  const j = JSON.parse(r.getContentText() || '{}');
+  if (!j.ok) throw new Error('Telegram recusou (' + metodo + '): ' + (j.description || r.getResponseCode()));
+  return j.result;
+}
+function telegramH(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function telegramConectar() {
+  const ups = telegramApi('getUpdates', { allowed_updates: ['message'] }) || [];
+  const chats = telegramChats(), ja = {};
+  chats.forEach(c => { ja[c.id] = true; });
+  let novos = 0, maxId = 0;
+  ups.forEach(u => {
+    maxId = Math.max(maxId, u.update_id || 0);
+    const m = u.message; if (!m || !m.chat || m.chat.type !== 'private' || !/^\/start\b/.test(String(m.text || ''))) return;
+    if (ja[m.chat.id]) return;
+    ja[m.chat.id] = true; novos++;
+    chats.push({ id: m.chat.id, nome: [m.chat.first_name, m.chat.last_name].filter(Boolean).join(' ') || m.chat.username || 'sem nome', em: agora() });
+  });
+  if (maxId) telegramApi('getUpdates', { offset: maxId + 1 });
+  PropertiesService.getScriptProperties().setProperty('TELEGRAM_CHATS', JSON.stringify(chats));
+  chats.forEach(c => { try { telegramApi('sendMessage', { chat_id: c.id, parse_mode: 'HTML', text: '✅ <b>Pier Gestão conectado</b>\nVocê vai receber aqui os avisos do quadro da Guarita Norte.' }); } catch (e) {} });
+  const msg = 'Telegram: ' + chats.length + ' contato(s) conectado(s) (' + novos + ' novo(s)): ' + chats.map(c => c.nome).join(', ');
+  console.log(msg);
+  return msg;
+}
+// teste pelo editor, sem publicar nada no quadro: manda um aviso de exemplo para quem está conectado
+function telegramTesteAviso() {
+  const r = telegramAvisar({ titulo: 'Teste do Pier Gestão', texto: 'Este é um aviso de teste. Se chegou aqui, os avisos do quadro vão chegar no seu Telegram.', prioridade: 'Importante', criadoPor: 'Teste pelo editor' }, 'Aviso de teste');
+  console.log(r || 'Ninguém conectado: rode telegramConectar primeiro.');
+  return r;
+}
+function telegramDesconectarTodos() { PropertiesService.getScriptProperties().deleteProperty('TELEGRAM_CHATS'); return 'Lista do Telegram apagada.'; }
+// manda o aviso do quadro para quem está conectado; nunca impede a publicação se o Telegram falhar
+function telegramAvisar(a, rotulo) {
+  const chats = telegramChats(); if (!chats.length || !telegramToken()) return '';
+  const icone = a.prioridade === 'Urgente' ? '🚨' : a.prioridade === 'Importante' ? '⚠️' : '📢';
+  const texto = icone + ' <b>' + telegramH(rotulo) + ' · ' + telegramH(String(a.prioridade || 'Normal').toUpperCase()) + '</b>\n\n<b>' + telegramH(a.titulo) + '</b>\n'
+    + telegramH(a.texto) + '\n\n<i>Publicado por ' + telegramH(a.editadoPor || a.criadoPor || '') + (a.validoAte ? ' · válido até ' + String(a.validoAte).split('-').reverse().join('/') : '') + '</i>'
+    + '\n\nAbra o Pier Gestão para dar ciente: https://piergestao.condominiopier.com.br';
+  let ok = 0;
+  chats.forEach(c => { try { telegramApi('sendMessage', { chat_id: c.id, parse_mode: 'HTML', text: texto.slice(0, 4000), disable_web_page_preview: true }); ok++; } catch (e) { console.log('Telegram: falhou para ' + c.nome + ': ' + e.message); } });
+  return ok ? ' Enviado no Telegram (' + ok + ').' : ' (O Telegram não respondeu; o aviso está no quadro.)';
 }
 
 // ---------- Barco do condomínio (Guarita Sul): controle de passageiros por viagem ----------
