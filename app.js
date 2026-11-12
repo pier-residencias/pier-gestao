@@ -689,10 +689,10 @@ document.addEventListener("click", e => {
   else if (b.dataset.guaCancelar) guaFormulario(b.dataset.g, "cancelar", b.dataset.guaCancelar);
 });
 // ---------- Barco do condomínio (Guarita Sul): controle de passageiros (pedido de 04/11/2026, modelo "CONTROLE BARCO - PADRÃO") ----------
-// Grades de horário: quadro "Horário Fixo do Barco" (11/11/2026). Só as saídas do Pier (Pier > Metrô): a guarita não controla as voltas. "ALMOÇO" marca a parada do meio-dia.
+// Grades de horário: quadro "Horário Fixo do Barco". Idas Pier > Metrô e voltas Metrô > Pier (voltas reincluídas em 12/11/2026); Praia (Windsor) > Metrô fica de fora. "ALMOÇO" marca a parada do meio-dia.
 const BARCO_GRADE = {
-  "Dias úteis": "07:00 P>M|07:30 P>M|08:00 P>M|08:30 P>M|09:00 P>M|09:30 P>M|10:00 P>M|10:30 P>M|11:00 P>M|12:00 P>M|ALMOÇO|13:00 P>M|14:00 P>M|15:00 P>M|16:00 P>M|16:30 P>M|17:00 P>M|17:30 P>M|18:00 P>M|18:30 P>M|19:00 P>M|19:30 P>M|20:00 P>M|20:30 P>M",
-  "Fim de semana e feriado": "09:00 P>M|09:45 P>M|10:30 P>M|11:15 P>M|12:00 P>M|ALMOÇO|13:30 P>M|14:15 P>M|15:00 P>M|15:45 P>M|16:30 P>M|17:15 P>M|18:00 P>M"
+  "Dias úteis": "07:00 P>M|07:20 M>P|07:30 P>M|07:50 M>P|08:00 P>M|08:20 M>P|08:30 P>M|08:50 M>P|09:00 P>M|09:20 M>P|09:30 P>M|09:50 M>P|10:00 P>M|10:20 M>P|10:30 P>M|10:50 M>P|11:00 P>M|11:50 M>P|12:00 P>M|ALMOÇO|13:00 P>M|13:50 M>P|14:00 P>M|14:50 M>P|15:00 P>M|15:50 M>P|16:00 P>M|16:20 M>P|16:30 P>M|16:50 M>P|17:00 P>M|17:20 M>P|17:30 P>M|17:50 M>P|18:00 P>M|18:20 M>P|18:30 P>M|18:50 M>P|19:00 P>M|19:20 M>P|19:30 P>M|19:50 M>P|20:00 P>M|20:20 M>P|20:30 P>M",
+  "Fim de semana e feriado": "09:00 P>M|09:35 M>P|09:45 P>M|10:20 M>P|10:30 P>M|11:05 M>P|11:15 P>M|11:50 M>P|12:00 P>M|ALMOÇO|13:20 M>P|13:30 P>M|14:05 M>P|14:15 P>M|14:50 M>P|15:00 P>M|15:35 M>P|15:45 P>M|16:20 M>P|16:30 P>M|17:05 M>P|17:15 P>M|17:50 M>P|18:00 P>M"
 };
 const BARCO_TRAJ = {"P>M":"PIER > METRÔ", "M>P":"METRÔ > PIER", "W>M":"PRAIA (WINDSOR) > METRÔ", "C>M":"CPR > METRÔ"};
 const BARCO_CATS = ["Morador(a)","Funcionário(a)","Pier","Visitante","Prestador de serviço"];
@@ -773,7 +773,7 @@ function barcoRender(){
             <div class="full actions"><button type="submit" class="btn primary">Salvar turno</button><span class="hint" id="ba-turno-msg" role="status"></span></div>
           </form></details></div>
       <div class="ba-resumo" id="ba-resumo"></div>
-      <div class="panel stack ba-lista-grade" id="ba-lista-grade"><div class="ba-cab"><h3 id="ba-viagens-tit">Saídas do Pier</h3><button type="button" class="btn" id="ba-extra">+ Viagem extra</button></div>
+      <div class="panel stack ba-lista-grade" id="ba-lista-grade"><div class="ba-cab"><h3 id="ba-viagens-tit">Viagens do dia</h3><button type="button" class="btn" id="ba-extra">+ Viagem extra</button></div>
         <p class="ba-mare-res" id="ba-mare-res" role="status" hidden></p>
         <p class="hint" id="ba-msg" role="status"></p><div id="ba-viagens" class="ba-viagens"></div></div>
       <div class="panel stack"><h3>Quadro de horários fixos</h3><div class="ba-quadro" id="ba-quadro"></div></div>
@@ -791,7 +791,7 @@ function barcoRender(){
   const fdsG = BARCO.grade !== "Dias úteis";
   document.querySelectorAll("#t-gbarco [data-ba-grade]").forEach(b => b.setAttribute("aria-pressed", b.dataset.baGrade === BARCO.grade ? "true" : "false"));
   $("#ba-lista-grade").classList.toggle("fds", fdsG);
-  $("#ba-viagens-tit").innerHTML = `Saídas do Pier <span class="ba-grade-tag ${fdsG ? "fds" : "uteis"}">${fdsG ? "Fins de semana e feriados" : "Dias úteis"}</span>`;
+  $("#ba-viagens-tit").innerHTML = `Viagens do dia <span class="ba-grade-tag ${fdsG ? "fds" : "uteis"}">${fdsG ? "Fins de semana e feriados" : "Dias úteis"}</span>`;
   barcoRenderQuadro();
   const fds = [0,6].includes(barcoDow(BARCO.data));
   $("#ba-diasem").textContent = BARCO_DIAS[barcoDow(BARCO.data)] + (BARCO.grade !== barcoGradePadrao(BARCO.data) ? (fds ? "" : " · grade de fim de semana/feriado") : "");
@@ -821,9 +821,12 @@ function barcoRender(){
 // quadro fixo, como o impresso na guarita: as duas grades lado a lado (a do dia em destaque)
 function barcoRenderQuadro(){
   const box = $("#ba-quadro"); if (!box) return;
-  const col = (g, cls, tit, sub) => { const hs = BARCO_GRADE[g].split("|").map(s => s === "ALMOÇO" ? '<li class="alm">almoço</li>' : `<li>${esc(s.slice(0,5))}</li>`).join("");
-    return `<section class="ba-q ${cls}${BARCO.grade === g ? " atual" : ""}"><h4>${tit}</h4><small>${sub}</small><ol>${hs}</ol></section>`; };
-  box.innerHTML = col("Dias úteis", "uteis", "Dias úteis", "segunda a sexta · Pier → Metrô") + col("Fim de semana e feriado", "fds", "Fins de semana e feriados", "sábado, domingo e feriado · Pier → Metrô");
+  // como no quadro impresso: Ida (Pier → Metrô) e Volta (Metrô → Pier) em colunas
+  const col = (g, cls, tit, sub) => { const it = BARCO_GRADE[g].split("|").filter(x => x !== "ALMOÇO");
+    const lista = tr => `<ol>${it.filter(x => x.slice(6) === tr).map(x => `<li>${esc(x.slice(0,5))}</li>`).join("")}</ol>`;
+    return `<section class="ba-q ${cls}${BARCO.grade === g ? " atual" : ""}"><h4>${tit}</h4><small>${sub}</small>
+      <div class="ba-q-cols"><div><p class="ba-q-sent">Ida · Pier → Metrô</p>${lista("P>M")}</div><div><p class="ba-q-sent">Volta · Metrô → Pier</p>${lista("M>P")}</div></div></section>`; };
+  box.innerHTML = col("Dias úteis", "uteis", "Dias úteis", "segunda a sexta") + col("Fim de semana e feriado", "fds", "Fins de semana e feriados", "sábado, domingo e feriado");
 }
 function barcoRenderMes(){
   const box = $("#ba-mes"); if (!box) return;

@@ -261,3 +261,7 @@
 .ba-sug-op{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;padding:9px 12px;border-radius:9px;cursor:pointer}
 .ba-sug-op span{color:var(--muted);font-size:12px}.ba-sug-op[aria-selected=true],.ba-sug-op:hover{background:color-mix(in srgb,var(--teal) 16%,var(--surface))}
 .ba-sug-barco{font-style:normal;font-size:11px;font-weight:700;color:var(--teal);margin-left:auto}
+/* quadro do barco com Ida e Volta (12/11/2026) */
+.ba-q-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:10px}
+.ba-q-sent{margin:0;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.ba-q-cols ol{grid-template-columns:repeat(auto-fill,minmax(58px,1fr))}
