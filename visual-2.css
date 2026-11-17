@@ -265,3 +265,4 @@
 .ba-q-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:10px}
 .ba-q-sent{margin:0;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
 .ba-q-cols ol{grid-template-columns:repeat(auto-fill,minmax(58px,1fr))}
+.os-sol.os-fechadm{border-left:4px solid var(--warn);background:color-mix(in srgb,var(--warn) 9%,var(--surface))}.os-sol.os-fechadm .muted{font-size:12px}
