@@ -84,7 +84,8 @@ const ABAS = {
       ['setor', 'Setor'], ['pendencia', 'Pendência de origem'], ['equipamento', 'Equipamento'],
       ['tipo', 'Tipo de OS'], ['atividade', 'Atividade'], ['agendadaPara', 'Agendada para'], ['periodo', 'Período agendado'], ['unidadeSolic', 'Unidade solicitante'],
       ['tecnicaEm', 'Conclusão técnica em'], ['tecnicaPor', 'Conclusão técnica por'],
-      ['validadaEm', 'Validada em'], ['validadaPor', 'Validada por']
+      ['validadaEm', 'Validada em'], ['validadaPor', 'Validada por'],
+      ['fechAdmEm', 'Fechada pela Administração em'], ['fechAdmPor', 'Fechada pela Administração por'], ['fechAdmJust', 'Justificativa do fechamento'], ['statusAnterior', 'Situação antes do fechamento']
     ],
     num: []
   },
@@ -408,7 +409,7 @@ function prefixoSetor(setor) { const x = SETORES.find(s => s[0] === setor); retu
 const DEM_STATUS = { pendente: 'Pendente', andamento: 'Em andamento', concluida: 'Concluída', cancelada: 'Cancelada' };
 const PREV_UNIDADES = ['dias', 'semanas', 'meses'];
 
-const OS_STATUS = { aberta: 'Aberta', andamento: 'Em andamento', validacao: 'Aguardando validação', concluida: 'Concluída', cancelada: 'Cancelada' };
+const OS_STATUS = { aberta: 'Aberta', andamento: 'Em andamento', validacao: 'Aguardando validação', gerente: 'Aguardando gerente', concluida: 'Concluída', cancelada: 'Cancelada' };
 const OS_PRIORIDADES = ['Urgente', 'Alta', 'Normal', 'Baixa'];
 const OS_MAX_FOTOS = 8;
 const NF_MAX_ARQUIVOS = 4;
@@ -421,7 +422,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-11 Pier Gestão 2.0 — avisos também no Telegram (teste)';
+const VERSAO = '2026-11-17 Pier Gestão 2.0 — OS: fechamento pela Administração com aprovação do gerente';
 
 function doGet() {
   TABS = {};
@@ -871,7 +872,7 @@ function dadosOsDem(ms, conta, todas, limpa) {
     // OS em aberto, mais as encerradas nos últimos 90 dias e as abertas nos meses consultados
     const corte = Utilities.formatDate(new Date(Date.now() - 90 * 864e5), Session.getScriptTimeZone(), 'yyyy-MM-dd');
     const lista = linhas(tabela('os')).filter(o =>
-      o.status === OS_STATUS.aberta || o.status === OS_STATUS.andamento || o.status === OS_STATUS.validacao ||
+      o.status === OS_STATUS.aberta || o.status === OS_STATUS.andamento || o.status === OS_STATUS.validacao || o.status === OS_STATUS.gerente ||
       String(o.concluidaEm || o.atualizadoEm).slice(0, 10) >= corte ||
       ms.indexOf(String(o.abertaEm).slice(0, 7)) >= 0)
       .filter(o => setoresDe(conta).indexOf(osSetor(o)) >= 0)
@@ -1617,7 +1618,7 @@ function relatorio(de, ate, conta) {
   Object.keys(preco).forEach(k => { preco[k] = preco[k].valor; });
   const osDoPeriodo = linhas(tabela('os')).filter(o => {
     const ab = String(o.abertaEm).slice(0, 10), fe = String(o.concluidaEm).slice(0, 10);
-    return (ab >= de && ab <= ate) || (fe && fe >= de && fe <= ate) || o.status === OS_STATUS.aberta || o.status === OS_STATUS.andamento || o.status === OS_STATUS.validacao;
+    return (ab >= de && ab <= ate) || (fe && fe >= de && fe <= ate) || o.status === OS_STATUS.aberta || o.status === OS_STATUS.andamento || o.status === OS_STATUS.validacao || o.status === OS_STATUS.gerente;
   }).map(limpa);
   const demDoPeriodo = linhas(tabela('dem')).filter(d => {
     const cr = String(d.criadaEm).slice(0, 10), fe = String(d.concluidaEm).slice(0, 10);
@@ -1766,6 +1767,39 @@ function osAtualizar(r, conta) {
       txt = 'Devolveu para correção: ' + motivo; msg = o.numero + ' devolvida para correção.';
       break;
     }
+    // Fechamento pela Administração (pedido de 17/11/2026): só com justificativa, sem fotos; vai para a aprovação do gerente
+    case 'fecharAdm': {
+      if (conta.perfil !== PERFIL_TOTAL) negar();
+      if (d.encerrada) throw falha('Esta OS já está encerrada.');
+      if (o.status === OS_STATUS.gerente) throw falha('Esta OS já está aguardando a aprovação do gerente.');
+      const just = texto(r.justificativa, 1000);
+      if (just.length < 10) throw falha('Escreva a justificativa do fechamento (pelo menos 10 caracteres).');
+      upd.statusAnterior = o.status; upd.status = OS_STATUS.gerente;
+      upd.fechAdmEm = agora(); upd.fechAdmPor = conta.nome; upd.fechAdmJust = just;
+      if (!texto(o.solucao, 3000)) upd.solucao = 'Fechada pela Administração: ' + just;
+      txt = 'Fechou pela Administração (sem fotos), aguardando o gerente: ' + just;
+      msg = o.numero + ' enviada para a aprovação do gerente.' + osAvisarGerente(o, conta, just);
+      break;
+    }
+    case 'aprovarFech': {
+      if (!ehGerente(conta)) negar();
+      if (o.status !== OS_STATUS.gerente) throw falha('Esta OS não está aguardando a aprovação do gerente.');
+      upd.status = OS_STATUS.concluida; upd.concluidaEm = agora(); upd.concluidaPor = o.fechAdmPor || conta.nome;
+      upd.validadaEm = upd.concluidaEm; upd.validadaPor = conta.nome;
+      txt = 'Gerente aprovou o fechamento feito pela Administração'; msg = o.numero + ' encerrada com a aprovação do gerente.';
+      break;
+    }
+    case 'recusarFech': {
+      if (!ehGerente(conta)) negar();
+      if (o.status !== OS_STATUS.gerente) throw falha('Esta OS não está aguardando a aprovação do gerente.');
+      const motivo = texto(r.motivo, 300);
+      if (!motivo) throw falha('Informe o motivo da recusa.');
+      const volta = [OS_STATUS.aberta, OS_STATUS.andamento, OS_STATUS.validacao].indexOf(o.statusAnterior) >= 0 ? o.statusAnterior : OS_STATUS.aberta;
+      upd.status = volta; upd.fechAdmEm = ''; upd.fechAdmPor = ''; upd.fechAdmJust = ''; upd.statusAnterior = '';
+      if (String(o.solucao || '').indexOf('Fechada pela Administração: ') === 0) upd.solucao = '';
+      txt = 'Gerente recusou o fechamento: ' + motivo; msg = o.numero + ' voltou para "' + volta + '".';
+      break;
+    }
     case 'cancelar': {
       if (!d.ger) negar();
       if (d.encerrada) throw falha('Esta OS já está encerrada.');
@@ -1804,12 +1838,25 @@ function osAtualizar(r, conta) {
   }
   upd.andamento = osAndamento(o.andamento, conta.nome, txt);
   gravar(t, upd, o._row);
-  if (r.op === 'validar' || r.op === 'cancelar') {
+  if (r.op === 'validar' || r.op === 'cancelar' || r.op === 'aprovarFech') {
     const td = tabela('dem');
     linhas(td).filter(d => d.os === o.numero).forEach(d =>
-      gravar(td, { andamento: osAndamento(d.andamento, conta.nome, 'A ' + o.numero + ' foi ' + (r.op === 'validar' ? 'concluída' : 'cancelada')), atualizadoEm: agora() }, d._row));
+      gravar(td, { andamento: osAndamento(d.andamento, conta.nome, 'A ' + o.numero + ' foi ' + (r.op === 'cancelar' ? 'cancelada' : 'concluída')), atualizadoEm: agora() }, d._row));
   }
   return msg;
+}
+
+// e-mail para a gerência quando a Administração fecha uma OS sem fotos (uma falha no e-mail não desfaz o fechamento)
+function osAvisarGerente(o, conta, just) {
+  try {
+    const dest = emailsDoSetor('Gerência'); if (!dest.length) return ' (Sem e-mail da Gerência cadastrado: o gerente verá na lista de OS.)';
+    const h = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    MailApp.sendEmail({ to: dest.join(','), subject: 'Pier Gestão – ' + o.numero + ' fechada pela Administração: aguarda sua aprovação',
+      body: o.numero + ' – ' + o.titulo + '\nFechada por ' + conta.nome + ', sem fotos.\nJustificativa: ' + just + '\n\nAprove ou recuse em Manutenção > Ordens de serviço > filtro "Aguardando gerente": https://piergestao.condominiopier.com.br',
+      htmlBody: '<p><b>' + h(o.numero) + '</b> – ' + h(o.titulo) + '</p><p>Fechada por <b>' + h(conta.nome) + '</b>, sem fotos.</p><p><b>Justificativa:</b> ' + h(just) + '</p>'
+        + '<p>Aprove ou recuse em <b>Manutenção › Ordens de serviço</b>, filtro “Aguardando gerente”:<br><a href="https://piergestao.condominiopier.com.br">piergestao.condominiopier.com.br</a></p>' });
+    return ' Gerente avisado por e-mail.';
+  } catch (e) { return ' (Não foi possível enviar o e-mail ao gerente; ele verá na lista de OS.)'; }
 }
 
 // fotos e notas fiscais: cada tipo numa pasta própria no Drive, ao lado da planilha
@@ -1856,7 +1903,7 @@ function osFoto(r, conta) {
   const d = osDireitos(o, conta);
   const abriu = o.abertaPorUsuario === conta.usuario && !!conta.perms.os_abrir;
   if (!(d.atender || (abriu && fase === 'antes'))) throw falha('Seu perfil não tem permissão para pôr fotos nesta OS.');
-  if (d.encerrada || o.status === OS_STATUS.validacao) throw falha('Reabra ou devolva a OS para alterar as evidências.');
+  if (d.encerrada || o.status === OS_STATUS.validacao || o.status === OS_STATUS.gerente) throw falha('Reabra ou devolva a OS para alterar as evidências.');
   const campo = fase === 'antes' ? 'fotosAntes' : 'fotosDepois';
   const ids = String(o[campo] || '').split(',').filter(Boolean);
   if (ids.length >= OS_MAX_FOTOS) throw falha('Esta OS já tem ' + OS_MAX_FOTOS + ' fotos de ' + fase + '.');
@@ -1909,7 +1956,7 @@ function osFotoRemover(r, conta) {
   const o = linhas(t).find(x => x.id === r.id);
   if (!o) throw falha('OS não encontrada. Atualize a página.');
   const d = osDireitos(o, conta);
-  if (d.encerrada || o.status === OS_STATUS.validacao) throw falha('Reabra ou devolva a OS para alterar as evidências.');
+  if (d.encerrada || o.status === OS_STATUS.validacao || o.status === OS_STATUS.gerente) throw falha('Reabra ou devolva a OS para alterar as evidências.');
   if (!d.ger && !(d.atender && !d.encerrada)) throw falha('Seu perfil não tem permissão para tirar fotos desta OS.');
   const campo = r.fase === 'depois' ? 'fotosDepois' : 'fotosAntes';
   const ids = String(o[campo] || '').split(',').filter(Boolean);

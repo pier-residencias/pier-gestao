@@ -2138,7 +2138,7 @@ const ordemOS = (a,b) => (osAtrasada(b) - osAtrasada(a)) || ((PRIO_ORD[a.priorid
 const prioPill = p => `<span class="pill prio-${esc(norm(p||"Normal"))}">${esc(p||"Normal")}</span>`;
 function statusPill(o){
   if (osAtrasada(o)) return `<span class="pill s-zero">${esc(o.status)} · atrasada</span>`;
-  const cls = {"Aberta":"st-aberta","Em andamento":"st-andamento","Aguardando validação":"p-ajuste","Concluída":"s-ok","Cancelada":"p-ajuste"}[o.status] || "p-ajuste";
+  const cls = {"Aberta":"st-aberta","Em andamento":"st-andamento","Aguardando validação":"p-ajuste","Aguardando gerente":"p-ajuste","Concluída":"s-ok","Cancelada":"p-ajuste"}[o.status] || "p-ajuste";
   return `<span class="pill ${cls}">${esc(o.status)}</span>`;
 }
 const dt = s => s ? new Date(String(s).replace(" ","T")) : null;
@@ -2171,7 +2171,7 @@ function renderOS(){
   $("#dl-local").innerHTML = [...new Set(S.os.map(o=>o.local).concat(S.movs.map(m=>m.destino)).filter(Boolean).map(s=>String(s).trim()))].sort().slice(0,300).map(v=>`<option value="${esc(v)}">`).join("");
   $$("#o-filtros .chip").forEach(c => { if (c.dataset.f==="minhas") c.hidden = !can("os_atender") && !can("os_gerenciar"); });
   const passaSt = o => !(f==="aberto" && osEncerrada(o)) && !(f==="minhas" && (osEncerrada(o) || o.responsavelUsuario !== S.usuario)) && !(f==="atrasadas" && !osAtrasada(o))
-    && !(f==="validacao" && o.status!=="Aguardando validação") && !(f==="concluidas" && o.status!=="Concluída") && !(f==="canceladas" && o.status!=="Cancelada");
+    && !(f==="validacao" && o.status!=="Aguardando validação") && !(f==="gerente" && o.status!=="Aguardando gerente") && !(f==="concluidas" && o.status!=="Concluída") && !(f==="canceladas" && o.status!=="Cancelada");
   const passaF = o => (!cat || o.categoria===cat) && (!prio || o.prioridade===prio) && (!resp || (resp==="-" ? !o.responsavel : o.responsavel===resp))
     && (!q || norm([o.numero,o.titulo,o.local,o.categoria,o.atividade,o.responsavel,o.solicitante,o.abertaPor,o.descricao,o.equipamento,o.unidadeSolic].join(" ")).includes(q));
   const base = S.os.filter(o => passaSt(o) && passaF(o));
@@ -2357,7 +2357,7 @@ async function carregarFoto(id){
 }
 function galeria(o, fase, d){
   const ids = String((fase==="antes" ? o.fotosAntes : o.fotosDepois) || "").split(",").filter(Boolean);
-  const bloqueada = d.enc || o.status === "Aguardando validação";
+  const bloqueada = d.enc || o.status === "Aguardando validação" || o.status === "Aguardando gerente";
   const pode = !bloqueada && (fase==="antes" ? (d.atender || (d.abriu && can("os_abrir"))) && o.status!=="Cancelada" : d.atender && o.status!=="Cancelada");
   const remover = !bloqueada && (d.ger || d.atender);
   return `<div class="fotos">${ids.map(id => `<div class="foto"><button type="button" class="foto-ver" data-foto="${esc(id)}" aria-label="Ampliar foto"><span class="spin" aria-hidden="true"></span></button>${remover?`<button type="button" class="foto-x" data-fx="${esc(id)}" data-fase="${fase}" aria-label="Tirar foto">×</button>`:""}</div>`).join("")}
@@ -2374,6 +2374,10 @@ function abrirOS(id){
   const acoes = [];
   if (o.status==="Aberta" && d.atender) acoes.push(`<button class="btn primary" type="button" data-op="iniciar">Iniciar atendimento</button>`);
   if (o.status==="Em andamento" && d.atender) acoes.push(`<button class="btn primary" type="button" data-op="concluir">Enviar para validação</button>`);
+  // fechamento pela Administração (só justificativa) e aprovação do gerente (17/11/2026)
+  const ehGer = /gerente/.test(norm(S.perfil || ""));
+  if (o.status==="Aguardando gerente" && ehGer) acoes.push(`<button class="btn primary" type="button" data-op="aprovarFech">Aprovar fechamento</button><button class="btn" type="button" data-op="recusarFech">Recusar</button>`);
+  if (!d.enc && o.status!=="Aguardando gerente" && S.perfil==="Administração") acoes.push(`<button class="btn" type="button" data-op="fecharAdm">Fechar OS (Administração)</button>`);
   if (o.status==="Aguardando validação" && d.ger && S.perfil==="Administração") acoes.push(`<button class="btn primary" type="button" data-op="validar">Validar e encerrar</button><button class="btn" type="button" data-op="devolver">Devolver para correção</button>`);
   if (!d.enc && (can("registrar_saida") || can("registrar_troca"))) acoes.push(`<button class="btn" type="button" data-op="material">Retirar material</button>`);
   if (!d.enc && d.ger) acoes.push(`<button class="btn" type="button" data-op="atribuir">${o.responsavelUsuario?"Trocar responsável":"Atribuir"}</button>`);
@@ -2399,6 +2403,7 @@ function abrirOS(id){
     ${o.descricao ? `<p class="os-desc">${esc(o.descricao)}</p>` : ""}
     ${o.solucao ? `<div class="os-sol"><b>O que foi feito</b><p>${esc(o.solucao)}</p></div>` : ""}
     ${o.motivoCancelamento ? `<div class="os-sol canc"><b>Motivo do cancelamento</b><p>${esc(o.motivoCancelamento)}</p></div>` : ""}
+    ${o.fechAdmJust ? `<div class="os-sol os-fechadm"><b>Fechada pela Administração${o.status==="Aguardando gerente" ? " · aguardando aprovação do gerente" : ""}</b><p>${esc(o.fechAdmJust)}</p><span class="muted">${esc(o.fechAdmPor||"")} · ${fDataHora(o.fechAdmEm)}${o.validadaPor && o.status==="Concluída" ? " · aprovada por " + esc(o.validadaPor) : ""}</span></div>` : ""}
     <div class="os-acoes actions">${acoes.join("")}</div>
     <div id="os-form"></div>
     <div class="os-grid">
@@ -2456,6 +2461,16 @@ function acaoOS(o, op){
   const depois = () => abrirOS(o.id);
   const atualizar = (msg, extra) => enviar($("#os2-ok") || null, msg, "osAtualizar", Object.assign({id:o.id, op}, extra), depois);
   if (op === "iniciar") { enviar(null, $("#os-msg"), "osAtualizar", {id:o.id, op}, depois); return; }
+  if (op === "fecharAdm") return formOS(`<p class="full">A OS será fechada <b>sem fotos</b>, só com a justificativa, e vai para a <b>aprovação do gerente</b>. Ela só fica concluída depois que ele aprovar.</p>
+      <div class="field full"><label for="os-just">Justificativa do fechamento <span class="req">*</span></label><textarea class="input" id="os-just" maxlength="1000" placeholder="Ex.: serviço feito pela empresa contratada em 10/11; conferido pela administração"></textarea></div>`, msg => {
+      const j = $("#os-just").value.trim(); if (j.length < 10) { msg.className="hint err"; msg.textContent="Escreva a justificativa (pelo menos 10 caracteres)."; return; }
+      atualizar(msg, {justificativa:j});
+    }, "Fechar e enviar ao gerente");
+  if (op === "aprovarFech") return formOS(`<p class="full">Confira a justificativa da Administração. Ao aprovar, a OS fica <b>concluída</b>.</p>`, msg => atualizar(msg, {}), "Aprovar fechamento");
+  if (op === "recusarFech") return formOS(`<div class="field full"><label for="os-rec">Motivo da recusa <span class="req">*</span></label><textarea class="input" id="os-rec" maxlength="300" placeholder="Ex.: o serviço ainda não foi feito"></textarea></div>`, msg => {
+      const m = $("#os-rec").value.trim(); if (!m) { msg.className="hint err"; msg.textContent="Informe o motivo."; return; }
+      atualizar(msg, {motivo:m});
+    }, "Recusar fechamento");
   if (op === "validar") return formOS(`<p class="full">Confira a solução e as fotos antes de validar e encerrar esta OS.</p>`, msg => atualizar(msg, {}), "Validar e encerrar");
   if (op === "devolver") return formOS(`<div class="field full"><label for="os-devolver">Motivo da devolução</label><textarea class="input" id="os-devolver" maxlength="300"></textarea></div>`, msg => atualizar(msg, {motivo:$("#os-devolver").value.trim()}), "Devolver para correção");
   if (op === "material") {
