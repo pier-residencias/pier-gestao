@@ -1786,7 +1786,8 @@ function aplicarPermissoes(){
   $$("#seg button").forEach(b => b.hidden = !tipoOk(b.dataset.tipo));
   if (!tipoOk(S.tipo)) { const t = Object.keys(tipos).find(tipoOk); if (t) setTipo(t); }
   $("#i-novo").hidden = !can("itens_cadastrar");
-  $("#i-importar").hidden = !can("itens_editar") || S.setor === "Limpeza";
+  $("#i-importar").hidden = !can("itens_editar");
+  $("#i-exportar").hidden = !can("exportar");
   $("#o-nova").hidden = !can("os_abrir");
   $("#dm-nova").hidden = !can("dem_delegar");
   $("#pv-box").hidden = !can("dem_delegar");
@@ -3831,7 +3832,7 @@ function abrirImportacao(){
   if (!can("itens_editar")) return;
   const hojeBR = fData(hoje());
   $("#modal-box").innerHTML = `
-    <h3>Importar inventário${S.setores.length > 1 ? " · " + esc(S.setor) : ""}</h3>
+    <h3>Importar planilha do estoque${S.setores.length > 1 ? " · " + esc(S.setor) : ""}</h3>
     <p class="muted">Envie a planilha da contagem (.xlsx ou .csv). O sistema procura as colunas de código, item, quantidade (de preferência "Saldo atual"), categoria, unidade, mínimo e local.</p>
     <form class="form" id="f-imp" novalidate>
       <div class="field full"><label for="imp-arq">Planilha</label><input class="input" type="file" id="imp-arq" accept=".xlsx,.xls,.csv"></div>
@@ -3904,6 +3905,23 @@ function abrirImportacao(){
   });
 }
 $("#i-importar").addEventListener("click", abrirImportacao);
+// exportar o estoque do setor (mesmas colunas que a importação reconhece: dá para editar e importar de volta)
+function exportarEstoque(){
+  if (!can("exportar")) return;
+  const itens = itensArr();
+  if (!itens.length) { toast("Não há itens no estoque deste setor.", true); return; }
+  try {
+    const X = xlsxMini(), cab = {b:true, cor:"FFFFFFFF", fill:"FF1F4E79", wrap:false}, tit = {b:true, wrap:false}, num = {h:"right"};
+    X.cel(1, 1, `Estoque ${S.setor === "Limpeza" ? "da Limpeza" : "da Manutenção"} — ${fData(hoje())}`, tit);
+    ["Código","Item","Categoria","Tipo","Unidade","Saldo atual","Estoque mínimo","Localização","Observações"].forEach((c, j) => X.cel(3, j + 1, c, cab));
+    itens.forEach((it, k) => [it.codigo, it.nome, it.categoria, it.tipoItem, it.unidade, Number(it.qtd) || 0, it.minimo === "" || it.minimo == null ? "" : Number(it.minimo), it.local, it.obs]
+      .forEach((v, j) => X.cel(k + 4, j + 1, v ?? "", j === 5 || j === 6 ? num : {})));
+    [12, 40, 20, 18, 9, 11, 14, 20, 30].forEach((l, j) => X.col(j + 1, l));
+    registrarTela("exportar_estoque", S.setor);
+    mdBaixar(X.gerar("Estoque"), `Estoque ${S.setor} - ${hoje()}.xlsx`);
+  } catch(e){ toast(e.message || "Não foi possível gerar a planilha.", true); }
+}
+$("#i-exportar").addEventListener("click", exportarEstoque);
 
 // ---------- histórico de acessos (menu Administração) ----------
 const AC_TIPO = {login:"Entrou com senha", retorno:"Voltou ao sistema", falha:"Senha errada", bloqueado:"Login bloqueado"};
