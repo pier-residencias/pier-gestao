@@ -85,7 +85,8 @@ const ABAS = {
       ['tipo', 'Tipo de OS'], ['atividade', 'Atividade'], ['agendadaPara', 'Agendada para'], ['periodo', 'Período agendado'], ['unidadeSolic', 'Unidade solicitante'],
       ['tecnicaEm', 'Conclusão técnica em'], ['tecnicaPor', 'Conclusão técnica por'],
       ['validadaEm', 'Validada em'], ['validadaPor', 'Validada por'],
-      ['fechAdmEm', 'Fechada pela Administração em'], ['fechAdmPor', 'Fechada pela Administração por'], ['fechAdmJust', 'Justificativa do fechamento'], ['statusAnterior', 'Situação antes do fechamento']
+      ['fechAdmEm', 'Fechada pela Administração em'], ['fechAdmPor', 'Fechada pela Administração por'], ['fechAdmJust', 'Justificativa do fechamento'], ['statusAnterior', 'Situação antes do fechamento'],
+      ['offId', 'Aberta sem internet (código do celular)']
     ],
     num: []
   },
@@ -422,7 +423,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-17 Pier Gestão 2.0 — Usuários: excluir login';
+const VERSAO = '2026-11-17 Pier Gestão 2.0 — Aplicativo sem internet (etapa 1: abrir OS)';
 
 function doGet() {
   TABS = {};
@@ -1717,15 +1718,25 @@ function osAbrir(v, conta, origem) {
     resp = colaboradorAtivo(v.responsavelUsuario);
   }
   const t = tabela('os');
+  // OS aberta sem internet no aplicativo: o celular manda um código; se ele já chegou antes (envio repetido), não cria outra
+  const offId = /^F[a-z0-9]{6,40}$/i.test(String(v.offId || '')) ? String(v.offId) : '';
+  if (offId) {
+    const ja = linhas(t).find(x => x.offId === offId);
+    if (ja) return { texto: ja.numero + ' já tinha sido recebida.', numero: ja.numero, id: ja.id };
+  }
   const max = linhas(t).reduce((m, o) => { const x = /(\d+)\s*$/.exec(o.numero || ''); return x ? Math.max(m, Number(x[1])) : m; }, 0);
   const numero = 'OS-' + ('000' + (max + 1)).slice(-4);
   const id = novoId('O');
   let and = osAndamento('', conta.nome, 'Abriu a OS' + (campos.agendadaPara ? ' (agendada para ' + campos.agendadaPara.split('-').reverse().join('/') + ', ' + String(campos.periodo).toLowerCase() + ')' : ''));
   if (resp) and = osAndamento(and, conta.nome, 'Atribuiu a ' + (resp.nome || resp.usuario));
+  if (offId) {
+    const em = new Date(String(v.offEm || ''));
+    and = osAndamento(and, conta.nome, 'Aberta sem internet no aplicativo' + (isNaN(em) ? '' : ' em ' + Utilities.formatDate(em, Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm')) + '; enviada quando a conexão voltou');
+  }
   gravar(t, Object.assign({
     id, numero, status: OS_STATUS.aberta, abertaEm: agora(), abertaPor: conta.nome, abertaPorUsuario: conta.usuario,
     responsavel: resp ? (resp.nome || resp.usuario) : '', responsavelUsuario: resp ? resp.usuario : '',
-    andamento: and, atualizadoEm: agora(), setor, pendencia: (origem && origem.pendencia) || ''
+    andamento: and, atualizadoEm: agora(), setor, pendencia: (origem && origem.pendencia) || '', offId
   }, campos));
   return { texto: numero + ' aberta.', numero, id };
 }

@@ -160,17 +160,20 @@ async function arqConferir(acao, files, box){
 }
 async function api(acao, extra, opc){
   if (!API) throw {paraUsuario:true, message:"O endereço da planilha ainda não foi configurado (arquivo config.js)."};
-  await conferirAmbiente();
   const meses = [...new Set([mesDe(), S.histMes].concat(S.iPer.tipo && S.iPer.tipo !== "cad" ? [perMes()] : []))];
   const corpo = Object.assign({acao, token:S.token, meses}, extra||{});
   if (ARQ_PEND[acao] && acao !== "arqVerificar") corpo.arquivos = ARQ_PEND[acao]; // o servidor registra o arquivo junto da importação
   let r;
   try {
+    await conferirAmbiente();
     // importações grandes podem levar mais que os 30 s padrão
     r = await buscarJsonPier(API, {method:"POST", body:JSON.stringify(corpo), redirect:"follow"}, /importar|Importar|pendAnexo/.test(acao) ? 180000 : 30000);
   } catch(e){
-    throw {paraUsuario:true, message:e.message || "Sem conexão com a planilha. Verifique a internet e tente de novo."};
+    const rede = e instanceof TypeError || !navigator.onLine || /demorou|conex/i.test(e.message || "");
+    if (rede) offEstado(true);
+    throw {paraUsuario:true, rede, message:!navigator.onLine ? "Sem internet no momento." : (e.message && !(e instanceof TypeError) ? e.message : "Sem conexão com a planilha. Verifique a internet e tente de novo.")};
   }
+  offEstado(false);
   if (!r.ok) {
     if ((r.codigo === "senha" || r.codigo === "sessao") && !(acao === "entrar" && extra && extra.senha !== undefined)) { encerrarLocal(r.erro || "Sua sessão terminou. Entre de novo."); }
     throw {paraUsuario:true, message:r.erro || "Não foi possível concluir.", codigo:r.codigo};
@@ -182,7 +185,7 @@ async function api(acao, extra, opc){
   if (r.nome) S.nome = r.nome;
   // na entrada, os dados que vêm junto são aplicados depois de escolhido o setor (entradaDados); "soLer" só consulta
   if (r.dados && acao !== "entrar" && !(opc && opc.soLer)) { S.mesesCarregados = meses; aplicar(r.dados); }
-  if (r.dados) r._meses = meses;
+  if (r.dados) { r._meses = meses; offGuardarSnap(r.dados, meses); }
   return r;
 }
 // Apps Script novo: a entrada já traz os dados e as pendências (uma ida só à planilha). Com o antigo, busca como antes.
@@ -242,7 +245,7 @@ function mostrarLogin(msg){
   ($("#l-usuario").value ? $("#l-senha") : $("#l-usuario")).focus();
 }
 // sair encerra a sessão também no servidor: o código guardado no aparelho deixa de valer
-function encerrarLocal(msg){ S.gua = false; AV.lista = []; AV.carregado = false; AV.mostrados.clear(); AV.vista = "avisos"; { const f = document.getElementById("av-faixa"); if (f) f.hidden = true; } GUA.Sul.lista = []; GUA.Norte.lista = []; BARCO.lista = []; BARCO.dia = null; BARCO.mes = null; BARCO.data = ""; BARCO.mor = null; BARCO.unid = null; rdQrLimpar(); RD.lista=null; RD.edit=null; RD.erro=""; INV_CT.val.clear(); INV_CT.msg=""; INV_AP.sel.clear(); INV_AP.ultimos=[]; INV_AP.aberto=null; S.contagens=[]; S.bloq=new Map(); S.token = ""; S.perms = {}; S.rel = null; S.eq = null; S.pend = null; unLimparMemoria(); mdLimpar(); miLimpar(); esLimpar(); FO.lista = null; fecharModal(); apagarSessao(); abrirMenuAdm(false); fecharMenu(); mostrarLogin(msg); renderMenu(); }
+function encerrarLocal(msg){ offApagarSnap(); S.gua = false; AV.lista = []; AV.carregado = false; AV.mostrados.clear(); AV.vista = "avisos"; { const f = document.getElementById("av-faixa"); if (f) f.hidden = true; } GUA.Sul.lista = []; GUA.Norte.lista = []; BARCO.lista = []; BARCO.dia = null; BARCO.mes = null; BARCO.data = ""; BARCO.mor = null; BARCO.unid = null; rdQrLimpar(); RD.lista=null; RD.edit=null; RD.erro=""; INV_CT.val.clear(); INV_CT.msg=""; INV_AP.sel.clear(); INV_AP.ultimos=[]; INV_AP.aberto=null; S.contagens=[]; S.bloq=new Map(); S.token = ""; S.perms = {}; S.rel = null; S.eq = null; S.pend = null; unLimparMemoria(); mdLimpar(); miLimpar(); esLimpar(); FO.lista = null; fecharModal(); apagarSessao(); abrirMenuAdm(false); fecharMenu(); mostrarLogin(msg); renderMenu(); }
 function sair(msg){
   const tk = S.token;
   if (tk && API) { try { fetch(API, {method:"POST", body:JSON.stringify({acao:"sair", token:tk}), redirect:"follow", keepalive:true}).catch(()=>{}); } catch(e){} }
@@ -2341,8 +2344,9 @@ function novaOS(){
     if (v.unidadeSolic && !v.solicitante) v.solicitante = "Unidade " + v.unidadeSolic;
     if (ger && $("#os-resp").value) v.responsavelUsuario = $("#os-resp").value;
     v.setor = osAmb();
+    if (offAgora()) { if (await offGuardarOS(v, fotos, msg)) fecharModal(); return; }
     const r = await enviar($("#os-ok"), msg, "osAbrir", {os:v});
-    if (!r) return;
+    if (!r) { if (offAgora() && await offGuardarOS(v, fotos, msg)) fecharModal(); return; }
     $("#os-ok").disabled = true; await enviarFotos(r.osId, "antes", fotos, msg);
     fecharModal(); setTab("os"); abrirOS(r.osId);
   });
@@ -9403,12 +9407,118 @@ if (sess && sess.senha) apagarSessao(); // versão antiga guardava a senha no ap
 if (sess && sess.token && sess.usuario) {
   S.usuario = sess.usuario || ""; S.token = sess.token;
   try { S.setor = localStorage.getItem("estoque-setor") || S.setor; const ent = localStorage.getItem("estoque-entrada"); S.gua = ent === "Guaritas"; S.adm = ent === "Administração" || S.gua; } catch(e){}
-  api("entrar", {registro:{motivo:"retorno", entrada:S.gua ? "Guaritas" : S.adm ? "Administração" : S.setor, aparelho:aparelho()}, comDados:true, comPend:pedirPend(S.adm)}).then(r => { entradaPend(r); if (S.gua && !podeGua()) { S.gua = false; S.adm = false; } if (S.adm && !S.gua && !(TEM_ADM && podeAdm())) S.adm = false; if (!S.adm && !setoresReais().length && TEM_ADM && podeAdm()) S.adm = true; if (!S.adm && !setoresReais().length && podeGua()) { S.adm = true; S.gua = true; } aplicarPermissoes(); renderMe(); setTab(rdQrDestino(podeAba(S.tab) ? S.tab : primeiraAba())); entradaDados(r); }).catch(e => { mostrarLogin(e.message || "Não foi possível restaurar sua sessão. Entre novamente."); }).finally(concluirInicioPier);
+  api("entrar", {registro:{motivo:"retorno", entrada:S.gua ? "Guaritas" : S.adm ? "Administração" : S.setor, aparelho:aparelho()}, comDados:true, comPend:pedirPend(S.adm)}).then(r => { entradaPend(r); if (S.gua && !podeGua()) { S.gua = false; S.adm = false; } if (S.adm && !S.gua && !(TEM_ADM && podeAdm())) S.adm = false; if (!S.adm && !setoresReais().length && TEM_ADM && podeAdm()) S.adm = true; if (!S.adm && !setoresReais().length && podeGua()) { S.adm = true; S.gua = true; } aplicarPermissoes(); renderMe(); setTab(rdQrDestino(podeAba(S.tab) ? S.tab : primeiraAba())); entradaDados(r); }).catch(async e => { if (e && e.rede && await offEntrar()) return; mostrarLogin(e.message || "Não foi possível restaurar sua sessão. Entre novamente."); }).finally(concluirInicioPier);
 } else {
   if(RQ.codigo) $("#l-setor").value="Administração";
   mostrarLogin("");
   concluirInicioPier();
 }
+// ---------- modo sem internet (aplicativo instalado, setores Manutenção e Limpeza) ----------
+// Etapa 1: abrir o app sem internet com os últimos dados e criar OS (com fotos) que ficam guardadas no celular
+// e são enviadas sozinhas quando a conexão volta. Os dados ficam só no aplicativo instalado e são apagados ao sair.
+const OFF = { db:null, offline:false, enviando:false, fila:[] };
+const offApp = () => { try { return matchMedia("(display-mode: standalone)").matches || navigator.standalone === true || localStorage.getItem("pier-off-teste") === "1"; } catch(e){ return false; } };
+const offAgora = () => !navigator.onLine || OFF.offline;
+function offBanco(){
+  if (OFF.db) return OFF.db;
+  OFF.db = new Promise((ok, erro) => {
+    if (!window.indexedDB) return erro(new Error("Este aparelho não guarda dados sem internet."));
+    const q = indexedDB.open("pier-offline", 1);
+    q.onupgradeneeded = () => { const db = q.result; if (!db.objectStoreNames.contains("kv")) db.createObjectStore("kv"); if (!db.objectStoreNames.contains("fila")) db.createObjectStore("fila", {keyPath:"id"}); };
+    q.onsuccess = () => ok(q.result); q.onerror = () => erro(q.error || new Error("Banco local indisponível."));
+  }).catch(e => { OFF.db = null; throw e; });
+  return OFF.db;
+}
+async function offOp(loja, modo, fn){
+  const db = await offBanco();
+  return new Promise((ok, erro) => { const tx = db.transaction(loja, modo), st = tx.objectStore(loja); const q = fn(st); tx.oncomplete = () => ok(q && q.result); tx.onerror = tx.onabort = () => erro(tx.error || new Error("Não deu para gravar no celular.")); });
+}
+function offGuardarSnap(dados, meses){
+  if (!offApp() || S.adm || !S.usuario) return;
+  offOp("kv", "readwrite", st => st.put({usuario:S.usuario, perfil:S.perfil, perms:S.perms, nome:S.nome, setor:S.setor, dados, meses, em:Date.now()}, "snap")).catch(() => {});
+}
+function offApagarSnap(){ if (window.indexedDB) offOp("kv", "readwrite", st => st.delete("snap")).catch(() => {}); }
+async function offEntrar(){
+  if (!offApp() || S.adm) return false;
+  let snap = null; try { snap = await offOp("kv", "readonly", st => st.get("snap")); } catch(e){ return false; }
+  if (!snap || snap.usuario !== S.usuario || !snap.dados) return false;
+  S.perfil = snap.perfil; S.perms = snap.perms || {}; S.nome = snap.nome;
+  aplicarPermissoes(); renderMe(); setTab(podeAba(S.tab) ? S.tab : primeiraAba());
+  entradaDados({dados:snap.dados, _meses:snap.meses});
+  S.ultima = new Date(snap.em); renderSync();
+  offEstado(true); offFilaCarregar();
+  return true;
+}
+function offEstado(sem){ if (OFF.offline === !!sem) return; OFF.offline = !!sem; offFaixa(); if (!sem) setTimeout(offSincronizar, 800); }
+async function offFilaCarregar(){ try { OFF.fila = (await offOp("fila", "readonly", st => st.getAll())) || []; } catch(e){ OFF.fila = []; } offFaixa(); }
+const offMinhas = () => OFF.fila.filter(x => x.usuario === S.usuario);
+function offFaixa(){
+  let el = document.getElementById("off-faixa");
+  if (!el) { const m = document.querySelector("main"); if (!m) return; el = document.createElement("div"); el.id = "off-faixa"; el.className = "off-faixa"; el.setAttribute("role", "status"); m.prepend(el); }
+  const minhas = S.token ? offMinhas() : [], erros = minhas.filter(x => x.estado === "erro").length;
+  if (!S.token || (!OFF.offline && !minhas.length)) { el.hidden = true; return; }
+  const quando = S.ultima ? ` Mostrando os dados de ${fData(iso(S.ultima))} às ${S.ultima.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}.` : "";
+  el.hidden = false; el.classList.toggle("off-sem", OFF.offline);
+  el.innerHTML = `<span class="off-ico" aria-hidden="true">${OFF.offline ? "⚠" : "↻"}</span><span>${OFF.offline ? `<b>Sem internet.</b>${quando}` : OFF.enviando ? "<b>Enviando o que ficou guardado…</b>" : "<b>Conexão de volta.</b>"}
+    ${minhas.length ? ` <b>${minhas.length} ${minhas.length === 1 ? "OS guardada" : "OS guardadas"}</b> no celular${erros ? `, ${erros} com problema` : OFF.offline ? (minhas.length === 1 ? ", vai ser enviada quando a internet voltar" : ", vão ser enviadas quando a internet voltar") : ""}.` : " Dá para abrir OS: elas ficam guardadas e são enviadas depois."}</span>
+    ${minhas.length ? `<button type="button" class="btn small" id="off-ver">Ver</button>` : ""}`;
+  const b = el.querySelector("#off-ver"); if (b) b.onclick = offVerFila;
+}
+async function offGuardarOS(v, fotos, msgEl){
+  const msg = t => { if (msgEl) { msgEl.className = "hint"; msgEl.innerHTML = t; } };
+  try {
+    msg(`<span class="spin" aria-hidden="true"></span> Sem internet: guardando a OS no celular…`);
+    const b64 = []; for (const f of fotos) b64.push(await reduzirFoto(f, 1280, 0.78));
+    const id = "F" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    const x = {id, tipo:"osAbrir", usuario:S.usuario, nome:S.nome, criadoEm:new Date().toISOString(), os:Object.assign({}, v, {offId:id, offEm:new Date().toISOString()}), fotos:b64, fotosOk:0, estado:"aguardando", erro:""};
+    await offOp("fila", "readwrite", st => st.put(x));
+    await offFilaCarregar();
+    toast("Sem internet: a OS ficou guardada no celular e vai ser enviada quando a conexão voltar.");
+    return true;
+  } catch(e){ if (msgEl) { msgEl.className = "hint err"; msgEl.textContent = "Não deu para guardar a OS no celular: " + (e.message || "erro") + "."; } return false; }
+}
+async function offSincronizar(){
+  if (OFF.enviando || !S.token || !navigator.onLine) return;
+  await offFilaCarregar();
+  const fila = offMinhas().filter(x => x.estado !== "erro").sort((a, b) => a.criadoEm.localeCompare(b.criadoEm));
+  if (!fila.length) return;
+  OFF.enviando = true; offFaixa();
+  const feitas = [];
+  try {
+    for (const x of fila) {
+      try {
+        if (!x.osId) { const r = await api("osAbrir", {os:x.os}); x.osId = r.osId; x.numero = r.osNumero; await offOp("fila", "readwrite", st => st.put(x)); }
+        while (x.fotosOk < x.fotos.length) { await api("osFoto", {id:x.osId, fase:"antes", mime:"image/jpeg", b64:x.fotos[x.fotosOk]}); x.fotosOk++; await offOp("fila", "readwrite", st => st.put(x)); }
+        await offOp("fila", "readwrite", st => st.delete(x.id)); feitas.push(x.numero || x.os.titulo);
+      } catch(e){
+        if (e && e.rede) break; // a internet caiu de novo: tenta depois
+        x.estado = "erro"; x.erro = (e && e.message) || "Não foi possível enviar."; await offOp("fila", "readwrite", st => st.put(x)).catch(() => {});
+      }
+    }
+  } finally { OFF.enviando = false; await offFilaCarregar(); }
+  if (feitas.length) { toast(feitas.length === 1 ? `OS enviada: ${feitas[0]}.` : `${feitas.length} OS enviadas: ${feitas.join(", ")}.`); atualizar(true); }
+  if (offMinhas().some(x => x.estado === "erro")) toast("Uma OS guardada no celular não pôde ser enviada. Toque em Ver na faixa do topo.", true);
+}
+function offVerFila(){
+  const lista = offMinhas().sort((a, b) => a.criadoEm.localeCompare(b.criadoEm));
+  $("#modal-box").innerHTML = `<h3>Guardado no celular</h3><p class="muted">Estas OS foram abertas sem internet e ainda não chegaram ao sistema. Elas são enviadas sozinhas quando a conexão volta.</p>
+    <ul class="off-lista">${lista.map(x => `<li><div><b>${esc(x.os.titulo)}</b><span class="muted">${esc(x.os.local)} · aberta em ${fData(iso(new Date(x.criadoEm)))} às ${esc(new Date(x.criadoEm).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}))} · ${x.fotos.length} ${x.fotos.length === 1 ? "foto" : "fotos"}</span>
+      ${x.estado === "erro" ? `<span class="off-erro">Não foi enviada: ${esc(x.erro)}</span>` : `<span class="muted">${x.osId ? `Criada como ${esc(x.numero || "")}, enviando as fotos…` : "Aguardando internet"}</span>`}</div>
+      <div class="actions">${x.estado === "erro" ? `<button type="button" class="btn small" data-off-tentar="${esc(x.id)}">Tentar de novo</button>` : ""}${x.osId ? "" : `<button type="button" class="btn small danger" data-off-desc="${esc(x.id)}">Descartar</button>`}</div></li>`).join("") || "<li>Nada guardado.</li>"}</ul>
+    <div class="actions"><button type="button" class="btn primary" id="off-enviar" ${offAgora() ? "disabled" : ""}>Enviar agora</button><button type="button" class="btn" id="off-fechar">Fechar</button></div>`;
+  $("#modal").hidden = false;
+  $("#off-fechar").onclick = fecharModal;
+  $("#off-enviar").onclick = async () => { fecharModal(); await offSincronizar(); };
+  $$("#modal-box [data-off-tentar]").forEach(b => b.onclick = async () => { const x = OFF.fila.find(y => y.id === b.dataset.offTentar); if (!x) return; x.estado = "aguardando"; x.erro = ""; await offOp("fila", "readwrite", st => st.put(x)); fecharModal(); offSincronizar(); });
+  $$("#modal-box [data-off-desc]").forEach(b => b.onclick = async () => {
+    if (b.dataset.conf !== "1") { b.dataset.conf = "1"; b.textContent = "Confirmar descarte"; return; }
+    await offOp("fila", "readwrite", st => st.delete(b.dataset.offDesc)); await offFilaCarregar(); offVerFila(); });
+}
+addEventListener("online", () => { offEstado(false); setTimeout(() => { if (S.token) { atualizar(true); offSincronizar(); } }, 1500); });
+addEventListener("offline", () => offEstado(true));
+setInterval(() => { if (S.token && navigator.onLine && offMinhas().some(x => x.estado !== "erro")) offSincronizar(); }, 45000);
+if (window.indexedDB) offFilaCarregar();
+setTimeout(() => { if (S.token && navigator.onLine) offSincronizar(); }, 5000);
 // aplicativo Android (instalação pela página instalar.html): service worker mínimo, sem cache
 if ("serviceWorker" in navigator && window.isSecureContext) navigator.serviceWorker.register("sw.js").catch(() => {});
 })();
