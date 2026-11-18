@@ -2433,7 +2433,7 @@ function abrirOS(id){
     ${o.solucao ? `<div class="os-sol"><b>O que foi feito</b><p>${esc(o.solucao)}</p></div>` : ""}
     ${o.motivoCancelamento ? `<div class="os-sol canc"><b>Motivo do cancelamento</b><p>${esc(o.motivoCancelamento)}</p></div>` : ""}
     ${o.fechAdmJust ? `<div class="os-sol os-fechadm"><b>Fechada pela Administração${o.status==="Aguardando gerente" ? " · aguardando aprovação do gerente" : ""}</b><p>${esc(o.fechAdmJust)}</p><span class="muted">${esc(o.fechAdmPor||"")} · ${fDataHora(o.fechAdmEm)}${o.validadaPor && o.status==="Concluída" ? " · aprovada por " + esc(o.validadaPor) : ""}</span></div>` : ""}
-    ${baixaGuardada ? `<div class="notice warn off-baixa"><b>Baixa guardada no celular</b> em ${fData(iso(new Date(baixaGuardada.criadoEm)))} às ${esc(new Date(baixaGuardada.criadoEm).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}))}: ${esc(baixaGuardada.solucao)}${baixaGuardada.estado === "erro" ? `<br><span class="off-erro">Não foi enviada: ${esc(baixaGuardada.erro)}</span>` : "<br>Ela vai ser enviada quando a internet voltar."}</div>` : ""}
+    ${offAvisoOS(o.id)}
     <div class="os-acoes actions">${acoes.join("")}</div>
     <div id="os-form"></div>
     <div class="os-grid">
@@ -2461,6 +2461,7 @@ function abrirOS(id){
   };
   $$("#modal-box [data-up]").forEach(inp => inp.addEventListener("change", async () => {
     const arquivos = [...inp.files]; if (!arquivos.length) return;
+    if (offAgora()) { await offGuardar(o, {tipo:"osFoto", fase:inp.dataset.up}, arquivos.slice(0, 8), $("#os-msg"), arquivos.length === 1 ? "a foto" : "as fotos"); abrirOS(o.id); return; }
     await enviarFotos(o.id, inp.dataset.up, arquivos, $("#os-msg"));
     abrirOS(o.id);
   }));
@@ -2528,6 +2529,7 @@ function acaoOS(o, op){
   if (op === "reabrir") return formOS(`<div class="field full"><label for="os-mot">Por que reabrir?</label><input class="input" id="os-mot" placeholder="Ex.: o problema voltou"></div>`, msg => atualizar(msg, {motivo:$("#os-mot").value.trim()}), "Reabrir OS");
   if (op === "nota") return formOS(`<div class="field full"><label for="os-nota">Anotação <span class="req">*</span></label><textarea class="input" id="os-nota" placeholder="Ex.: aguardando peça; morador não estava em casa" maxlength="1000"></textarea></div>`, msg => {
       const n = $("#os-nota").value.trim(); if (!n) { msg.className="hint err"; msg.textContent="Escreva a anotação."; return; }
+      if (offAgora()) { offGuardar(o, {tipo:"osNota", nota:n}, [], msg, "a anotação").then(ok => { if (ok) abrirOS(o.id); }); return; }
       atualizar(msg, {nota:n});
     }, "Salvar anotação");
   if (op === "atribuir") return formOS(`<div class="field full"><label for="os-r">Responsável</label><select class="input" id="os-r"><option value="">Sem responsável</option>${S.colab.map(c=>`<option value="${esc(c.usuario)}" ${c.usuario===o.responsavelUsuario?"selected":""}>${esc(c.nome)}</option>`).join("")}</select></div>`, msg => atualizar(msg, {responsavelUsuario:$("#os-r").value}), "Salvar");
@@ -9467,7 +9469,7 @@ function offFaixa(){
   const quando = S.ultima ? ` Mostrando os dados de ${fData(iso(S.ultima))} às ${S.ultima.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}.` : "";
   el.hidden = false; el.classList.toggle("off-sem", OFF.offline);
   el.innerHTML = `<span class="off-ico" aria-hidden="true">${OFF.offline ? "⚠" : "↻"}</span><span>${OFF.offline ? `<b>Sem internet.</b>${quando}` : OFF.enviando ? "<b>Enviando o que ficou guardado…</b>" : "<b>Conexão de volta.</b>"}
-    ${minhas.length ? ` <b>${minhas.length} ${minhas.length === 1 ? "envio guardado" : "envios guardados"}</b> no celular${erros ? `, ${erros} com problema` : OFF.offline ? ", saem quando a internet voltar" : ""}.` : " Dá para abrir OS e dar baixa: fica tudo guardado e é enviado depois."}</span>
+    ${minhas.length ? ` <b>${minhas.length} ${minhas.length === 1 ? "envio guardado" : "envios guardados"}</b> no celular${erros ? `, ${erros} com problema` : OFF.offline ? ", saem quando a internet voltar" : ""}.` : " Dá para abrir OS, dar baixa, anotar e pôr fotos: fica tudo guardado e é enviado depois."}</span>
     ${minhas.length ? `<button type="button" class="btn small" id="off-ver">Ver</button>` : ""}`;
   const b = el.querySelector("#off-ver"); if (b) b.onclick = offVerFila;
 }
@@ -9485,6 +9487,28 @@ async function offGuardarOS(v, fotos, msgEl){
   } catch(e){ if (msgEl) { msgEl.className = "hint err"; msgEl.textContent = "Não deu para guardar a OS no celular: " + (e.message || "erro") + "."; } return false; }
 }
 const offBaixaDe = osId => OFF.fila.find(x => x.tipo === "osConcluir" && x.osId === osId && x.usuario === S.usuario);
+const offHora = t => `${fData(iso(new Date(t)))} às ${new Date(t).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}`;
+// aviso dentro da OS: o que foi feito nela sem internet e ainda está no celular
+function offAvisoOS(osId){
+  const l = OFF.fila.filter(x => x.osId === osId && x.usuario === S.usuario && x.tipo !== "osAbrir").sort((a, b) => a.criadoEm.localeCompare(b.criadoEm));
+  if (!l.length) return "";
+  const txt = x => x.tipo === "osConcluir" ? `<b>Baixa</b>: ${esc(x.solucao)}` : x.tipo === "osNota" ? `<b>Anotação</b>: ${esc(x.nota)}` : `<b>${x.fotos.length} ${x.fotos.length === 1 ? "foto" : "fotos"} ${x.fase === "depois" ? "depois" : "antes"}</b>`;
+  const erro = l.filter(x => x.estado === "erro");
+  return `<div class="notice warn off-baixa"><b>Guardado no celular</b> (feito sem internet):<ul class="off-os">${l.map(x => `<li>${txt(x)} <span class="muted">· ${esc(offHora(x.criadoEm))}</span>${x.estado === "erro" ? `<br><span class="off-erro">Não foi enviado: ${esc(x.erro)}</span>` : ""}</li>`).join("")}</ul>${erro.length ? "" : "Vai ser enviado quando a internet voltar."}</div>`;
+}
+// guarda no celular um registro numa OS que já existe (anotação ou fotos)
+async function offGuardar(o, base, arquivos, msgEl, oque){
+  try {
+    if (msgEl) { msgEl.className = "hint"; msgEl.innerHTML = `<span class="spin" aria-hidden="true"></span> Sem internet: guardando ${oque} no celular…`; }
+    const b64 = []; for (const f of arquivos) b64.push(await reduzirFoto(f, 1280, 0.78));
+    const id = "F" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    const x = Object.assign({id, usuario:S.usuario, nome:S.nome, criadoEm:new Date().toISOString(), osId:o.id, numero:o.numero, titulo:o.titulo, local:o.local || "", fotos:b64, fotosOk:0, estado:"aguardando", erro:""}, base);
+    await offOp("fila", "readwrite", st => st.put(x));
+    await offFilaCarregar();
+    toast(`Sem internet: ${oque} ficou guardada no celular e vai ser enviada quando a conexão voltar.`.replace("as fotos ficou guardada", "as fotos ficaram guardadas"));
+    return true;
+  } catch(e){ if (msgEl) { msgEl.className = "hint err"; msgEl.textContent = `Não deu para guardar ${oque}: ` + (e.message || "erro") + "."; } return false; }
+}
 async function offGuardarBaixa(o, solucao, arquivos, msgEl){
   const msg = t => { if (msgEl) { msgEl.className = "hint"; msgEl.innerHTML = t; } };
   try {
@@ -9516,13 +9540,17 @@ async function offSincronizar(){
             try { await api("osAtualizar", {id:x.osId, op:"iniciar"}); } catch(e){ if (e && e.rede) throw e; if (!/Só uma OS aberta/i.test(e.message || "")) throw e; } // já tinha sido iniciada: segue
             x.iniciado = true; await salvar();
           }
-          while (x.fotosOk < x.fotos.length) { await api("osFoto", {id:x.osId, fase:"depois", mime:"image/jpeg", b64:x.fotos[x.fotosOk]}); x.fotosOk++; await salvar(); }
+          while (x.fotosOk < x.fotos.length) { await api("osFoto", {id:x.osId, fase:"depois", mime:"image/jpeg", b64:x.fotos[x.fotosOk], offId:x.id + "-d" + x.fotosOk}); x.fotosOk++; await salvar(); }
           await api("osAtualizar", {id:x.osId, op:"concluir", solucao:x.solucao, offId:x.id, offEm:x.criadoEm});
+        } else if (x.tipo === "osNota") {
+          await api("osAtualizar", {id:x.osId, op:"nota", nota:x.nota, offId:x.id, offEm:x.criadoEm});
+        } else if (x.tipo === "osFoto") {
+          while (x.fotosOk < x.fotos.length) { await api("osFoto", {id:x.osId, fase:x.fase, mime:"image/jpeg", b64:x.fotos[x.fotosOk], offId:x.id + "-f" + x.fotosOk}); x.fotosOk++; await salvar(); }
         } else {
           if (!x.osId) { const r = await api("osAbrir", {os:x.os}); x.osId = r.osId; x.numero = r.osNumero; await salvar(); }
-          while (x.fotosOk < x.fotos.length) { await api("osFoto", {id:x.osId, fase:"antes", mime:"image/jpeg", b64:x.fotos[x.fotosOk]}); x.fotosOk++; await salvar(); }
+          while (x.fotosOk < x.fotos.length) { await api("osFoto", {id:x.osId, fase:"antes", mime:"image/jpeg", b64:x.fotos[x.fotosOk], offId:x.id + "-a" + x.fotosOk}); x.fotosOk++; await salvar(); }
         }
-        await offOp("fila", "readwrite", st => st.delete(x.id)); feitas.push(x.tipo === "osConcluir" ? "baixa da " + x.numero : (x.numero || x.os.titulo));
+        await offOp("fila", "readwrite", st => st.delete(x.id)); feitas.push(x.tipo === "osConcluir" ? "baixa da " + x.numero : x.tipo === "osNota" ? "anotação na " + x.numero : x.tipo === "osFoto" ? (x.fotos.length === 1 ? "foto na " : "fotos na ") + x.numero : (x.numero || x.os.titulo));
       } catch(e){
         if (e && e.rede) break; // a internet caiu de novo: tenta depois
         x.estado = "erro"; x.erro = (e && e.message) || "Não foi possível enviar."; await offOp("fila", "readwrite", st => st.put(x)).catch(() => {});
@@ -9534,10 +9562,11 @@ async function offSincronizar(){
 }
 function offVerFila(){
   const lista = offMinhas().sort((a, b) => a.criadoEm.localeCompare(b.criadoEm));
-  const baixa = x => x.tipo === "osConcluir";
-  const comecou = x => baixa(x) ? (x.iniciado || x.fotosOk > 0) : !!x.osId;
+  const baixa = x => x.tipo !== "osAbrir"; // registros numa OS que já existe
+  const comecou = x => x.tipo === "osConcluir" ? (x.iniciado || x.fotosOk > 0) : x.tipo === "osAbrir" ? !!x.osId : x.fotosOk > 0;
+  const rot = x => ({osConcluir:"Baixa da ", osNota:"Anotação na ", osFoto:(x.fotos.length === 1 ? "Foto " : "Fotos ") + (x.fase === "depois" ? "depois" : "antes") + " na "})[x.tipo] + esc(x.numero);
   $("#modal-box").innerHTML = `<h3>Guardado no celular</h3><p class="muted">Feito sem internet e ainda não chegou ao sistema. É enviado sozinho quando a conexão volta.</p>
-    <ul class="off-lista">${lista.map(x => `<li><div><span class="off-tipo">${baixa(x) ? "Baixa da " + esc(x.numero) : "OS nova"}</span><b>${esc(baixa(x) ? x.titulo : x.os.titulo)}</b><span class="muted">${esc(baixa(x) ? x.local : x.os.local)} · ${baixa(x) ? "baixa" : "aberta"} em ${fData(iso(new Date(x.criadoEm)))} às ${esc(new Date(x.criadoEm).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}))} · ${x.fotos.length} ${x.fotos.length === 1 ? "foto" : "fotos"}</span>
+    <ul class="off-lista">${lista.map(x => `<li><div><span class="off-tipo">${baixa(x) ? rot(x) : "OS nova"}</span><b>${esc(baixa(x) ? x.titulo : x.os.titulo)}</b><span class="muted">${esc(baixa(x) ? x.local : x.os.local)} · ${x.tipo === "osAbrir" ? "aberta" : "feito"} em ${fData(iso(new Date(x.criadoEm)))} às ${esc(new Date(x.criadoEm).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}))} · ${x.tipo === "osNota" ? esc(x.nota.length > 80 ? x.nota.slice(0, 80) + "…" : x.nota) : `${x.fotos.length} ${x.fotos.length === 1 ? "foto" : "fotos"}`}</span>
       ${x.estado === "erro" ? `<span class="off-erro">Não foi enviado: ${esc(x.erro)}</span>` : `<span class="muted">${comecou(x) ? "Enviando…" : "Aguardando internet"}</span>`}</div>
       <div class="actions">${x.estado === "erro" ? `<button type="button" class="btn small" data-off-tentar="${esc(x.id)}">Tentar de novo</button>` : ""}${comecou(x) ? "" : `<button type="button" class="btn small danger" data-off-desc="${esc(x.id)}">Descartar</button>`}</div></li>`).join("") || "<li>Nada guardado.</li>"}</ul>
     <div class="actions"><button type="button" class="btn primary" id="off-enviar" ${offAgora() ? "disabled" : ""}>Enviar agora</button><button type="button" class="btn" id="off-fechar">Fechar</button></div>`;
