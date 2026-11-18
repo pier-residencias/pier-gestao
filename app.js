@@ -2065,7 +2065,8 @@ function abrirUsuario(usuario){
         ${u.sessoes && !eu ? `<button class="btn small" type="button" id="u-encerrar">Encerrar acessos abertos</button>` : ""}
       </div><span class="hint">Trocar a senha ou bloquear o login também encerra os acessos abertos.</span></div>` : ""}
       <p class="hint full">A senha definida aqui é <b>provisória</b>: ao entrar com ela, a pessoa é convidada a criar a própria senha${u && u.provisoria ? " (esta pessoa ainda não criou a dela)" : ""}. Passe o usuário e a senha para o colaborador. O nome aparece no histórico em cada lançamento que ele fizer. O e-mail permite que a própria pessoa redefina a senha em "Esqueci minha senha".</p>
-      <div class="full actions"><button class="btn primary" type="submit" id="u-ok">${u ? "Salvar" : "Criar login"}</button><button class="btn" type="button" id="u-no">Cancelar</button><span class="hint" id="u-msg"></span></div>
+      <div class="full actions"><button class="btn primary" type="submit" id="u-ok">${u ? "Salvar" : "Criar login"}</button><button class="btn" type="button" id="u-no">Cancelar</button>${u && !eu ? `<button class="btn danger" type="button" id="u-del" style="margin-left:auto">Excluir usuário</button>` : ""}<span class="hint" id="u-msg"></span></div>
+      <div class="full" id="u-del-box" hidden></div>
     </form>`;
   $("#modal").hidden = false; $("#u-nome").focus();
   $("#u-no").onclick = fecharModal;
@@ -2073,6 +2074,15 @@ function abrirUsuario(usuario){
   const acesso = (op, btn) => enviar(btn, $("#u-msg"), "acessoUsuario", {usuario: u.usuario, op}, r => { S.eq = r.equipe; renderEquipe(); toast(r.msg); abrirUsuario(u.usuario); });
   if ($("#u-liberar")) $("#u-liberar").onclick = () => acesso("liberar", $("#u-liberar"));
   if ($("#u-encerrar")) $("#u-encerrar").onclick = () => acesso("encerrar", $("#u-encerrar"));
+  if ($("#u-del")) $("#u-del").onclick = () => {
+    const box = $("#u-del-box"); box.hidden = false;
+    box.innerHTML = `<div class="notice crit" role="alert"><p style="margin:0 0 6px"><b>Excluir o login de ${esc(u.nome)} (${esc(u.usuario)})?</b></p>
+      <p style="margin:0 0 8px">A pessoa não entra mais e os acessos abertos dela são encerrados. O histórico continua com o nome dela. Isso não dá para desfazer: se for só por um tempo, prefira <b>Situação: Bloqueado</b>.</p>
+      <div class="actions"><button class="btn danger" type="button" id="u-del-ok">Excluir de vez</button><button class="btn" type="button" id="u-del-no">Voltar</button></div></div>`;
+    box.scrollIntoView({block:"nearest"});
+    $("#u-del-no").onclick = () => { box.hidden = true; box.innerHTML = ""; };
+    $("#u-del-ok").onclick = () => enviar($("#u-del-ok"), $("#u-msg"), "excluirUsuario", {usuario: u.usuario, confirmar: u.usuario}, r => { S.eq = r.equipe; fecharModal(); renderEquipe(); toast(r.msg); });
+  };
   $("#u-nome").addEventListener("input", () => {
     if (u || $("#u-usuario").dataset.mexeu) return;
     $("#u-usuario").value = norm($("#u-nome").value.trim().split(/\s+/)[0] || "").replace(/[^a-z0-9]/g, "");

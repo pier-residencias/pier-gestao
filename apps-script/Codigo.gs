@@ -422,7 +422,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-17 Pier Gestão 2.0 — Estoque: exportar e importar planilha (Limpeza)';
+const VERSAO = '2026-11-17 Pier Gestão 2.0 — Usuários: excluir login';
 
 function doGet() {
   TABS = {};
@@ -561,6 +561,7 @@ function doPost(e) {
         case 'estornar': pode('historico_estornar'); msg = estornar(req, nome, conta); break;
         case 'salvarUsuario': pode('usuarios'); msg = salvarUsuario(req, conta); extra.equipe = equipe(); break;
         case 'acessoUsuario': pode('usuarios'); msg = acessoUsuario(req, conta); extra.equipe = equipe(); break;
+        case 'excluirUsuario': pode('usuarios'); msg = excluirUsuario(req, conta); extra.equipe = equipe(); break;
         case 'salvarPerfil': pode('usuarios'); exigirPerfilTotalParaPerfil(req, conta); msg = salvarPerfil(req); extra.equipe = equipe(); break;
         case 'excluirPerfil': pode('usuarios'); msg = excluirPerfil(req.nome); extra.equipe = equipe(); break;
         case 'trocarSenha': msg = trocarMinhaSenha(req, conta); extra.semDados = true; break;
@@ -1400,6 +1401,24 @@ function acessoUsuario(r, conta) {
     return n ? n + (n === 1 ? ' acesso encerrado.' : ' acessos encerrados.') + ' ' + us.nome + ' vai precisar entrar de novo.' : 'Não havia acessos abertos de ' + us.nome + '.';
   }
   throw falha('Operação inválida.');
+}
+// exclui o login de vez: a linha sai da aba Usuarios e os acessos abertos são encerrados.
+// O histórico (OS, movimentações, auditoria) continua com o nome da pessoa.
+function excluirUsuario(r, conta) {
+  const u = String(r.usuario || '').trim().toLowerCase();
+  if (!u || String(r.confirmar || '').trim().toLowerCase() !== u) throw falha('Confirme a exclusão do login.');
+  const U = lerUsuarios();
+  const us = U.lista.find(x => x.usuario === u);
+  if (!us) throw falha('Usuário não encontrado. Atualize a página.');
+  if (u === conta.usuario) throw falha('Você não pode excluir o seu próprio login.');
+  if (us.perfil === PERFIL_TOTAL && conta.perfil !== PERFIL_TOTAL) { const e = falha('Só um login do perfil Administração pode excluir outro administrador.'); e.negado = true; throw e; }
+  if (us.perfil === PERFIL_TOTAL && !U.lista.some(x => x.usuario !== u && x.perfil === PERFIL_TOTAL && x.ativo)) throw falha('Este é o último login ativo da Administração: não dá para excluir.');
+  const n = encerrarSessoesDe(u, '');
+  limparFalhasLogin(u);
+  U.sh.deleteRow(us.row);
+  AUDIT_DET = 'Excluiu o login ' + u + ' (' + us.nome + ', perfil ' + us.perfil + ')' + (n ? '; ' + n + ' acesso(s) aberto(s) encerrado(s)' : '');
+  alertaSeguranca('usuario', u, AUDIT_DET + ' (feito por ' + conta.nome + ').', '', us.nome);
+  return 'Login de ' + us.nome + ' excluído.';
 }
 function exigirPerfilTotalParaPerfil(r, conta) {
   const sensivel = r.perms && (r.perms.usuarios || r.perms.acessos);
@@ -5122,7 +5141,7 @@ const ACOES_AUDIT = {
   registrar: 'Movimentação', osAbrir: 'Abriu OS', osAtualizar: 'Atualizou OS', osFoto: 'Foto na OS', osFotoRemover: 'Tirou foto da OS',
   demCriar: 'Criou demanda', demAtualizar: 'Atualizou demanda', salvarPreventiva: 'Salvou preventiva', excluirPreventiva: 'Excluiu preventiva',
   salvarLocais: 'Alterou locais', importarContagem: 'Importou inventário', devolver: 'Devolução', salvarItem: 'Salvou item',
-  excluirItem: 'Excluiu item', estornar: 'Estornou lançamento', salvarUsuario: 'Usuário', acessoUsuario: 'Acessos de usuário',
+  excluirItem: 'Excluiu item', estornar: 'Estornou lançamento', salvarUsuario: 'Usuário', acessoUsuario: 'Acessos de usuário', excluirUsuario: 'Excluiu usuário',
   salvarPerfil: 'Perfil', excluirPerfil: 'Excluiu perfil', pendSalvar: 'Pendência', pendExcluir: 'Excluiu pendência',
   nfEnviar: 'Enviou nota fiscal', nfVer: 'Abriu nota fiscal', relatorio: 'Dashboard', usuarios: 'Usuários', acessos: 'Histórico de acessos',
   auditoria: 'Auditoria', pendencias: 'Pendências'
