@@ -282,3 +282,7 @@
 .off-baixa{margin:10px 0}.off-baixa .off-erro{color:var(--danger,#d9534f)}
 .off-os{margin:6px 0;padding-left:18px}.off-os li{margin:3px 0}
 .off-pend{color:var(--warn);font-weight:600;font-size:13px}
+
+/* Comunicado por e-mail */
+.com-grupos{border:1px solid var(--line);border-radius:12px;padding:10px 14px;display:grid;gap:8px}.com-grupos legend{padding:0 6px;font-weight:600}
+.com-g{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}.com-g .muted{font-size:13px;overflow-wrap:anywhere}
