@@ -17,6 +17,14 @@
  */
 
 const ABAS = {
+  com: {
+    nome: 'Comunicados',
+    criar: true,
+    cols: [['id', 'ID'], ['criadoEm', 'Criado em'], ['por', 'Enviado por'], ['porUsuario', 'Usuário'], ['assunto', 'Assunto'], ['tipo', 'Destaque'],
+      ['destinos', 'Destinatários'], ['emails', 'E-mails'], ['status', 'Situação'], ['agendadoPara', 'Agendado para'], ['enviadoEm', 'Enviado em'],
+      ['resumo', 'Resumo'], ['arquivo', 'Arquivo do agendamento']],
+    num: []
+  },
   correspondencias: {nome:'Correspondencias', cols:[['id','ID'],['operacaoId','Operação'],['bloco','Bloco'],['unidade','Unidade'],['destinatario','Destinatário'],['tipo','Tipo'],['transportadora','Transportadora'],['rastreio','Rastreio'],['local','Local de guarda'],['obs','Observação'],['status','Situação'],['recebidoEm','Recebido em'],['recebidoPor','Recebido por'],['retiradoEm','Retirado em'],['retiradoPor','Retirado por'],['entreguePor','Entregue por'],['canceladoEm','Cancelado em'],['canceladoPor','Cancelado por'],['motivo','Motivo do cancelamento'],['versao','Versão']], num:['versao'], criar:true},
   itens: {
     nome: 'Itens',
@@ -423,7 +431,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-17 Pier Gestão 2.0 — Comunicado por e-mail';
+const VERSAO = '2026-11-17 Pier Gestão 2.0 — Comunicado por e-mail completo';
 
 function doGet() {
   TABS = {};
@@ -525,7 +533,8 @@ function doPost(e) {
     if (req.acao === 'rondas') { rondaExigir(conta, false); return json(Object.assign(base, rondaLista())); }
     if (req.acao === 'rondaFotoVer') { rondaExigir(conta, false); const f = rondaFotoVer(req); delete f.nome; return json(Object.assign(base, { foto: f })); }
     if (req.acao === 'prestVerDoc') { prestExigir(conta, false); const f = prestVerDoc(req); auditar(conta, 'Abriu documento de prestador', f.nome); delete f.nome; return json(Object.assign(base, { arquivo: f })); }
-    if (req.acao === 'comunicadoDestinos') { comExigir(conta); let cota = null; try { cota = MailApp.getRemainingDailyQuota(); } catch (e) {} return json(Object.assign(base, { destinos: comDestinos(), cota })); }
+    if (req.acao === 'comunicadoDestinos') { comExigir(conta); return json(Object.assign(base, { com: comPainel(conta) })); }
+    if (req.acao === 'comunicadoPrevia') { comExigir(conta); return json(Object.assign(base, { previa: comunicadoPrevia(req, conta) })); }
     if (req.acao === 'pendencias') { pode('pendencias'); return json(Object.assign(base, { pendencias: pendLista(), pendVersao: PEND_VERSAO })); }
     if (req.acao === 'nfVer') { algum(['historico_ver', 'registrar_entrada', 'dashboard']); const f = verArquivo(req.fotoId, pastaNF()); auditar(conta, 'Abriu nota fiscal', f.nome); delete f.nome; return json(Object.assign(base, { foto: f })); }
     if (req.acao === 'nfEnviar') { pode('registrar_entrada'); return json(Object.assign(base, { arquivo: nfEnviar(req, conta) })); }
@@ -605,7 +614,10 @@ function doPost(e) {
         case 'rondaFotoRemover': rondaExigir(conta, true); msg = rondaFotoRemover(req, conta); extra.ronda = msg.ronda; msg = msg.texto; extra.semDados = true; break;
         case 'rondaResolver': rondaExigir(conta, true); msg = rondaResolver(req, conta); extra.ronda = msg.ronda; msg = msg.texto; extra.semDados = true; break;
         case 'prestImportar': prestExigir(conta, true); msg = prestImportar(req, conta); break;
-        case 'comunicadoEnviar': comExigir(conta); msg = comunicadoEnviar(req, conta); extra.semDados = true; break;
+        case 'comunicadoEnviar': comExigir(conta); msg = comunicadoEnviar(req, conta); extra.semDados = true; extra.com = true; break;
+        case 'comunicadoCancelar': comExigir(conta); msg = comunicadoCancelar(req, conta); extra.semDados = true; extra.com = true; break;
+        case 'comModeloSalvar': comExigir(conta); msg = comModeloSalvar(req, conta); extra.semDados = true; extra.com = true; break;
+        case 'comModeloExcluir': comExigir(conta); msg = comModeloExcluir(req, conta); extra.semDados = true; extra.com = true; break;
         case 'pendAnexo': pode('pendencias'); msg = pendAnexo(req, conta); extra.pendencias = true; break;
         case 'pendExcluir': pode('pendencias'); msg = pendExcluir(req.id); extra.pendencias = true; break;
         default: throw falha('Ação desconhecida.');
@@ -620,7 +632,7 @@ function doPost(e) {
     }
     if (extra.pendencias) return json(Object.assign(base, { msg, pendencias: pendLista(), pendVersao: PEND_VERSAO }));
     if (extra.equipe) return json(Object.assign(base, { msg }, extra));
-    if (extra.semDados) return json(Object.assign(base, { msg }, extra.avisos ? { avisos: extra.avisos } : {}, extra.cot ? { cot: extra.cot } : {}, extra.ronda ? { ronda: extra.ronda } : {}, extra.med ? medLista() : {}, extra.esp ? espLista() : {}, extra.forn ? fornLista() : {}, extra.mi ? miLista() : {}, extra.lida ? { lida: extra.lida } : {}));
+    if (extra.semDados) return json(Object.assign(base, { msg }, extra.avisos ? { avisos: extra.avisos } : {}, extra.cot ? { cot: extra.cot } : {}, extra.ronda ? { ronda: extra.ronda } : {}, extra.med ? medLista() : {}, extra.esp ? espLista() : {}, extra.forn ? fornLista() : {}, extra.mi ? miLista() : {}, extra.lida ? { lida: extra.lida } : {}, extra.com ? { com: comPainel(conta) } : {}));
     return json(Object.assign(base, { msg, dados: dados(req.meses, conta) }, extra));
   } catch (err) {
     // Falhas dos serviços de auditoria não podem impedir uma resposta segura.
@@ -4843,41 +4855,216 @@ function emailsDoSetor(resp) {
 // ---------- comunicado por e-mail (Administração > Início) ----------
 // Destinatários: os grupos da aba "Emails" (Gerente, Síndico, Supervisor…) e os logins ativos com e-mail.
 // O navegador só escolhe entre os endereços que o servidor listou; nenhum endereço digitado é aceito.
+// Recursos: destaque (Novidade/Importante/Urgente), lista ou cards, imagens no corpo, anexos (PDF/Excel/foto),
+// botões extras, rodapé com contatos, saudação pelo nome, modelos salvos, prévia, teste para mim, cópia,
+// agendamento (acionador de uma vez) e histórico na aba "Comunicados".
+const COM_FUNCAO = 'comunicadosAgendados';
+const COM_TIPOS = { Normal: '', Novidade: '#397d9d', Importante: '#c98a0b', Urgente: '#c0392b' };
 function comExigir(conta) { if (!conta || conta.perfil !== PERFIL_TOTAL) { const e = falha('Só o perfil Administração envia comunicados por e-mail.'); e.negado = true; throw e; } }
 function comDestinos() {
   const grupos = EMAILS_INICIAIS.map(x => x[0]).filter(g => ['Segurança', 'Fornecedor'].indexOf(g) < 0);
   try { lerUsuarios().lista.forEach(u => { if (u.ativo && emailValido(u.email) && u.perfil && !grupos.some(g => chaveNome(g) === chaveNome(u.perfil) || (chaveNome(g) === 'gerente' && chaveNome(u.perfil) === 'gerencia'))) grupos.push(u.perfil); }); } catch (e) {}
   return grupos.map(g => ({ grupo: g, emails: emailsDoSetor(g) })).filter(x => x.emails.length);
 }
-function comunicadoEnviar(r, conta) {
-  comExigir(conta);
-  const assunto = texto(r.assunto, 120), corpo = String(r.mensagem || '').replace(/\r/g, '').trim().slice(0, 6000);
-  if (!assunto) throw falha('Escreva o assunto.');
-  if (corpo.length < 10) throw falha('Escreva a mensagem.');
+function comMeuEmail(conta) { try { const u = lerUsuarios().lista.find(x => x.usuario === conta.usuario); return u && emailValido(u.email) ? u.email : ''; } catch (e) { return ''; } }
+function comNomes() { const m = {}; try { lerUsuarios().lista.forEach(u => { if (u.ativo && emailValido(u.email)) m[u.email] = u.nome; }); } catch (e) {} return m; }
+function comProps() { return PropertiesService.getScriptProperties(); }
+function comJson(chave, padrao) { try { const v = JSON.parse(comProps().getProperty(chave) || 'null'); return v == null ? padrao : v; } catch (e) { return padrao; } }
+function comCfg() { const c = comJson('COM_CFG', {}); return { endereco: texto(c.endereco, 160), telefone: texto(c.telefone, 40), whatsapp: texto(c.whatsapp, 40) }; }
+function comModelos() { const l = comJson('COM_MODELOS', []); return Array.isArray(l) ? l : []; }
+function comHistorico() {
+  return linhas(tabela('com')).slice(-40).reverse().map(x => ({ id: x.id, criadoEm: x.criadoEm, por: x.por, assunto: x.assunto, tipo: x.tipo, destinos: x.destinos,
+    status: x.status, agendadoPara: x.agendadoPara, enviadoEm: x.enviadoEm, resumo: x.resumo }));
+}
+function comPainel(conta) {
+  let cota = null; try { cota = MailApp.getRemainingDailyQuota(); } catch (e) {}
+  return { destinos: comDestinos(), cota, cfg: comCfg(), modelos: comModelos(), historico: comHistorico(), meuEmail: comMeuEmail(conta) };
+}
+const COM_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'];
+// confere e normaliza o pedido vindo do navegador (nada é confiado sem checar)
+function comLer(r) {
+  const p = {
+    assunto: texto(r.assunto, 120), mensagem: String(r.mensagem || '').replace(/\r/g, '').trim().slice(0, 6000),
+    tipo: Object.prototype.hasOwnProperty.call(COM_TIPOS, r.tipo) ? r.tipo : 'Normal', formato: r.formato === 'cards' ? 'cards' : 'lista',
+    saudacao: r.saudacao !== false, botaoApp: !!r.botaoApp, copia: !!r.copia, imagens: [], anexos: [], botaoExtra: null
+  };
+  if (!p.assunto) throw falha('Escreva o assunto.');
+  if (p.mensagem.length < 10) throw falha('Escreva a mensagem.');
+  const bt = r.botaoExtra || {}, btTxt = texto(bt.texto, 40), btUrl = String(bt.url || '').trim();
+  if (btTxt || btUrl) {
+    if (!btTxt || !/^https:\/\/[^\s"'<>]{3,300}$/i.test(btUrl)) throw falha('Botão extra: escreva o texto e um link que comece com https://');
+    p.botaoExtra = { texto: btTxt, url: btUrl };
+  }
+  let total = 0;
+  const arq = (lista, max, soImagem, rotulo) => (Array.isArray(lista) ? lista : []).slice(0, max).map((a, i) => {
+    const mime = String(a.mime || ''), b64 = String(a.b64 || '');
+    if (COM_MIMES.indexOf(mime) < 0 || (soImagem && mime.indexOf('image/') !== 0)) throw falha(rotulo + ': use foto (JPG ou PNG), PDF ou Excel.');
+    total += b64.length; if (total > 9000000) throw falha('Imagens e anexos passaram do limite (cerca de 6 MB no total).');
+    if (!conteudoConfere(b64, mime)) throw falha(rotulo + ' "' + texto(a.nome, 80) + '": o conteúdo não confere com o tipo do arquivo.');
+    return { mime, b64, nome: (texto(a.nome, 80) || (rotulo.toLowerCase() + '-' + (i + 1))).replace(/[\\/:*?"<>|]/g, '_') };
+  });
+  if (r.rodape && typeof r.rodape === 'object') p.rodape = { endereco: texto(r.rodape.endereco, 160), telefone: texto(r.rodape.telefone, 40), whatsapp: texto(r.rodape.whatsapp, 40) };
+  p.imagens = arq(r.imagens, 3, true, 'Imagem');
+  p.anexos = arq(r.anexos, 3, false, 'Anexo');
+  return p;
+}
+function comH(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function comLinks(s) { return comH(s).replace(/https?:\/\/[^\s<]+[^\s<.,;:!?)]/g, u => '<a href="' + u + '" style="color:#397d9d">' + u + '</a>'); }
+// monta o e-mail; "previa" usa imagens embutidas (data:) para mostrar no navegador
+function comMontar(p, porNome, nomeDest, previa) {
+  const site = 'https://piergestao.condominiopier.com.br', F = 'font-family:Arial,Helvetica,sans-serif;';
+  const cor = COM_TIPOS[p.tipo];
+  const saud = p.saudacao ? 'Olá' + (nomeDest ? ', ' + String(nomeDest).split(/\s+/)[0] : '') + ',' : '';
+  const item = l => l.replace(/^\s*[•\-*]\s+/, '');
+  const pars = p.mensagem.split(/\n{2,}/).map(par => {
+    const ls = par.split('\n');
+    if (ls.every(l => /^\s*[•\-*]\s+/.test(l))) {
+      if (p.formato === 'cards') return ls.map(l => { const t = item(l), k = t.indexOf(':'); const tit = k > 0 && k < 60 ? t.slice(0, k) : '', txt0 = tit ? t.slice(k + 1).trim() : t, txt = tit ? txt0.charAt(0).toUpperCase() + txt0.slice(1) : txt0;
+        return '<div style="border:1px solid #d9e1e8;border-left:4px solid ' + (cor || '#397d9d') + ';border-radius:8px;padding:12px 14px;margin:0 0 10px;background:#f7fafc">'
+          + (tit ? '<div style="font-weight:bold;color:#17324d;margin:0 0 4px">' + comH(tit) + '</div>' : '') + '<div>' + comLinks(txt) + '</div></div>'; }).join('');
+      return '<ul style="margin:0 0 16px;padding-left:22px">' + ls.map(l => '<li style="margin:0 0 10px">' + comLinks(item(l)) + '</li>').join('') + '</ul>';
+    }
+    return '<p style="margin:0 0 14px">' + ls.map(comLinks).join('<br>') + '</p>';
+  }).join('');
+  const imgs = p.imagens.map((im, i) => '<div style="margin:6px 0 16px;text-align:center"><img src="' + (previa ? 'data:' + im.mime + ';base64,' + im.b64 : 'cid:img' + i) + '" alt="' + comH(im.nome) + '" style="max-width:100%;height:auto;border-radius:8px;border:1px solid #d9e1e8"></div>').join('');
+  const botao = (t, u, prim) => '<a href="' + comH(u) + '" style="display:inline-block;margin:4px 6px;background:' + (prim ? '#17324d' : '#ffffff') + ';color:' + (prim ? '#ffffff' : '#17324d') + ';border:2px solid #17324d;' + F + 'font-size:15px;font-weight:bold;text-decoration:none;padding:10px 22px;border-radius:8px">' + comH(t) + '</a>';
+  const botoes = botao('Abrir o Pier Gestão', site, true) + (p.botaoApp ? botao('Instalar o aplicativo', site + '/instalar.html', false) : '') + (p.botaoExtra ? botao(p.botaoExtra.texto, p.botaoExtra.url, false) : '');
+  const c = p.rodape || comCfg(), contatos = [c.endereco, c.telefone ? 'Tel.: ' + c.telefone : '', c.whatsapp ? 'WhatsApp: ' + c.whatsapp : ''].filter(Boolean).map(comH).join(' · ');
+  const anexosTxt = p.anexos.length ? '<p style="margin:0 0 14px;color:#5b6b7a;font-size:13px">📎 Anexo' + (p.anexos.length > 1 ? 's' : '') + ': ' + p.anexos.map(a => comH(a.nome)).join(', ') + '</p>' : '';
+  const html = '<div style="background:#f2f5f7;padding:24px 12px">'
+    + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #d9e1e8;border-radius:12px">'
+    + '<tr><td align="center" style="padding:28px 24px 18px"><img src="' + (previa ? 'data:image/png;base64,' + LEMB_LOGO_B64 : 'cid:logo') + '" width="200" alt="Pier Residências" style="display:block;width:200px;max-width:70%;height:auto;border:0"></td></tr>'
+    + '<tr><td style="padding:0 32px"><div style="border-top:2px solid ' + (cor || '#397d9d') + ';height:0;line-height:0">&nbsp;</div></td></tr>'
+    + (cor ? '<tr><td style="padding:18px 32px 0"><span style="display:inline-block;background:' + cor + ';color:#fff;' + F + 'font-size:12px;font-weight:bold;letter-spacing:.08em;text-transform:uppercase;padding:5px 12px;border-radius:999px">' + comH(p.tipo) + '</span></td></tr>' : '')
+    + '<tr><td style="padding:' + (cor ? '12px' : '22px') + ' 32px 6px;' + F + 'font-size:22px;font-weight:bold;color:#17324d">' + comH(p.assunto) + '</td></tr>'
+    + '<tr><td style="padding:10px 32px 4px;' + F + 'font-size:15px;line-height:1.6;color:#163047">' + (saud ? '<p style="margin:0 0 14px">' + comH(saud) + '</p>' : '') + pars + imgs + anexosTxt + '</td></tr>'
+    + '<tr><td align="center" style="padding:8px 26px 26px">' + botoes + '</td></tr>'
+    + '<tr><td style="padding:0 32px"><div style="border-top:1px solid #d9e1e8;height:0;line-height:0">&nbsp;</div></td></tr>'
+    + '<tr><td style="padding:16px 32px 24px;' + F + 'font-size:13px;line-height:1.6;color:#5b6b7a"><b style="color:#17324d">' + comH(porNome) + '</b>' + (chaveNome(porNome) === 'administracao' ? '' : ' · Administração') + ' · Pier Residências'
+    + (contatos ? '<br>' + contatos : '') + '<br>Comunicado enviado pelo Pier Gestão · <a href="' + site + '" style="color:#397d9d">' + site.replace('https://', '') + '</a></td></tr>'
+    + '</table></div>';
+  const body = (saud ? saud + '\n\n' : '') + p.mensagem + '\n\n' + (p.botaoExtra ? p.botaoExtra.texto + ': ' + p.botaoExtra.url + '\n' : '') + '—\n' + porNome + ' · Pier Residências\n' + (c.endereco || c.telefone || c.whatsapp ? [c.endereco, c.telefone, c.whatsapp].filter(Boolean).join(' · ') + '\n' : '') + site;
+  return { subject: (p.tipo === 'Urgente' ? '[URGENTE] ' : p.tipo === 'Importante' ? '[Importante] ' : '') + 'Pier Gestão – ' + p.assunto, html, body };
+}
+function comDisparar(p, porNome, emails) {
+  const nomes = comNomes(), inline = { logo: lembLogoBlob() };
+  p.imagens.forEach((im, i) => { inline['img' + i] = Utilities.newBlob(Utilities.base64Decode(im.b64), im.mime, im.nome); });
+  const anexos = p.anexos.map(a => Utilities.newBlob(Utilities.base64Decode(a.b64), a.mime, a.nome));
+  let ok = 0; const falhas = [];
+  emails.forEach(e => { try { const m = comMontar(p, porNome, nomes[e] || '', false);
+    MailApp.sendEmail({ to: e, subject: m.subject, body: m.body, htmlBody: m.html, inlineImages: inline, attachments: anexos, name: 'Pier Gestão' }); ok++; } catch (err) { falhas.push(e); } });
+  return { ok, falhas };
+}
+function comDestinosEscolhidos(r) {
   const validos = {}; comDestinos().forEach(x => x.emails.forEach(e => { validos[e] = true; }));
   const dest = [];
   (Array.isArray(r.emails) ? r.emails : []).forEach(e => { e = String(e || '').trim().toLowerCase(); if (validos[e] && dest.indexOf(e) < 0) dest.push(e); });
   if (!dest.length) throw falha('Escolha ao menos um destinatário.');
   if (dest.length > 60) throw falha('Envie para no máximo 60 pessoas por vez.');
+  return dest;
+}
+function comunicadoPrevia(r, conta) {
+  comExigir(conta);
+  const p = comLer(r), m = comMontar(p, conta.nome, conta.nome, true);
+  return { assunto: m.subject, html: m.html };
+}
+function comSalvarCfg(r) {
+  const c = r.rodape || {};
+  comProps().setProperty('COM_CFG', JSON.stringify({ endereco: texto(c.endereco, 160), telefone: texto(c.telefone, 40), whatsapp: texto(c.whatsapp, 40) }));
+}
+function comunicadoEnviar(r, conta) {
+  comExigir(conta);
+  if (r.rodape) comSalvarCfg(r);
+  const p = comLer(r);
+  if (r.modo === 'teste') {
+    const eu = comMeuEmail(conta);
+    if (!eu) throw falha('Cadastre o seu e-mail no seu login (Pessoas > Usuários) para receber o teste.');
+    const x = comDisparar(p, conta.nome, [eu]);
+    if (!x.ok) throw falha('Não foi possível enviar o teste.');
+    AUDIT_DET = 'Comunicado de teste "' + p.assunto + '" para o próprio e-mail';
+    return 'Teste enviado para ' + eu + '.';
+  }
+  const dest = comDestinosEscolhidos(r);
+  const eu = p.copia ? comMeuEmail(conta) : '';
+  if (eu && dest.indexOf(eu) < 0) dest.push(eu);
+  const t = tabela('com'), id = novoId('C');
+  const linha = { id, criadoEm: agora(), por: conta.nome, porUsuario: conta.usuario, assunto: p.assunto, tipo: p.tipo, destinos: dest.length, emails: dest.join(', ').slice(0, 4000) };
+  if (r.modo === 'agendar') {
+    const quando = new Date(String(r.quando || ''));
+    if (isNaN(quando) || quando.getTime() < Date.now() + 2 * 60000) throw falha('Escolha uma data e hora daqui a pelo menos alguns minutos.');
+    if (quando.getTime() > Date.now() + 60 * 864e5) throw falha('Agende para no máximo 60 dias à frente.');
+    const f = pastaDrive('PASTA_COMUNICADOS', 'Comunicados agendados - Pier Gestão').createFile(id + '.json', JSON.stringify({ p, emails: dest, por: conta.nome }), 'application/json');
+    const qtxt = Utilities.formatDate(quando, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm');
+    gravar(t, Object.assign(linha, { status: 'Agendado', agendadoPara: qtxt, arquivo: f.getId(), resumo: 'Agendado para ' + qtxt.split(' ')[0].split('-').reverse().join('/') + ' ' + qtxt.split(' ')[1] }));
+    comReagendar();
+    AUDIT_DET = 'Agendou o comunicado "' + p.assunto + '" para ' + qtxt + ' (' + dest.length + ' pessoa(s))';
+    return 'Comunicado agendado para ' + qtxt.split(' ')[0].split('-').reverse().join('/') + ' às ' + qtxt.split(' ')[1] + '.';
+  }
   let cota = 100; try { cota = MailApp.getRemainingDailyQuota(); } catch (e) {}
-  if (cota < dest.length) throw falha('A cota de e-mails do Google para hoje acabou (restam ' + cota + '). Tente amanhã ou envie para menos pessoas.');
-  const h = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const html = corpo.split(/\n{2,}/).map(par => {
-    const ls = par.split('\n');
-    if (ls.every(l => /^\s*[•\-*]\s+/.test(l))) return '<ul style="margin:0 0 14px;padding-left:20px">' + ls.map(l => '<li style="margin:0 0 6px">' + h(l.replace(/^\s*[•\-*]\s+/, '')) + '</li>').join('') + '</ul>';
-    return '<p style="margin:0 0 14px">' + ls.map(h).join('<br>') + '</p>';
-  }).join('');
-  const site = 'https://piergestao.condominiopier.com.br';
-  const htmlBody = '<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.55;color:#163047;max-width:620px">'
-    + '<div style="background:#17324d;color:#fff;padding:14px 18px;border-radius:10px 10px 0 0;font-weight:bold;font-size:16px">Pier Gestão · Comunicado</div>'
-    + '<div style="border:1px solid #d9e1e8;border-top:0;border-radius:0 0 10px 10px;padding:18px">' + html
-    + '<p style="margin:18px 0 0;color:#5b6b7a;font-size:13px">Enviado por ' + h(conta.nome) + ' pelo Pier Gestão · <a href="' + site + '">' + site.replace('https://', '') + '</a></p></div></div>';
-  const body = corpo + '\n\n—\nEnviado por ' + conta.nome + ' pelo Pier Gestão\n' + site;
-  let ok = 0; const falhas = [];
-  dest.forEach(e => { try { MailApp.sendEmail({ to: e, subject: 'Pier Gestão – ' + assunto, body, htmlBody, name: 'Pier Gestão' }); ok++; } catch (err) { falhas.push(e); } });
-  AUDIT_DET = 'Comunicado "' + assunto + '" para ' + ok + ' pessoa(s)' + (falhas.length ? '; falhou para ' + falhas.length : '');
-  if (!ok) throw falha('Não foi possível enviar o comunicado. Tente de novo mais tarde.');
-  return 'Comunicado enviado para ' + ok + (ok === 1 ? ' pessoa' : ' pessoas') + '.' + (falhas.length ? ' Não foi possível enviar para ' + falhas.length + '.' : '');
+  if (cota < dest.length) throw falha('A cota de e-mails do Google para hoje acabou (restam ' + cota + '). Tente amanhã, agende ou envie para menos pessoas.');
+  const x = comDisparar(p, conta.nome, dest);
+  gravar(t, Object.assign(linha, { status: x.ok ? 'Enviado' : 'Falhou', enviadoEm: agora(), resumo: x.ok + ' enviado(s)' + (x.falhas.length ? ', ' + x.falhas.length + ' com falha' : '') }));
+  AUDIT_DET = 'Comunicado "' + p.assunto + '" para ' + x.ok + ' pessoa(s)' + (x.falhas.length ? '; falhou para ' + x.falhas.length : '');
+  if (!x.ok) throw falha('Não foi possível enviar o comunicado. Tente de novo mais tarde.');
+  return 'Comunicado enviado para ' + x.ok + (x.ok === 1 ? ' pessoa' : ' pessoas') + '.' + (x.falhas.length ? ' Não foi possível enviar para ' + x.falhas.length + '.' : '');
+}
+function comunicadoCancelar(r, conta) {
+  comExigir(conta);
+  const t = tabela('com'), c = linhas(t).find(x => x.id === r.id);
+  if (!c) throw falha('Comunicado não encontrado. Atualize a página.');
+  if (c.status !== 'Agendado') throw falha('Só dá para cancelar um comunicado agendado.');
+  gravar(t, { status: 'Cancelado', resumo: 'Cancelado por ' + conta.nome + ' em ' + agora() }, c._row);
+  try { if (c.arquivo) DriveApp.getFileById(c.arquivo).setTrashed(true); } catch (e) {}
+  comReagendar();
+  AUDIT_DET = 'Cancelou o comunicado agendado "' + c.assunto + '"';
+  return 'Comunicado agendado cancelado.';
+}
+function comModeloSalvar(r, conta) {
+  comExigir(conta);
+  const nome = texto(r.nome, 60); if (!nome) throw falha('Dê um nome ao modelo.');
+  const p = { assunto: texto(r.assunto, 120), mensagem: String(r.mensagem || '').replace(/\r/g, '').slice(0, 6000), tipo: Object.prototype.hasOwnProperty.call(COM_TIPOS, r.tipo) ? r.tipo : 'Normal', formato: r.formato === 'cards' ? 'cards' : 'lista' };
+  const l = comModelos().filter(m => chaveNome(m.nome) !== chaveNome(nome));
+  l.push(Object.assign({ id: novoId('MD'), nome }, p));
+  if (l.length > 20) throw falha('Guarde no máximo 20 modelos. Exclua algum antes.');
+  l.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  const txt = JSON.stringify(l); if (txt.length > 8500) throw falha('Os modelos ficaram grandes demais. Exclua algum ou encurte o texto.');
+  comProps().setProperty('COM_MODELOS', txt);
+  AUDIT_DET = 'Salvou o modelo de comunicado "' + nome + '"';
+  return 'Modelo "' + nome + '" salvo.';
+}
+function comModeloExcluir(r, conta) {
+  comExigir(conta);
+  const l = comModelos(), m = l.find(x => x.id === r.id); if (!m) throw falha('Modelo não encontrado.');
+  comProps().setProperty('COM_MODELOS', JSON.stringify(l.filter(x => x.id !== r.id)));
+  AUDIT_DET = 'Excluiu o modelo de comunicado "' + m.nome + '"';
+  return 'Modelo "' + m.nome + '" excluído.';
+}
+// agendamento: um único acionador de tempo, sempre para o próximo comunicado agendado
+function comReagendar() {
+  ScriptApp.getProjectTriggers().filter(tr => tr.getHandlerFunction() === COM_FUNCAO).forEach(tr => ScriptApp.deleteTrigger(tr));
+  const prox = linhas(tabela('com')).filter(x => x.status === 'Agendado' && x.agendadoPara).map(x => x.agendadoPara).sort()[0];
+  if (!prox) return;
+  const [d, h] = String(prox).split(' '), [a, m, di] = d.split('-').map(Number), [hh, mm] = (h || '00:00').split(':').map(Number);
+  const quando = new Date(a, m - 1, di, hh, mm);
+  ScriptApp.newTrigger(COM_FUNCAO).timeBased().at(new Date(Math.max(quando.getTime(), Date.now() + 60000))).create();
+}
+// chamada pelo acionador: envia os agendados que já venceram
+function comunicadosAgendados() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) { try { ScriptApp.newTrigger(COM_FUNCAO).timeBased().after(5 * 60000).create(); } catch (e) {} return; }
+  try {
+    const agoraTxt = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm');
+    const t = tabela('com');
+    linhas(t).filter(x => x.status === 'Agendado' && x.agendadoPara && x.agendadoPara <= agoraTxt).forEach(c => {
+      try {
+        const dadosArq = JSON.parse(DriveApp.getFileById(c.arquivo).getBlob().getDataAsString());
+        const x = comDisparar(dadosArq.p, dadosArq.por, dadosArq.emails);
+        gravar(t, { status: x.ok ? 'Enviado' : 'Falhou', enviadoEm: agora(), resumo: x.ok + ' enviado(s) no horário agendado' + (x.falhas.length ? ', ' + x.falhas.length + ' com falha' : '') }, c._row);
+        try { DriveApp.getFileById(c.arquivo).setTrashed(true); } catch (e) {}
+      } catch (e) { gravar(t, { status: 'Falhou', resumo: 'Falhou no horário agendado: ' + texto(e.message, 200) }, c._row); }
+    });
+    comReagendar();
+  } finally { lock.releaseLock(); }
 }
 
 // --- avisos ao síndico: pendência aguardando a aprovação dele e alterações nas pendências que ele acompanha ---
@@ -5218,7 +5405,7 @@ const ACOES_AUDIT = {
   registrar: 'Movimentação', osAbrir: 'Abriu OS', osAtualizar: 'Atualizou OS', osFoto: 'Foto na OS', osFotoRemover: 'Tirou foto da OS',
   demCriar: 'Criou demanda', demAtualizar: 'Atualizou demanda', salvarPreventiva: 'Salvou preventiva', excluirPreventiva: 'Excluiu preventiva',
   salvarLocais: 'Alterou locais', importarContagem: 'Importou inventário', devolver: 'Devolução', salvarItem: 'Salvou item',
-  excluirItem: 'Excluiu item', estornar: 'Estornou lançamento', salvarUsuario: 'Usuário', comunicadoEnviar: 'Enviou comunicado por e-mail', acessoUsuario: 'Acessos de usuário', excluirUsuario: 'Excluiu usuário',
+  excluirItem: 'Excluiu item', estornar: 'Estornou lançamento', salvarUsuario: 'Usuário', comunicadoEnviar: 'Enviou comunicado por e-mail', comunicadoCancelar: 'Cancelou comunicado agendado', comModeloSalvar: 'Modelo de comunicado', comModeloExcluir: 'Modelo de comunicado', acessoUsuario: 'Acessos de usuário', excluirUsuario: 'Excluiu usuário',
   salvarPerfil: 'Perfil', excluirPerfil: 'Excluiu perfil', pendSalvar: 'Pendência', pendExcluir: 'Excluiu pendência',
   nfEnviar: 'Enviou nota fiscal', nfVer: 'Abriu nota fiscal', relatorio: 'Dashboard', usuarios: 'Usuários', acessos: 'Histórico de acessos',
   auditoria: 'Auditoria', pendencias: 'Pendências'

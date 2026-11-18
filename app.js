@@ -553,13 +553,13 @@ function filtrarMenuPier(){
     sub.hidden=q?false:grupo.getAttribute('aria-expanded')!=='true';
   });
 }
-// Comunicado por e-mail (Administração): escolhe os grupos/pessoas da lista do servidor, escreve e envia
+// Comunicado por e-mail (Administração): destinatários da lista do servidor, destaque, lista ou cards, imagens, anexos,
+// botões, rodapé, saudação pelo nome, modelos, prévia, teste, cópia, agendamento e histórico
 const COM_PADRAO = /s[ií]ndico|ger[eê]n|supervis/i;
+const COM = { painel:null, imagens:[], anexos:[], aba:"escrever" };
 function comNovidades(){
   const inst = new URL("instalar.html", location.href).href;
-  return {assunto:"Novidades no Pier Gestão", mensagem:`Olá,
-
-O Pier Gestão recebeu novidades:
+  return {assunto:"Novidades no Pier Gestão", tipo:"Novidade", formato:"cards", mensagem:`O Pier Gestão recebeu novidades:
 
 • Aplicativo para Android: instale pelo QR Code (card "Aplicativo" no Início) ou pelo endereço ${inst}. Não precisa baixar arquivo e as atualizações chegam sozinhas.
 • Funciona sem internet: a equipe de Manutenção e Limpeza pode abrir OS, dar baixa, anotar, pôr fotos e retirar material mesmo sem sinal. Tudo é enviado sozinho quando a conexão volta.
@@ -569,41 +569,134 @@ O Pier Gestão recebeu novidades:
 
 Qualquer dúvida, fale com a Administração.`};
 }
+const comB64 = f => new Promise((ok, erro) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1] || ""); r.onerror = () => erro(new Error("Não deu para ler " + f.name)); r.readAsDataURL(f); });
+const COM_ANEXO_TIPOS = {pdf:"application/pdf", xlsx:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", xls:"application/vnd.ms-excel", jpg:"image/jpeg", jpeg:"image/jpeg", png:"image/png"};
 async function abrirComunicado(){
-  $("#modal-box").innerHTML = `<h3>Comunicado por e-mail</h3><div class="empty"><span class="spin" aria-hidden="true"></span> Carregando os destinatários…</div>`;
-  $("#modal").hidden = false;
-  let r; try { r = await api("comunicadoDestinos", {}, {soLer:true}); } catch(e){ $("#modal-box").innerHTML = `<h3>Comunicado por e-mail</h3><p class="hint err">${esc(e.message || "Não foi possível carregar.")}</p><div class="actions"><button class="btn" type="button" id="com-no">Fechar</button></div>`; $("#com-no").onclick = fecharModal; return; }
-  const grupos = r.destinos || [];
-  const todos = [...new Set(grupos.flatMap(g => g.emails))];
+  COM.imagens = []; COM.anexos = []; COM.aba = "escrever";
+  $("#modal-box").innerHTML = `<h3>Comunicado por e-mail</h3><div class="empty"><span class="spin" aria-hidden="true"></span> Carregando…</div>`;
+  $("#modal-box").classList.add("com-box"); $("#modal").hidden = false;
+  try { COM.painel = (await api("comunicadoDestinos", {}, {soLer:true})).com; }
+  catch(e){ $("#modal-box").innerHTML = `<h3>Comunicado por e-mail</h3><p class="hint err">${esc(e.message || "Não foi possível carregar.")}</p><div class="actions"><button class="btn" type="button" id="com-no">Fechar</button></div>`; $("#com-no").onclick = comFechar; return; }
+  comRender();
+}
+function comFechar(){ $("#modal-box").classList.remove("com-box"); fecharModal(); }
+function comRender(){
+  const P = COM.painel, grupos = P.destinos || [], cfg = P.cfg || {}, mods = P.modelos || [];
+  const agora = new Date(Date.now() + 60*60000), dl = `${iso(agora)}T${String(agora.getHours()).padStart(2,"0")}:00`;
   $("#modal-box").innerHTML = `<h3>Comunicado por e-mail</h3>
-    <p class="muted">O e-mail sai pela conta do sistema, com o visual do Pier Gestão. Só aparecem os endereços cadastrados (aba Emails da planilha e logins com e-mail).</p>
-    <form class="form" id="f-com" novalidate>
+    <div class="chips com-abas" role="tablist"><button class="chip" type="button" data-com-aba="escrever" aria-pressed="${COM.aba==="escrever"}">Escrever</button><button class="chip" type="button" data-com-aba="historico" aria-pressed="${COM.aba==="historico"}">Histórico (${(P.historico||[]).length})</button></div>
+    <div id="com-hist" ${COM.aba==="historico" ? "" : "hidden"}>${comHistHtml()}</div>
+    <form class="form" id="f-com" novalidate ${COM.aba==="escrever" ? "" : "hidden"}>
+      <div class="field full com-mod"><label for="com-modelo">Modelos salvos</label><div class="actions"><select class="input" id="com-modelo"><option value="">— Escolha um modelo —</option>${mods.map(m => `<option value="${esc(m.id)}">${esc(m.nome)}</option>`).join("")}</select>
+        <button class="btn small" type="button" id="com-mod-usar">Usar</button><button class="btn small danger" type="button" id="com-mod-del">Excluir</button><button class="link" type="button" id="com-nov">Usar o texto das novidades de hoje</button></div></div>
       <fieldset class="full com-grupos"><legend>Para quem</legend>
         ${grupos.length ? grupos.map((g, i) => `<label class="com-g"><input type="checkbox" data-g="${i}" ${COM_PADRAO.test(g.grupo) ? "checked" : ""}> <b>${esc(g.grupo)}</b> <span class="muted">${g.emails.map(esc).join(", ")}</span></label>`).join("") : `<p class="hint err">Nenhum e-mail cadastrado. Cadastre na aba Emails da planilha ou no login de cada pessoa.</p>`}
+        <label class="com-g"><input type="checkbox" id="com-copia" ${P.meuEmail ? "checked" : "disabled"}> Receber uma cópia <span class="muted">${P.meuEmail ? esc(P.meuEmail) : "(cadastre o seu e-mail no seu login)"}</span></label>
       </fieldset>
+      <div class="field"><label for="com-tipo">Destaque</label><select class="input" id="com-tipo">${["Normal","Novidade","Importante","Urgente"].map(t => `<option>${t}</option>`).join("")}</select></div>
+      <div class="field"><label for="com-formato">Formato da lista</label><select class="input" id="com-formato"><option value="lista">Lista com marcadores</option><option value="cards">Cards por assunto</option></select></div>
       <div class="field full"><label for="com-ass">Assunto <span class="req">*</span></label><input class="input" id="com-ass" maxlength="120" placeholder="Ex.: Novidades no Pier Gestão"></div>
-      <div class="field full"><label for="com-msg">Mensagem <span class="req">*</span></label><textarea class="input" id="com-msg" rows="12" maxlength="6000" placeholder="Escreva o comunicado. Linhas começando com • viram lista."></textarea>
-        <button type="button" class="link" id="com-nov">Usar o texto das novidades de hoje</button></div>
+      <div class="field full"><label for="com-msg">Mensagem <span class="req">*</span></label><textarea class="input" id="com-msg" rows="10" maxlength="6000" placeholder="Escreva o comunicado. Linhas começando com • viram lista (ou cards: o que vem antes dos dois-pontos vira o título)."></textarea>
+        <label class="com-g"><input type="checkbox" id="com-saud" checked> Começar com “Olá, <i>nome da pessoa</i>,”</label></div>
+      <div class="field"><label for="com-img">Imagens no corpo <span class="muted">(até 3)</span></label><input class="input" type="file" id="com-img" accept="image/*" multiple><div class="com-arqs" id="com-img-l"></div></div>
+      <div class="field"><label for="com-anx">Anexos <span class="muted">(PDF, Excel ou foto · até 3)</span></label><input class="input" type="file" id="com-anx" accept=".pdf,.xlsx,.xls,.jpg,.jpeg,.png" multiple><div class="com-arqs" id="com-anx-l"></div></div>
+      <fieldset class="full com-grupos"><legend>Botões no e-mail</legend>
+        <label class="com-g"><input type="checkbox" checked disabled> Abrir o Pier Gestão</label>
+        <label class="com-g"><input type="checkbox" id="com-bt-app"> Instalar o aplicativo</label>
+        <div class="com-linha"><input class="input" id="com-bt-txt" maxlength="40" placeholder="Botão extra: texto (ex.: Ver manual)"><input class="input" id="com-bt-url" maxlength="300" placeholder="Link (https://…)"></div>
+      </fieldset>
+      <fieldset class="full com-grupos"><legend>Rodapé <span class="muted">(fica salvo para os próximos)</span></legend>
+        <div class="com-linha"><input class="input" id="com-end" maxlength="160" placeholder="Endereço do condomínio" value="${esc(cfg.endereco||"")}"></div>
+        <div class="com-linha"><input class="input" id="com-tel" maxlength="40" placeholder="Telefone da Administração" value="${esc(cfg.telefone||"")}"><input class="input" id="com-wpp" maxlength="40" placeholder="WhatsApp" value="${esc(cfg.whatsapp||"")}"></div>
+      </fieldset>
+      <fieldset class="full com-grupos"><legend>Quando enviar</legend>
+        <label class="com-g"><input type="radio" name="com-quando" value="agora" checked> Enviar agora</label>
+        <label class="com-g"><input type="radio" name="com-quando" value="agendar"> Agendar para <input class="input com-dt" type="datetime-local" id="com-dt" value="${dl}"></label>
+      </fieldset>
       <p class="hint full" id="com-res"></p>
-      <div class="full actions"><button class="btn primary" type="submit" id="com-ok">Enviar comunicado</button><button class="btn" type="button" id="com-no">Cancelar</button><span class="hint" id="com-msg-st"></span></div>
+      <div class="full actions com-acoes"><button class="btn" type="button" id="com-prev">Prévia</button><button class="btn" type="button" id="com-teste" ${P.meuEmail ? "" : "disabled title='Cadastre o seu e-mail no seu login'"}>Enviar teste para mim</button>
+        <button class="btn" type="button" id="com-salvar-mod">Salvar como modelo</button><span class="com-esp"></span><button class="btn" type="button" id="com-no">Fechar</button><button class="btn primary" type="submit" id="com-ok">Enviar comunicado</button></div>
+      <span class="hint full" id="com-msg-st" role="status"></span>
+      <div class="full" id="com-prev-box" hidden></div>
     </form>`;
+  $$("#modal-box [data-com-aba]").forEach(b => b.onclick = () => { COM.aba = b.dataset.comAba; $$("#modal-box [data-com-aba]").forEach(x => x.setAttribute("aria-pressed", x === b)); $("#com-hist").hidden = COM.aba !== "historico"; $("#f-com").hidden = COM.aba !== "escrever"; });
+  $("#com-no").onclick = comFechar;
   const escolhidos = () => [...new Set($$("#f-com [data-g]:checked").flatMap(c => grupos[+c.dataset.g].emails))];
-  const resumo = () => { const n = escolhidos().length; $("#com-res").textContent = n ? `Vai para ${n} ${n === 1 ? "endereço" : "endereços"}.${r.cota != null ? ` Cota de e-mails do Google hoje: ${r.cota}.` : ""}` : "Escolha ao menos um grupo."; $("#com-ok").disabled = !n; };
-  $$("#f-com [data-g]").forEach(c => c.onchange = resumo); resumo();
-  $("#com-no").onclick = fecharModal;
-  $("#com-nov").onclick = () => { const n = comNovidades(); $("#com-ass").value = n.assunto; $("#com-msg").value = n.mensagem; };
-  let confirmar = false;
+  const resumo = () => { const n = escolhidos().length, ag = ($("input[name=com-quando]:checked")||{}).value === "agendar";
+    $("#com-res").textContent = n ? `Vai para ${n} ${n === 1 ? "endereço" : "endereços"}${$("#com-copia").checked ? " + cópia para você" : ""}.${P.cota != null ? ` Cota de e-mails do Google hoje: ${P.cota}.` : ""}` : "Escolha ao menos um grupo.";
+    $("#com-ok").textContent = ag ? "Agendar comunicado" : "Enviar comunicado"; confirmar = false; };
+  $$("#f-com [data-g], #com-copia, input[name=com-quando]").forEach(c => c.addEventListener("change", resumo));
+  $("#com-dt").addEventListener("focus", () => { $("input[name=com-quando][value=agendar]").checked = true; resumo(); });
+  const aplicar = m => { $("#com-ass").value = m.assunto || ""; $("#com-msg").value = m.mensagem || ""; $("#com-tipo").value = m.tipo || "Normal"; $("#com-formato").value = m.formato || "lista"; };
+  $("#com-nov").onclick = () => aplicar(comNovidades());
+  $("#com-mod-usar").onclick = () => { const m = mods.find(x => x.id === $("#com-modelo").value); if (m) aplicar(m); };
+  $("#com-mod-del").onclick = async () => { const m = mods.find(x => x.id === $("#com-modelo").value); if (!m) return;
+    const b = $("#com-mod-del"); if (b.dataset.conf !== "1") { b.dataset.conf = "1"; b.textContent = "Confirmar exclusão"; return; }
+    const r = await enviar(b, $("#com-msg-st"), "comModeloExcluir", {id:m.id}); if (r && r.com) { COM.painel = r.com; comRender(); } };
+  $("#com-salvar-mod").onclick = async () => {
+    const st = $("#com-msg-st"); let box = $("#com-mod-nome");
+    if (!box) { $("#com-salvar-mod").insertAdjacentHTML("afterend", `<input class="input" id="com-mod-nome" maxlength="60" placeholder="Nome do modelo" style="max-width:220px">`); $("#com-mod-nome").focus(); $("#com-salvar-mod").textContent = "Salvar modelo"; return; }
+    const r = await enviar($("#com-salvar-mod"), st, "comModeloSalvar", {nome:box.value.trim(), assunto:$("#com-ass").value.trim(), mensagem:$("#com-msg").value, tipo:$("#com-tipo").value, formato:$("#com-formato").value});
+    if (r && r.com) { const keep = comLerForm(); COM.painel = r.com; comRender(); comPreencher(keep); }
+  };
+  const lista = (sel, arr) => { $(sel).innerHTML = arr.map((a, i) => `<span class="com-arq">${esc(a.nome)} <button type="button" class="link" data-x="${i}" aria-label="Tirar ${esc(a.nome)}">×</button></span>`).join(""); };
+  $("#com-img").onchange = async ev => { const fs = [...ev.target.files].filter(f => /^image\//.test(f.type)); ev.target.value = "";
+    for (const f of fs) { if (COM.imagens.length >= 3) { toast("No máximo 3 imagens.", true); break; } try { COM.imagens.push({nome:f.name.replace(/\.[^.]+$/, "") + ".jpg", mime:"image/jpeg", b64:await reduzirFoto(f, 1200, 0.82)}); } catch(e){ toast("Não deu para ler a imagem " + f.name + ".", true); } }
+    lista("#com-img-l", COM.imagens); };
+  $("#com-img-l").onclick = ev => { const x = ev.target.closest("[data-x]"); if (x) { COM.imagens.splice(+x.dataset.x, 1); lista("#com-img-l", COM.imagens); } };
+  $("#com-anx").onchange = async ev => { const fs = [...ev.target.files]; ev.target.value = "";
+    for (const f of fs) { if (COM.anexos.length >= 3) { toast("No máximo 3 anexos.", true); break; }
+      const ext = (f.name.split(".").pop() || "").toLowerCase(), mime = COM_ANEXO_TIPOS[ext];
+      if (!mime) { toast(`${f.name}: use PDF, Excel ou foto.`, true); continue; }
+      if (f.size > 4*1024*1024) { toast(`${f.name} passa de 4 MB.`, true); continue; }
+      try { COM.anexos.push({nome:f.name, mime, b64:await comB64(f)}); } catch(e){ toast(e.message, true); } }
+    lista("#com-anx-l", COM.anexos); };
+  $("#com-anx-l").onclick = ev => { const x = ev.target.closest("[data-x]"); if (x) { COM.anexos.splice(+x.dataset.x, 1); lista("#com-anx-l", COM.anexos); } };
+  $("#com-hist").onclick = async ev => { const b = ev.target.closest("[data-com-cancel]"); if (!b) return;
+    if (b.dataset.conf !== "1") { b.dataset.conf = "1"; b.textContent = "Confirmar cancelamento"; return; }
+    const r = await enviar(b, null, "comunicadoCancelar", {id:b.dataset.comCancel}); if (r && r.com) { COM.painel = r.com; COM.aba = "historico"; const keep = comLerForm(); comRender(); comPreencher(keep); } };
+  const pedido = () => {
+    const st = $("#com-msg-st"); st.className = "hint err";
+    const v = comLerForm();
+    if (!v.assunto) { st.textContent = "Escreva o assunto."; return null; }
+    if (v.mensagem.length < 10) { st.textContent = "Escreva a mensagem."; return null; }
+    if ((v.botaoExtra.texto || v.botaoExtra.url) && !(v.botaoExtra.texto && /^https:\/\//i.test(v.botaoExtra.url))) { st.textContent = "Botão extra: escreva o texto e um link que comece com https://"; return null; }
+    return Object.assign(v, {emails:escolhidos(), imagens:COM.imagens, anexos:COM.anexos});
+  };
+  $("#com-prev").onclick = async () => {
+    const v = pedido(); if (!v) return; const st = $("#com-msg-st"), b = $("#com-prev"); b.disabled = true; st.className = "hint"; st.innerHTML = `<span class="spin" aria-hidden="true"></span> Montando a prévia…`;
+    try { const r = await api("comunicadoPrevia", v, {soLer:true}); const box = $("#com-prev-box"); box.hidden = false;
+      box.innerHTML = `<p class="hint"><b>Assunto:</b> ${esc(r.previa.assunto)}</p><iframe class="com-iframe" sandbox="" title="Prévia do e-mail"></iframe>`; box.querySelector("iframe").srcdoc = `<!doctype html><meta charset="utf-8"><body style="margin:0">${r.previa.html}</body>`;
+      st.textContent = ""; box.scrollIntoView({block:"nearest"}); }
+    catch(e){ st.className = "hint err"; st.textContent = e.message || "Não foi possível montar a prévia."; } finally { b.disabled = false; }
+  };
+  $("#com-teste").onclick = async () => { const v = pedido(); if (!v) return; await enviar($("#com-teste"), $("#com-msg-st"), "comunicadoEnviar", Object.assign(v, {modo:"teste"})); };
+  let confirmar = false; resumo();
   $("#f-com").addEventListener("submit", async ev => {
     ev.preventDefault();
-    const st = $("#com-msg-st"); st.className = "hint err";
-    const assunto = $("#com-ass").value.trim(), mensagem = $("#com-msg").value.trim(), emails = escolhidos();
-    if (!emails.length) { st.textContent = "Escolha ao menos um grupo."; return; }
-    if (!assunto) { st.textContent = "Escreva o assunto."; return; }
-    if (mensagem.length < 10) { st.textContent = "Escreva a mensagem."; return; }
-    if (!confirmar) { confirmar = true; $("#com-ok").textContent = `Confirmar envio para ${emails.length}`; st.className = "hint"; st.textContent = "Confira e clique de novo para enviar."; return; }
-    const res = await enviar($("#com-ok"), st, "comunicadoEnviar", {assunto, mensagem, emails});
-    if (res) fecharModal();
+    const v = pedido(); if (!v) return; const st = $("#com-msg-st");
+    if (!v.emails.length) { st.className = "hint err"; st.textContent = "Escolha ao menos um grupo."; return; }
+    const ag = ($("input[name=com-quando]:checked")||{}).value === "agendar";
+    if (ag) { const q = new Date($("#com-dt").value); if (isNaN(q) || q.getTime() < Date.now() + 2*60000) { st.className = "hint err"; st.textContent = "Escolha uma data e hora futuras para o agendamento."; return; } v.modo = "agendar"; v.quando = q.toISOString(); }
+    if (!confirmar) { confirmar = true; $("#com-ok").textContent = ag ? `Confirmar agendamento para ${v.emails.length}` : `Confirmar envio para ${v.emails.length}`; st.className = "hint"; st.textContent = "Confira e clique de novo."; return; }
+    const r = await enviar($("#com-ok"), st, "comunicadoEnviar", v);
+    if (r) { COM.painel = r.com || COM.painel; COM.imagens = []; COM.anexos = []; COM.aba = "historico"; comRender(); }
   });
+}
+function comLerForm(){
+  return {assunto:$("#com-ass").value.trim(), mensagem:$("#com-msg").value.trim(), tipo:$("#com-tipo").value, formato:$("#com-formato").value, saudacao:$("#com-saud").checked,
+    copia:$("#com-copia").checked, botaoApp:$("#com-bt-app").checked, botaoExtra:{texto:$("#com-bt-txt").value.trim(), url:$("#com-bt-url").value.trim()},
+    rodape:{endereco:$("#com-end").value.trim(), telefone:$("#com-tel").value.trim(), whatsapp:$("#com-wpp").value.trim()}};
+}
+function comPreencher(v){ $("#com-ass").value = v.assunto; $("#com-msg").value = v.mensagem; $("#com-tipo").value = v.tipo; $("#com-formato").value = v.formato; $("#com-saud").checked = v.saudacao;
+  $("#com-bt-app").checked = v.botaoApp; $("#com-bt-txt").value = v.botaoExtra.texto; $("#com-bt-url").value = v.botaoExtra.url; }
+function comHistHtml(){
+  const h = (COM.painel && COM.painel.historico) || [];
+  if (!h.length) return `<p class="muted">Nenhum comunicado enviado ainda.</p>`;
+  const cls = {Enviado:"p-entrada", Agendado:"p-emprestimo", Cancelado:"p-ajuste", Falhou:"prio-urgente"};
+  return `<ul class="off-lista com-hist">${h.map(x => `<li><div><span class="off-tipo">${esc(x.tipo && x.tipo !== "Normal" ? x.tipo : "Comunicado")}</span><b>${esc(x.assunto)}</b>
+    <span class="muted">${esc(x.status === "Agendado" ? "Agendado para " + fDataHora(x.agendadoPara) : "Criado em " + fDataHora(x.criadoEm))} · por ${esc(x.por)} · ${esc(x.destinos)} ${Number(x.destinos) === 1 ? "pessoa" : "pessoas"}</span>${x.resumo ? `<span class="muted">${esc(x.resumo)}</span>` : ""}</div>
+    <div class="actions"><span class="pill ${cls[x.status] || ""}">${esc(x.status)}</span>${x.status === "Agendado" ? `<button type="button" class="btn small danger" data-com-cancel="${esc(x.id)}">Cancelar</button>` : ""}</div></li>`).join("")}</ul>`;
 }
 // Aplicativo (Android): QR Code da página pública de instalação
 function abrirAppQR(){
