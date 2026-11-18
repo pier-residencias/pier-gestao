@@ -550,10 +550,19 @@ function filtrarMenuPier(){
     sub.hidden=q?false:grupo.getAttribute('aria-expanded')!=='true';
   });
 }
+// Aplicativo (Android): QR Code da página pública de instalação
+function abrirAppQR(){
+  const url=new URL("instalar.html",location.href).href;
+  let svg="";try{const qr=qrcode(0,"M");qr.addData(url);qr.make();svg=qr.createSvgTag({cellSize:6,margin:2,scalable:true});}catch(e){}
+  $("#modal-box").innerHTML=`<h3>Aplicativo Pier Gestão</h3><p class="muted">Aponte a câmera do celular Android para o QR Code. Abre a página de instalação: é só tocar em <b>Instalar aplicativo</b>. Não precisa baixar arquivo nem liberar fontes desconhecidas.</p>
+    <div class="app-qr">${svg}</div><p class="mono hint" style="text-align:center;word-break:break-all">${esc(url)}</p>
+    <div class="actions"><a class="btn primary" href="instalar.html" target="_blank" rel="noopener">Abrir a página de instalação</a><button type="button" class="btn" id="app-qr-fechar">Fechar</button></div>`;
+  $("#modal").hidden=false;$("#app-qr-fechar").onclick=fecharModal;
+}
 function renderCentralPier(){
   const box=document.getElementById('pier-central');if(!box)return;
   const areas=[['correspondencias','Correspondências','Recebimentos e retiradas','↗'],['unidades','Unidades','Cadastros e moradores','▦'],['medrel','Central de medições','Consumos e relatórios','◴'],['pendencias','Pendências','Demandas da administração','☰'],['cotacoes','Compras','Cotações e fornecedores','▤'],['os','Manutenção','Ordens de serviço e rotinas','⌁']];
-  box.innerHTML='<div class="central-titulo"><div><p class="overline">SEU CONDOMÍNIO, EM UM SÓ LUGAR</p><h2>Áreas de trabalho</h2></div><span class="hint">Escolha uma ferramenta para começar</span></div><div class="central-grid">'+areas.filter(a=>podeAba(a[0])&&document.getElementById('t-'+a[0])).map(a=>'<button type="button" class="central-card" data-central="'+a[0]+'"><span class="central-ico" aria-hidden="true">'+a[3]+'</span><strong>'+a[1]+'</strong><span>'+a[2]+'</span><span class="central-ir" aria-hidden="true">→</span></button>').join('')+'</div>';
+  box.innerHTML='<div class="central-titulo"><div><p class="overline">SEU CONDOMÍNIO, EM UM SÓ LUGAR</p><h2>Áreas de trabalho</h2></div><span class="hint">Escolha uma ferramenta para começar</span></div><div class="central-grid">'+areas.filter(a=>podeAba(a[0])&&document.getElementById('t-'+a[0])).map(a=>'<button type="button" class="central-card" data-central="'+a[0]+'"><span class="central-ico" aria-hidden="true">'+a[3]+'</span><strong>'+a[1]+'</strong><span>'+a[2]+'</span><span class="central-ir" aria-hidden="true">→</span></button>').join('')+'<button type="button" class="central-card" data-app-qr="1"><span class="central-ico" aria-hidden="true">▯</span><strong>Aplicativo</strong><span>QR Code para instalar no celular Android</span><span class="central-ir" aria-hidden="true">→</span></button></div>';
 }
 async function carregarCorrespondencias(){
   if(!S.token||S.perfil!=='Administração')return;
@@ -1094,7 +1103,7 @@ document.getElementById('corr-nova')?.addEventListener('click',()=>corrFormulari
 document.getElementById('corr-atualizar')?.addEventListener('click',carregarCorrespondencias);
 for(const id of ['corr-busca','corr-status'])document.getElementById(id)?.addEventListener(id==='corr-busca'?'input':'change',renderCorrespondencias);
 document.addEventListener('click',e=>{
- const central=e.target.closest('[data-central]');if(central){setTab(central.dataset.central);return;}
+ if(e.target.closest('[data-app-qr]')){abrirAppQR();return;}const central=e.target.closest('[data-central]');if(central){setTab(central.dataset.central);return;}
  const b=e.target.closest('[data-corr-entregar],[data-corr-cancelar]');if(b)corrFormulario(b.dataset.corrEntregar?'entregar':'cancelar',b.dataset.corrEntregar||b.dataset.corrCancelar);
 });
 
@@ -9400,4 +9409,6 @@ if (sess && sess.token && sess.usuario) {
   mostrarLogin("");
   concluirInicioPier();
 }
+// aplicativo Android (instalação pela página instalar.html): service worker mínimo, sem cache
+if ("serviceWorker" in navigator && window.isSecureContext) navigator.serviceWorker.register("sw.js").catch(() => {});
 })();
