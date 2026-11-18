@@ -553,6 +553,58 @@ function filtrarMenuPier(){
     sub.hidden=q?false:grupo.getAttribute('aria-expanded')!=='true';
   });
 }
+// Comunicado por e-mail (Administração): escolhe os grupos/pessoas da lista do servidor, escreve e envia
+const COM_PADRAO = /s[ií]ndico|ger[eê]n|supervis/i;
+function comNovidades(){
+  const inst = new URL("instalar.html", location.href).href;
+  return {assunto:"Novidades no Pier Gestão", mensagem:`Olá,
+
+O Pier Gestão recebeu novidades:
+
+• Aplicativo para Android: instale pelo QR Code (card "Aplicativo" no Início) ou pelo endereço ${inst}. Não precisa baixar arquivo e as atualizações chegam sozinhas.
+• Funciona sem internet: a equipe de Manutenção e Limpeza pode abrir OS, dar baixa, anotar, pôr fotos e retirar material mesmo sem sinal. Tudo é enviado sozinho quando a conexão volta.
+• OS fechada pela Administração: a Administração pode fechar uma OS em aberto só com justificativa, sem fotos. Ela vai para a aprovação do gerente, que aprova ou recusa.
+• Estoque da Limpeza: botões para exportar a planilha do estoque e importar uma planilha atualizada. Os saldos só mudam com a aprovação da Administração.
+• Usuários: agora dá para excluir um login, com confirmação. Para afastamentos temporários, continue usando "Bloqueado".
+
+Qualquer dúvida, fale com a Administração.`};
+}
+async function abrirComunicado(){
+  $("#modal-box").innerHTML = `<h3>Comunicado por e-mail</h3><div class="empty"><span class="spin" aria-hidden="true"></span> Carregando os destinatários…</div>`;
+  $("#modal").hidden = false;
+  let r; try { r = await api("comunicadoDestinos", {}, {soLer:true}); } catch(e){ $("#modal-box").innerHTML = `<h3>Comunicado por e-mail</h3><p class="hint err">${esc(e.message || "Não foi possível carregar.")}</p><div class="actions"><button class="btn" type="button" id="com-no">Fechar</button></div>`; $("#com-no").onclick = fecharModal; return; }
+  const grupos = r.destinos || [];
+  const todos = [...new Set(grupos.flatMap(g => g.emails))];
+  $("#modal-box").innerHTML = `<h3>Comunicado por e-mail</h3>
+    <p class="muted">O e-mail sai pela conta do sistema, com o visual do Pier Gestão. Só aparecem os endereços cadastrados (aba Emails da planilha e logins com e-mail).</p>
+    <form class="form" id="f-com" novalidate>
+      <fieldset class="full com-grupos"><legend>Para quem</legend>
+        ${grupos.length ? grupos.map((g, i) => `<label class="com-g"><input type="checkbox" data-g="${i}" ${COM_PADRAO.test(g.grupo) ? "checked" : ""}> <b>${esc(g.grupo)}</b> <span class="muted">${g.emails.map(esc).join(", ")}</span></label>`).join("") : `<p class="hint err">Nenhum e-mail cadastrado. Cadastre na aba Emails da planilha ou no login de cada pessoa.</p>`}
+      </fieldset>
+      <div class="field full"><label for="com-ass">Assunto <span class="req">*</span></label><input class="input" id="com-ass" maxlength="120" placeholder="Ex.: Novidades no Pier Gestão"></div>
+      <div class="field full"><label for="com-msg">Mensagem <span class="req">*</span></label><textarea class="input" id="com-msg" rows="12" maxlength="6000" placeholder="Escreva o comunicado. Linhas começando com • viram lista."></textarea>
+        <button type="button" class="link" id="com-nov">Usar o texto das novidades de hoje</button></div>
+      <p class="hint full" id="com-res"></p>
+      <div class="full actions"><button class="btn primary" type="submit" id="com-ok">Enviar comunicado</button><button class="btn" type="button" id="com-no">Cancelar</button><span class="hint" id="com-msg-st"></span></div>
+    </form>`;
+  const escolhidos = () => [...new Set($$("#f-com [data-g]:checked").flatMap(c => grupos[+c.dataset.g].emails))];
+  const resumo = () => { const n = escolhidos().length; $("#com-res").textContent = n ? `Vai para ${n} ${n === 1 ? "endereço" : "endereços"}.${r.cota != null ? ` Cota de e-mails do Google hoje: ${r.cota}.` : ""}` : "Escolha ao menos um grupo."; $("#com-ok").disabled = !n; };
+  $$("#f-com [data-g]").forEach(c => c.onchange = resumo); resumo();
+  $("#com-no").onclick = fecharModal;
+  $("#com-nov").onclick = () => { const n = comNovidades(); $("#com-ass").value = n.assunto; $("#com-msg").value = n.mensagem; };
+  let confirmar = false;
+  $("#f-com").addEventListener("submit", async ev => {
+    ev.preventDefault();
+    const st = $("#com-msg-st"); st.className = "hint err";
+    const assunto = $("#com-ass").value.trim(), mensagem = $("#com-msg").value.trim(), emails = escolhidos();
+    if (!emails.length) { st.textContent = "Escolha ao menos um grupo."; return; }
+    if (!assunto) { st.textContent = "Escreva o assunto."; return; }
+    if (mensagem.length < 10) { st.textContent = "Escreva a mensagem."; return; }
+    if (!confirmar) { confirmar = true; $("#com-ok").textContent = `Confirmar envio para ${emails.length}`; st.className = "hint"; st.textContent = "Confira e clique de novo para enviar."; return; }
+    const res = await enviar($("#com-ok"), st, "comunicadoEnviar", {assunto, mensagem, emails});
+    if (res) fecharModal();
+  });
+}
 // Aplicativo (Android): QR Code da página pública de instalação
 function abrirAppQR(){
   const url=new URL("instalar.html",location.href).href;
@@ -565,7 +617,7 @@ function abrirAppQR(){
 function renderCentralPier(){
   const box=document.getElementById('pier-central');if(!box)return;
   const areas=[['correspondencias','Correspondências','Recebimentos e retiradas','↗'],['unidades','Unidades','Cadastros e moradores','▦'],['medrel','Central de medições','Consumos e relatórios','◴'],['pendencias','Pendências','Demandas da administração','☰'],['cotacoes','Compras','Cotações e fornecedores','▤'],['os','Manutenção','Ordens de serviço e rotinas','⌁']];
-  box.innerHTML='<div class="central-titulo"><div><p class="overline">SEU CONDOMÍNIO, EM UM SÓ LUGAR</p><h2>Áreas de trabalho</h2></div><span class="hint">Escolha uma ferramenta para começar</span></div><div class="central-grid">'+areas.filter(a=>podeAba(a[0])&&document.getElementById('t-'+a[0])).map(a=>'<button type="button" class="central-card" data-central="'+a[0]+'"><span class="central-ico" aria-hidden="true">'+a[3]+'</span><strong>'+a[1]+'</strong><span>'+a[2]+'</span><span class="central-ir" aria-hidden="true">→</span></button>').join('')+'<button type="button" class="central-card" data-app-qr="1"><span class="central-ico" aria-hidden="true">▯</span><strong>Aplicativo</strong><span>QR Code para instalar no celular Android</span><span class="central-ir" aria-hidden="true">→</span></button></div>';
+  box.innerHTML='<div class="central-titulo"><div><p class="overline">SEU CONDOMÍNIO, EM UM SÓ LUGAR</p><h2>Áreas de trabalho</h2></div><span class="hint">Escolha uma ferramenta para começar</span></div><div class="central-grid">'+areas.filter(a=>podeAba(a[0])&&document.getElementById('t-'+a[0])).map(a=>'<button type="button" class="central-card" data-central="'+a[0]+'"><span class="central-ico" aria-hidden="true">'+a[3]+'</span><strong>'+a[1]+'</strong><span>'+a[2]+'</span><span class="central-ir" aria-hidden="true">→</span></button>').join('')+(S.perfil==="Administração"?'<button type="button" class="central-card" data-com="1"><span class="central-ico" aria-hidden="true">✉</span><strong>Comunicado por e-mail</strong><span>Avisar síndico, gerência e supervisão</span><span class="central-ir" aria-hidden="true">→</span></button>':'')+'<button type="button" class="central-card" data-app-qr="1"><span class="central-ico" aria-hidden="true">▯</span><strong>Aplicativo</strong><span>QR Code para instalar no celular Android</span><span class="central-ir" aria-hidden="true">→</span></button></div>';
 }
 async function carregarCorrespondencias(){
   if(!S.token||S.perfil!=='Administração')return;
@@ -1106,7 +1158,7 @@ document.getElementById('corr-nova')?.addEventListener('click',()=>corrFormulari
 document.getElementById('corr-atualizar')?.addEventListener('click',carregarCorrespondencias);
 for(const id of ['corr-busca','corr-status'])document.getElementById(id)?.addEventListener(id==='corr-busca'?'input':'change',renderCorrespondencias);
 document.addEventListener('click',e=>{
- if(e.target.closest('[data-app-qr]')){abrirAppQR();return;}const central=e.target.closest('[data-central]');if(central){setTab(central.dataset.central);return;}
+ if(e.target.closest('[data-app-qr]')){abrirAppQR();return;}if(e.target.closest('[data-com]')){abrirComunicado();return;}const central=e.target.closest('[data-central]');if(central){setTab(central.dataset.central);return;}
  const b=e.target.closest('[data-corr-entregar],[data-corr-cancelar]');if(b)corrFormulario(b.dataset.corrEntregar?'entregar':'cancelar',b.dataset.corrEntregar||b.dataset.corrCancelar);
 });
 

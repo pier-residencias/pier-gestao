@@ -423,7 +423,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-17 Pier Gestão 2.0 — Aplicativo sem internet (etapa 4: retirada de material)';
+const VERSAO = '2026-11-17 Pier Gestão 2.0 — Comunicado por e-mail';
 
 function doGet() {
   TABS = {};
@@ -525,6 +525,7 @@ function doPost(e) {
     if (req.acao === 'rondas') { rondaExigir(conta, false); return json(Object.assign(base, rondaLista())); }
     if (req.acao === 'rondaFotoVer') { rondaExigir(conta, false); const f = rondaFotoVer(req); delete f.nome; return json(Object.assign(base, { foto: f })); }
     if (req.acao === 'prestVerDoc') { prestExigir(conta, false); const f = prestVerDoc(req); auditar(conta, 'Abriu documento de prestador', f.nome); delete f.nome; return json(Object.assign(base, { arquivo: f })); }
+    if (req.acao === 'comunicadoDestinos') { comExigir(conta); let cota = null; try { cota = MailApp.getRemainingDailyQuota(); } catch (e) {} return json(Object.assign(base, { destinos: comDestinos(), cota })); }
     if (req.acao === 'pendencias') { pode('pendencias'); return json(Object.assign(base, { pendencias: pendLista(), pendVersao: PEND_VERSAO })); }
     if (req.acao === 'nfVer') { algum(['historico_ver', 'registrar_entrada', 'dashboard']); const f = verArquivo(req.fotoId, pastaNF()); auditar(conta, 'Abriu nota fiscal', f.nome); delete f.nome; return json(Object.assign(base, { foto: f })); }
     if (req.acao === 'nfEnviar') { pode('registrar_entrada'); return json(Object.assign(base, { arquivo: nfEnviar(req, conta) })); }
@@ -604,6 +605,7 @@ function doPost(e) {
         case 'rondaFotoRemover': rondaExigir(conta, true); msg = rondaFotoRemover(req, conta); extra.ronda = msg.ronda; msg = msg.texto; extra.semDados = true; break;
         case 'rondaResolver': rondaExigir(conta, true); msg = rondaResolver(req, conta); extra.ronda = msg.ronda; msg = msg.texto; extra.semDados = true; break;
         case 'prestImportar': prestExigir(conta, true); msg = prestImportar(req, conta); break;
+        case 'comunicadoEnviar': comExigir(conta); msg = comunicadoEnviar(req, conta); extra.semDados = true; break;
         case 'pendAnexo': pode('pendencias'); msg = pendAnexo(req, conta); extra.pendencias = true; break;
         case 'pendExcluir': pode('pendencias'); msg = pendExcluir(req.id); extra.pendencias = true; break;
         default: throw falha('Ação desconhecida.');
@@ -4838,6 +4840,46 @@ function emailsDoSetor(resp) {
   return dest;
 }
 
+// ---------- comunicado por e-mail (Administração > Início) ----------
+// Destinatários: os grupos da aba "Emails" (Gerente, Síndico, Supervisor…) e os logins ativos com e-mail.
+// O navegador só escolhe entre os endereços que o servidor listou; nenhum endereço digitado é aceito.
+function comExigir(conta) { if (!conta || conta.perfil !== PERFIL_TOTAL) { const e = falha('Só o perfil Administração envia comunicados por e-mail.'); e.negado = true; throw e; } }
+function comDestinos() {
+  const grupos = EMAILS_INICIAIS.map(x => x[0]).filter(g => ['Segurança', 'Fornecedor'].indexOf(g) < 0);
+  try { lerUsuarios().lista.forEach(u => { if (u.ativo && emailValido(u.email) && u.perfil && !grupos.some(g => chaveNome(g) === chaveNome(u.perfil) || (chaveNome(g) === 'gerente' && chaveNome(u.perfil) === 'gerencia'))) grupos.push(u.perfil); }); } catch (e) {}
+  return grupos.map(g => ({ grupo: g, emails: emailsDoSetor(g) })).filter(x => x.emails.length);
+}
+function comunicadoEnviar(r, conta) {
+  comExigir(conta);
+  const assunto = texto(r.assunto, 120), corpo = String(r.mensagem || '').replace(/\r/g, '').trim().slice(0, 6000);
+  if (!assunto) throw falha('Escreva o assunto.');
+  if (corpo.length < 10) throw falha('Escreva a mensagem.');
+  const validos = {}; comDestinos().forEach(x => x.emails.forEach(e => { validos[e] = true; }));
+  const dest = [];
+  (Array.isArray(r.emails) ? r.emails : []).forEach(e => { e = String(e || '').trim().toLowerCase(); if (validos[e] && dest.indexOf(e) < 0) dest.push(e); });
+  if (!dest.length) throw falha('Escolha ao menos um destinatário.');
+  if (dest.length > 60) throw falha('Envie para no máximo 60 pessoas por vez.');
+  let cota = 100; try { cota = MailApp.getRemainingDailyQuota(); } catch (e) {}
+  if (cota < dest.length) throw falha('A cota de e-mails do Google para hoje acabou (restam ' + cota + '). Tente amanhã ou envie para menos pessoas.');
+  const h = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const html = corpo.split(/\n{2,}/).map(par => {
+    const ls = par.split('\n');
+    if (ls.every(l => /^\s*[•\-*]\s+/.test(l))) return '<ul style="margin:0 0 14px;padding-left:20px">' + ls.map(l => '<li style="margin:0 0 6px">' + h(l.replace(/^\s*[•\-*]\s+/, '')) + '</li>').join('') + '</ul>';
+    return '<p style="margin:0 0 14px">' + ls.map(h).join('<br>') + '</p>';
+  }).join('');
+  const site = 'https://piergestao.condominiopier.com.br';
+  const htmlBody = '<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.55;color:#163047;max-width:620px">'
+    + '<div style="background:#17324d;color:#fff;padding:14px 18px;border-radius:10px 10px 0 0;font-weight:bold;font-size:16px">Pier Gestão · Comunicado</div>'
+    + '<div style="border:1px solid #d9e1e8;border-top:0;border-radius:0 0 10px 10px;padding:18px">' + html
+    + '<p style="margin:18px 0 0;color:#5b6b7a;font-size:13px">Enviado por ' + h(conta.nome) + ' pelo Pier Gestão · <a href="' + site + '">' + site.replace('https://', '') + '</a></p></div></div>';
+  const body = corpo + '\n\n—\nEnviado por ' + conta.nome + ' pelo Pier Gestão\n' + site;
+  let ok = 0; const falhas = [];
+  dest.forEach(e => { try { MailApp.sendEmail({ to: e, subject: 'Pier Gestão – ' + assunto, body, htmlBody, name: 'Pier Gestão' }); ok++; } catch (err) { falhas.push(e); } });
+  AUDIT_DET = 'Comunicado "' + assunto + '" para ' + ok + ' pessoa(s)' + (falhas.length ? '; falhou para ' + falhas.length : '');
+  if (!ok) throw falha('Não foi possível enviar o comunicado. Tente de novo mais tarde.');
+  return 'Comunicado enviado para ' + ok + (ok === 1 ? ' pessoa' : ' pessoas') + '.' + (falhas.length ? ' Não foi possível enviar para ' + falhas.length + '.' : '');
+}
+
 // --- avisos ao síndico: pendência aguardando a aprovação dele e alterações nas pendências que ele acompanha ---
 // (as que ele incluiu ou que estão com o Síndico como responsável). Quem fez a mudança sendo o próprio síndico, não sai e-mail.
 // Uma falha no e-mail nunca desfaz a gravação.
@@ -5176,7 +5218,7 @@ const ACOES_AUDIT = {
   registrar: 'Movimentação', osAbrir: 'Abriu OS', osAtualizar: 'Atualizou OS', osFoto: 'Foto na OS', osFotoRemover: 'Tirou foto da OS',
   demCriar: 'Criou demanda', demAtualizar: 'Atualizou demanda', salvarPreventiva: 'Salvou preventiva', excluirPreventiva: 'Excluiu preventiva',
   salvarLocais: 'Alterou locais', importarContagem: 'Importou inventário', devolver: 'Devolução', salvarItem: 'Salvou item',
-  excluirItem: 'Excluiu item', estornar: 'Estornou lançamento', salvarUsuario: 'Usuário', acessoUsuario: 'Acessos de usuário', excluirUsuario: 'Excluiu usuário',
+  excluirItem: 'Excluiu item', estornar: 'Estornou lançamento', salvarUsuario: 'Usuário', comunicadoEnviar: 'Enviou comunicado por e-mail', acessoUsuario: 'Acessos de usuário', excluirUsuario: 'Excluiu usuário',
   salvarPerfil: 'Perfil', excluirPerfil: 'Excluiu perfil', pendSalvar: 'Pendência', pendExcluir: 'Excluiu pendência',
   nfEnviar: 'Enviou nota fiscal', nfVer: 'Abriu nota fiscal', relatorio: 'Dashboard', usuarios: 'Usuários', acessos: 'Histórico de acessos',
   auditoria: 'Auditoria', pendencias: 'Pendências'
