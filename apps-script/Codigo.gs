@@ -86,7 +86,7 @@ const ABAS = {
       ['tecnicaEm', 'Conclusão técnica em'], ['tecnicaPor', 'Conclusão técnica por'],
       ['validadaEm', 'Validada em'], ['validadaPor', 'Validada por'],
       ['fechAdmEm', 'Fechada pela Administração em'], ['fechAdmPor', 'Fechada pela Administração por'], ['fechAdmJust', 'Justificativa do fechamento'], ['statusAnterior', 'Situação antes do fechamento'],
-      ['offId', 'Aberta sem internet (código do celular)'], ['offConc', 'Baixa sem internet (código do celular)']
+      ['offId', 'Aberta sem internet (código do celular)'], ['offConc', 'Baixa sem internet (código do celular)'], ['offIds', 'Envios sem internet (códigos do celular)']
     ],
     num: []
   },
@@ -423,7 +423,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-17 Pier Gestão 2.0 — Aplicativo sem internet (etapa 2: dar baixa)';
+const VERSAO = '2026-11-17 Pier Gestão 2.0 — Aplicativo sem internet (etapa 3: anotar e fotos)';
 
 function doGet() {
   TABS = {};
@@ -1751,6 +1751,12 @@ function osDireitos(o, conta) {
   return { ger, livre, minha, encerrada, atender: ger || (!!p.os_atender && (minha || livre)) };
 }
 
+// envios do aplicativo sem internet: a OS guarda os últimos códigos recebidos para não repetir um reenvio
+function osOffChave(v) { const s = String(v || ''); return /^F[a-z0-9]{6,40}(-[a-z][0-9]{1,2})?$/i.test(s) ? s : ''; }
+function osOffVisto(o, k) { return !!k && String(o.offIds || '').split(',').indexOf(k) >= 0; }
+function osOffMarcar(o, k) { const l = String(o.offIds || '').split(',').filter(Boolean); l.push(k); return l.slice(-60).join(','); }
+function osOffQuando(v) { const em = new Date(String(v || '')); return isNaN(em) ? '' : ' em ' + Utilities.formatDate(em, Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm'); }
+
 function osAtualizar(r, conta) {
   const t = tabela('os');
   const o = linhas(t).find(x => x.id === r.id);
@@ -1869,7 +1875,10 @@ function osAtualizar(r, conta) {
       if (!(p.os_abrir || p.os_atender || p.os_gerenciar)) negar();
       const n = texto(r.nota, 1000);
       if (!n) throw falha('Escreva a anotação.');
+      const offK = osOffChave(r.offId);
+      if (offK && osOffVisto(o, offK)) return 'Anotação já recebida.';
       txt = 'Anotou: ' + n; msg = 'Anotação registrada.';
+      if (offK) { upd.offIds = osOffMarcar(o, offK); txt += ' (feita sem internet no aplicativo' + osOffQuando(r.offEm) + ')'; }
       break;
     }
     default: throw falha('Ação desconhecida.');
@@ -1938,6 +1947,8 @@ function osFoto(r, conta) {
   const o = linhas(t).find(x => x.id === r.id);
   if (!o) throw falha('OS não encontrada. Atualize a página.');
   const fase = r.fase === 'depois' ? 'depois' : 'antes';
+  const offK = osOffChave(r.offId);
+  if (offK && osOffVisto(o, offK)) return 'Foto já recebida.';
   const d = osDireitos(o, conta);
   const abriu = o.abertaPorUsuario === conta.usuario && !!conta.perms.os_abrir;
   if (!(d.atender || (abriu && fase === 'antes'))) throw falha('Seu perfil não tem permissão para pôr fotos nesta OS.');
@@ -1955,6 +1966,7 @@ function osFoto(r, conta) {
   ids.push(f.getId());
   const upd = { atualizadoEm: agora(), andamento: osAndamento(o.andamento, conta.nome, 'Pôs uma foto de ' + fase) };
   upd[campo] = ids.join(',');
+  if (offK) upd.offIds = osOffMarcar(o, offK);
   gravar(t, upd, o._row);
   return 'Foto anexada.';
 }
