@@ -270,3 +270,11 @@
 /* Aplicativo (Android): QR da instalação */
 .app-qr{width:240px;max-width:100%;margin:14px auto 6px;background:#fff;border-radius:14px;padding:12px}.app-qr svg{display:block;width:100%;height:auto}
 .l-app{margin:14px 0 0;text-align:center;font-size:14px}.l-app a{color:var(--accent-ink);font-weight:600}
+
+/* Modo sem internet: faixa no topo e lista do que ficou guardado no celular */
+.off-faixa{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 14px;padding:11px 14px;border-radius:12px;border:1px solid var(--line);border-left:4px solid var(--accent);background:var(--accent-soft);color:var(--fg);font-size:14px}
+.off-faixa.off-sem{border-left-color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,var(--surface))}
+.off-faixa>span:nth-child(2){flex:1;min-width:200px}.off-faixa .off-ico{font-size:18px}
+.off-lista{list-style:none;margin:12px 0;padding:0;display:grid;gap:10px}
+.off-lista li{display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap;border:1px solid var(--line);border-radius:12px;padding:12px}
+.off-lista li>div:first-child{display:grid;gap:3px;min-width:0;flex:1 1 220px;overflow-wrap:anywhere}.off-lista .off-erro{color:var(--danger,#d9534f);font-size:13px}
