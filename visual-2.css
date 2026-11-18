@@ -278,3 +278,5 @@
 .off-lista{list-style:none;margin:12px 0;padding:0;display:grid;gap:10px}
 .off-lista li{display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap;border:1px solid var(--line);border-radius:12px;padding:12px}
 .off-lista li>div:first-child{display:grid;gap:3px;min-width:0;flex:1 1 220px;overflow-wrap:anywhere}.off-lista .off-erro{color:var(--danger,#d9534f);font-size:13px}
+.off-lista .off-tipo{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accent-ink)}
+.off-baixa{margin:10px 0}.off-baixa .off-erro{color:var(--danger,#d9534f)}

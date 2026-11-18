@@ -86,7 +86,7 @@ const ABAS = {
       ['tecnicaEm', 'Conclusão técnica em'], ['tecnicaPor', 'Conclusão técnica por'],
       ['validadaEm', 'Validada em'], ['validadaPor', 'Validada por'],
       ['fechAdmEm', 'Fechada pela Administração em'], ['fechAdmPor', 'Fechada pela Administração por'], ['fechAdmJust', 'Justificativa do fechamento'], ['statusAnterior', 'Situação antes do fechamento'],
-      ['offId', 'Aberta sem internet (código do celular)']
+      ['offId', 'Aberta sem internet (código do celular)'], ['offConc', 'Baixa sem internet (código do celular)']
     ],
     num: []
   },
@@ -423,7 +423,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-17 Pier Gestão 2.0 — Aplicativo sem internet (etapa 1: abrir OS)';
+const VERSAO = '2026-11-17 Pier Gestão 2.0 — Aplicativo sem internet (etapa 2: dar baixa)';
 
 function doGet() {
   TABS = {};
@@ -1768,6 +1768,9 @@ function osAtualizar(r, conta) {
       txt = 'Iniciou o atendimento'; msg = o.numero + ' em andamento.';
       break;
     case 'concluir': {
+      // baixa feita sem internet no aplicativo: o mesmo código enviado de novo não repete a baixa
+      const offC = /^F[a-z0-9]{6,40}$/i.test(String(r.offId || '')) ? String(r.offId) : '';
+      if (offC && o.offConc === offC) return o.numero + ' já tinha sido recebida.';
       if (!d.atender) negar();
       if (d.encerrada) throw falha('Esta OS já está encerrada.');
       const sol = texto(r.solucao, 3000);
@@ -1777,6 +1780,11 @@ function osAtualizar(r, conta) {
       upd.status = OS_STATUS.validacao; upd.tecnicaEm = agora(); upd.tecnicaPor = conta.nome; upd.solucao = sol;
       if (d.livre) { upd.responsavel = conta.nome; upd.responsavelUsuario = conta.usuario; }
       txt = 'Enviou para validação: ' + sol; msg = o.numero + ' aguardando validação administrativa.';
+      if (offC) {
+        upd.offConc = offC;
+        const em = new Date(String(r.offEm || ''));
+        txt += ' (baixa feita sem internet no aplicativo' + (isNaN(em) ? '' : ' em ' + Utilities.formatDate(em, Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm')) + ')';
+      }
       break;
     }
     case 'validar': {
