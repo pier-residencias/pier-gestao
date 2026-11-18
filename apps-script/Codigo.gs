@@ -422,7 +422,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-17 Pier Gestão 2.0 — OS: fechamento pela Administração com aprovação do gerente';
+const VERSAO = '2026-11-17 Pier Gestão 2.0 — Estoque: exportar e importar planilha (Limpeza)';
 
 function doGet() {
   TABS = {};
@@ -3281,7 +3281,6 @@ function importarContagem(r, conta) {
   const motivo = texto(r.motivo, 120) || 'Contagem de inventário';
   const setor = texto(r.setor) ? setorDe({ setor: r.setor }) : setoresDe(conta)[0];
   exigirSetor(conta, setor);
-  if (setor !== 'Manutenção') throw falha('O inventário está disponível somente para materiais da Manutenção.');
   const prefixo = prefixoSetor(setor);
   const ti = tabela('itens');
   const ss = SpreadsheetApp.getActive();
@@ -5511,7 +5510,6 @@ function contagemDecidir(r, conta) {
       resultados.push({ id: c.id, numero: c.numero, ok: true, msg: rot + ': ' + (op === 'rejeitar' ? 'rejeitado' : 'devolvido para reconferência') + '. O saldo não mudou.' });
       return;
     }
-    if (c.setor !== 'Manutenção') { resultados.push({id:c.id,ok:false,msg:'O inventário está restrito à Manutenção.'}); return; }
     const bq = lerBloqueio(c.itemId);
     if (bq) { resultados.push({ id: c.id, numero: c.numero, ok: false, msg: rot + ': o item está bloqueado para revisão (' + bq.motivo + ') Libere o item antes de decidir.' }); return; }
     // aprovação: o item e o histórico precisam estar como na hora da contagem
