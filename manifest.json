@@ -1,10 +1,10 @@
 {
   "background_color": "#ffffff",
   "display": "standalone",
-  "name": "Pier Gestão 2.0 — Testes",
+  "name": "Pier Gestão",
   "orientation": "any",
   "scope": "./",
-  "short_name": "Pier 2.0 Testes",
+  "short_name": "Pier Gestão",
   "start_url": "./",
   "theme_color": "#17324d",
   "icons": [
@@ -22,6 +22,6 @@
     }
   ],
   "id": "./pier-gestao-2-0-homologacao",
-  "description": "Ambiente de homologação do Pier Gestão 2.0. Use somente dados fictícios.",
+  "description": "Pier Gestão: gestão interna do Pier Residências.",
   "lang": "pt-BR"
 }
