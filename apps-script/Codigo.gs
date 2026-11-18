@@ -39,10 +39,10 @@ const ABAS = {
       ['valorUnit', 'Valor unitário'], ['previsao', 'Devolver até'], ['estadoDevolucao', 'Estado na devolução'],
       ['obs', 'Observação'], ['registradoPor', 'Registrado por'], ['criadoEm', 'Criado em'],
       ['estornado', 'Estornado'], ['estornoDe', 'Estorno de'], ['emprestimoId', 'ID do empréstimo'],
-      ['os', 'OS'], ['nfFotos', 'Foto da NF'], ['contagem','Contagem'], ['operacao','Operação'], ['saldoAnterior','Saldo anterior'], ['saldoFinal','Saldo final'], ['aprovadoPor','Aprovado por']
+      ['os', 'OS'], ['nfFotos', 'Foto da NF'], ['contagem','Contagem'], ['operacao','Operação'], ['saldoAnterior','Saldo anterior'], ['saldoFinal','Saldo final'], ['aprovadoPor','Aprovado por'], ['offId','Retirada sem internet (código do celular)']
     ],
     num: ['qtd', 'delta', 'valorUnit', 'saldoAnterior', 'saldoFinal'],
-    opcionais: ['os', 'nfFotos', 'contagem', 'operacao', 'saldoAnterior', 'saldoFinal', 'aprovadoPor']
+    opcionais: ['os', 'nfFotos', 'contagem', 'operacao', 'saldoAnterior', 'saldoFinal', 'aprovadoPor', 'offId']
   },
   cont: {
     nome: 'Contagens',
@@ -423,7 +423,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-17 Pier Gestão 2.0 — Aplicativo sem internet (etapa 3: anotar e fotos)';
+const VERSAO = '2026-11-17 Pier Gestão 2.0 — Aplicativo sem internet (etapa 4: retirada de material)';
 
 function doGet() {
   TABS = {};
@@ -650,6 +650,9 @@ function registrar(m, nome, conta) {
     if (!texto(m.destino)) throw falha('Informe o destino.');
   }
   if (tipo === 'troca' && !texto(m.velhoDestino)) throw falha('Informe o que foi feito com a peça retirada.');
+  // retirada feita sem internet no aplicativo: o mesmo código enviado de novo não desconta duas vezes
+  const offK = (tipo === 'saida' || tipo === 'troca') && /^F[a-z0-9]{6,40}$/i.test(String(m.offId || '')) ? String(m.offId) : '';
+  if (offK && linhas(tabela('movs')).some(x => x.offId === offK)) return 'Retirada já recebida.';
   let nfLinks = '';
   if (tipo === 'entrada' && m.nfFotos) {
     const ids = idsDeArquivos(m.nfFotos);
@@ -686,6 +689,7 @@ function registrar(m, nome, conta) {
     previsao: m.previsao ? dataValida(m.previsao) : '', obs: texto(m.obs, 300), registradoPor: nome, criadoEm: agora(),
     os: osNum, nfFotos: nfLinks
   };
+  if (offK) { mov.offId = offK; mov.obs = texto((mov.obs ? mov.obs + ' · ' : '') + 'Registrada sem internet no aplicativo' + osOffQuando(m.offEm), 300); }
   if (tipo === 'emprestimo') {
     const eid = novoId('E');
     mov.emprestimoId = eid;

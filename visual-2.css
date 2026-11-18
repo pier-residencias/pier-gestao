@@ -281,3 +281,4 @@
 .off-lista .off-tipo{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accent-ink)}
 .off-baixa{margin:10px 0}.off-baixa .off-erro{color:var(--danger,#d9534f)}
 .off-os{margin:6px 0;padding-left:18px}.off-os li{margin:3px 0}
+.off-pend{color:var(--warn);font-weight:600;font-size:13px}
