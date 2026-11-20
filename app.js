@@ -8272,7 +8272,7 @@ const mdMesSel = (m, ym) => mdSomaFaixa(m, ym + "-01", ym + "-31");
 function renderMedLanc(){
   const sec = $("#t-medlanc"); if (!sec || sec.hidden) return;
   $$("#ml-vistas [data-v]").forEach(b => b.setAttribute("aria-selected", b.dataset.v === MD.vista ? "true" : "false"));
-  ["#ml-novo","#ml-importar","#ml-modelo"].forEach(s => { $(s).hidden = !mdLancar(); });
+  ["#ml-novo","#ml-importar","#ml-modelo","#ml-pdf"].forEach(s => { $(s).hidden = !mdLancar(); });
   $("#ml-modelo").textContent = MD.vista === "mes" ? "Baixar modelo" : "Baixar planilha de controle";
   const box = $("#ml-corpo"); if (mdCarregando(box)) { $("#ml-conta").textContent = ""; return; }
   const meds = mdOrdem(MD.d.medidores);
@@ -8308,7 +8308,7 @@ function renderMedLanc(){
     box.innerHTML = `<div class="tablebox"><table><thead><tr><th>Mês</th><th>Medidor</th><th class="num">Consumo da conta</th><th class="num">Valor</th><th class="num hide-s">Preço por unidade</th><th class="hide-m">Vencimento</th><th class="num hide-m">Pelas leituras</th>${thA}</tr></thead><tbody>
       ${l.length ? l.map(x => { const m = mdMed(x.medidor) || {nome:"medidor excluído", tipo:"", unidade:""}, pl = m.id ? mdMesSel(m, x.mes) : {n:0};
         const c = x.consumo === "" ? NaN : Number(x.consumo), v = x.valor === "" ? NaN : Number(x.valor);
-        return `<tr><td>${mdRotMes(x.mes)}</td><td><span class="md-mn">${mdIco(m.tipo, "mini")}<span>${esc(m.nome)}<span class="sub">${esc(m.tipo)} · nº ${esc(m.numero || "")}</span></span></span></td>
+        return `<tr><td>${mdRotMes(x.mes)}${x.pdf ? `<button type="button" class="md-pdf" data-md-pdf="${esc(x.id)}" title="Abrir o PDF da conta" aria-label="Abrir o PDF da conta de ${esc(m.nome)}">PDF</button>` : ""}</td><td><span class="md-mn">${mdIco(m.tipo, "mini")}<span>${esc(m.nome)}<span class="sub">${esc(m.tipo)} · nº ${esc(m.numero || "")}</span></span></span></td>
           <td class="num">${isNaN(c) ? "—" : mdF(c, 2) + " " + esc(m.unidade)}</td><td class="num"><b>${isNaN(v) ? "—" : fBRL(v)}</b></td><td class="num hide-s">${!isNaN(c) && !isNaN(v) && c > 0 ? fBRL(v / c) + "/" + esc(m.unidade) : "—"}</td>
           <td class="hide-m">${x.vencimento ? fData(x.vencimento) : "—"}</td><td class="num hide-m">${pl.n ? mdF(pl.s, 2) + " " + esc(m.unidade) + `<span class="sub">${pl.n} dia${pl.n === 1 ? "" : "s"} com leitura</span>` : "—"}</td>${acoes("c", x.id)}</tr>`; }).join("")
         : `<tr><td colspan="8"><div class="empty">Nenhuma conta neste período.${mdLancar() ? ` Use <b>+ Novo lançamento</b> para lançar a conta do mês.` : ""}</div></td></tr>`}</tbody></table></div>`;
@@ -8382,6 +8382,120 @@ function mdNovaLeitura(o){
 const mdMesDe = s => { const t = String(s || "").trim(); let m = /^(\d{4})-(\d{1,2})/.exec(t); if (m) return m[1] + "-" + m[2].padStart(2, "0"); m = /^(\d{1,2})\/(\d{4})$/.exec(t); if (m) return m[2] + "-" + m[1].padStart(2, "0"); return ""; };
 function mdMesAnterior(){ const d = new Date(hoje() + "T12:00:00"); return iso(new Date(d.getFullYear(), d.getMonth() - 1, 1)).slice(0, 7); }
 // lançamento mensal: a conta da concessionária (consumo e valor) de um medidor
+// leitura das contas em PDF (água, luz e gás): procura mês de referência, vencimento, valor a pagar, consumo e o tipo
+// pelo texto do PDF. Nada é gravado sem a pessoa conferir na tela.
+const MD_MESES = {jan:1, fev:2, mar:3, abr:4, mai:5, jun:6, jul:7, ago:8, set:9, out:10, nov:11, dez:12};
+function mdLerConta(linhas, meds){
+  const txt = linhas.join("\n"), plano = norm(txt);
+  const num = s => { s = String(s).replace(/\s/g, ""); if (s.includes(",")) return Number(s.replace(/\./g, "").replace(",", ".")); if (/^\d{1,3}(\.\d{3})+$/.test(s)) return Number(s.replace(/\./g, "")); return Number(s); };
+  const r = {tipo:"", mes:"", vencimento:"", valor:"", consumo:"", medidor:"", achou:[]};
+  // tipo pela concessionária / unidade
+  r.tipo = /kwh|energia eletrica|\blight\b|\benel\b|cemig|copel|cpfl|eletropaulo|neoenergia|equatorial/.test(plano) ? "Energia"
+    : /naturgy|\bceg\b|comgas|gas natural|gas canalizado|compagas|sulgas/.test(plano) ? "Gás"
+    : /agua|esgoto|cedae|saneamento|sabesp|copasa|igua|aguas do rio|rio\+|embasa|sanepar|corsan/.test(plano) ? "Água" : "";
+  // vencimento
+  let m = /vencimento[^0-9\n]{0,40}(\d{2})\/(\d{2})\/(\d{4})/i.exec(plano) || /vencimento[^\n]*\n[^\n]*?(\d{2})\/(\d{2})\/(\d{4})/i.exec(plano);
+  if (m) { r.vencimento = `${m[3]}-${m[2]}-${m[1]}`; r.achou.push("vencimento"); }
+  // mês de referência: "referência 10/2026", "mês/ano 10/2026", "competência", "OUT/2026"
+  m = /(referencia|mes\s*\/\s*ano|mes de referencia|competencia|conta (?:do|de) mes|periodo de referencia)[^0-9a-z\n]{0,25}(\d{1,2})\s*\/\s*(\d{4})/i.exec(plano)
+    || /(referencia|mes\s*\/\s*ano|competencia)[^\n]*\n[^\n]*?\b(\d{1,2})\s*\/\s*(\d{4})\b/i.exec(plano);
+  if (m && +m[2] >= 1 && +m[2] <= 12) r.mes = `${m[3]}-${String(+m[2]).padStart(2, "0")}`;
+  if (!r.mes) { m = /\b(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)[a-z]*\.?\s*[\/\-\s]\s*(\d{4})\b/i.exec(plano); if (m) r.mes = `${m[2]}-${String(MD_MESES[m[1].toLowerCase()]).padStart(2, "0")}`; }
+  if (!r.mes) { m = /(?:^|[^\d\/])(\d{2})\/(20\d{2})(?![\d\/])/.exec(plano); if (m && +m[1] >= 1 && +m[1] <= 12) r.mes = `${m[2]}-${m[1]}`; }
+  if (!r.mes && r.vencimento) { const d = new Date(r.vencimento + "T12:00:00"); d.setMonth(d.getMonth() - 1); r.mes = iso(d).slice(0, 7); r.mesDoVenc = true; }
+  if (r.mes) r.achou.push("mês");
+  // valor a pagar
+  m = /(total a pagar|valor a pagar|valor total a pagar|total da fatura|valor total|valor do documento|total)[^0-9\n]{0,30}(?:r\$)?\s*(\d{1,3}(?:\.\d{3})*,\d{2})/i.exec(plano)
+    || /(total a pagar|valor a pagar|valor do documento)[^\n]*\n[^\n]*?(?:r\$)?\s*(\d{1,3}(?:\.\d{3})*,\d{2})/i.exec(plano);
+  if (m) { r.valor = num(m[2]); r.achou.push("valor"); }
+  else { const vs = [...plano.matchAll(/r\$\s*(\d{1,3}(?:\.\d{3})*,\d{2})/g)].map(x => num(x[1])).filter(v => v > 0); if (vs.length) { r.valor = Math.max(...vs); r.achou.push("valor (maior R$)"); } }
+  // consumo faturado
+  const un = r.tipo === "Energia" ? "kwh" : "m3|m³|m 3";
+  m = new RegExp(`consumo[^\\n]{0,60}?(\\d{1,3}(?:\\.\\d{3})*(?:,\\d+)?|\\d+(?:,\\d+)?)\\s*(?:${un})(?![a-z0-9])`, "i").exec(plano)
+    || new RegExp(`consumo[^\\n]{0,30}?(?:${un})\\)?[^\\d\\n]{0,25}(\\d{1,3}(?:\\.\\d{3})*(?:,\\d+)?|\\d+(?:,\\d+)?)`, "i").exec(plano)
+    || new RegExp(`(\\d{1,3}(?:\\.\\d{3})*(?:,\\d+)?|\\d+(?:,\\d+)?)\\s*(?:${un})(?![a-z0-9])`, "i").exec(plano);
+  if (m) { const c = num(m[1]); if (c >= 0 && isFinite(c)) { r.consumo = c; r.achou.push("consumo"); } }
+  // medidor: o que tem o número citado no PDF; senão o único do tipo
+  const ativos = meds.filter(x => x.ativo !== "Não");
+  const peloNum = ativos.find(x => { const n = String(x.numero || "").replace(/\D/g, ""); return n.length >= 4 && plano.replace(/\D/g, " ").split(/\s+/).includes(n); });
+  const doTipo = ativos.filter(x => x.tipo === r.tipo);
+  r.medidor = peloNum ? peloNum.id : doTipo.length === 1 ? doTipo[0].id : doTipo.length ? doTipo[0].id : "";
+  r.medidorCerto = !!peloNum || doTipo.length === 1;
+  return r;
+}
+async function mdLerContaPDF(f){
+  const buf = await f.arrayBuffer();
+  const b64 = await new Promise((ok, erro) => { const rd = new FileReader(); rd.onload = () => ok(String(rd.result).split(",")[1] || ""); rd.onerror = () => erro(new Error("Não deu para ler " + f.name)); rd.readAsDataURL(f); });
+  let linhas = [];
+  try {
+    const lib = await carregarPDFjs(), doc = await lib.getDocument({data:new Uint8Array(buf), isEvalSupported:false}).promise, pags = [];
+    for (let i = 1; i <= Math.min(doc.numPages, 6); i++) { const pg = await doc.getPage(i); pags.push((await pg.getTextContent()).items); }
+    linhas = LeitorNF.montarLinhas(pags);
+  } catch(e){ if (e && e.message === "leitor") throw new Error("Não deu para carregar o leitor de PDF. Verifique a internet."); }
+  return {b64, r: mdLerConta(linhas, MD.d.medidores)};
+}
+// várias contas em PDF de uma vez (meses anteriores): lê, mostra para conferir e lança uma a uma, guardando o PDF
+async function mdImportarPDFs(files){
+  if (!MD.d) return;
+  const meds = mdOrdem(MD.d.medidores).filter(m => m.ativo !== "Não");
+  if (!meds.length) { toast("Cadastre um medidor ativo em Meus medidores.", true); return; }
+  files = files.filter(f => /\.pdf$/i.test(f.name) || f.type === "application/pdf").slice(0, 24);
+  if (!files.length) { toast("Escolha os PDFs das contas.", true); return; }
+  $("#modal-box").classList.add("largo", "md-pdf-box");
+  $("#modal-box").innerHTML = `<h3>Importar contas em PDF</h3><div class="empty"><span class="spin" aria-hidden="true"></span> Lendo ${files.length} PDF${files.length === 1 ? "" : "s"}…</div>`;
+  $("#modal").hidden = false;
+  const lista = [];
+  for (const f of files) {
+    if (f.size > 10 * 1024 * 1024) { lista.push({f, erro:"passa de 10 MB"}); continue; }
+    try { const {b64, r} = await mdLerContaPDF(f); lista.push({f, b64, r}); } catch(e){ lista.push({f, erro:e.message || "não deu para ler"}); }
+  }
+  const n2 = v => v === "" || v === undefined || isNaN(v) ? "" : String(v).replace(".", ",");
+  const optMed = sel => meds.map(m => `<option value="${esc(m.id)}" ${m.id === sel ? "selected" : ""}>${esc(m.tipo)} · ${esc(m.nome)}</option>`).join("");
+  $("#modal-box").innerHTML = `<h3>Importar contas em PDF</h3>
+    <p class="muted">Confira o que foi lido de cada PDF e corrija se precisar. Cada linha vira uma conta mensal, com o PDF guardado junto.</p>
+    <div class="tablebox md-pdf-tab"><table><thead><tr><th>Lançar</th><th>Arquivo</th><th>Medidor</th><th>Mês</th><th class="num">Consumo</th><th class="num">Valor (R$)</th><th>Vencimento</th><th>Situação</th></tr></thead><tbody>
+    ${lista.map((x, i) => x.erro ? `<tr><td></td><td>${esc(x.f.name)}</td><td colspan="5" class="muted">—</td><td><span class="cc-al crit">${esc(x.erro)}</span></td></tr>` : `<tr data-i="${i}">
+      <td><input type="checkbox" data-k="ok" checked aria-label="Lançar ${esc(x.f.name)}"></td><td class="md-pdf-nome">${esc(x.f.name)}${x.r.achou.length ? "" : `<span class="sub">sem texto: preencha à mão</span>`}</td>
+      <td><select class="input" data-k="medidor">${optMed(x.r.medidor || meds[0].id)}</select>${x.r.medidor && !x.r.medidorCerto ? `<span class="sub">confira o medidor</span>` : ""}</td>
+      <td><input class="input" type="month" data-k="mes" max="${hoje().slice(0, 7)}" value="${esc(x.r.mes)}">${x.r.mesDoVenc ? `<span class="sub">pelo vencimento</span>` : ""}</td>
+      <td><input class="input num" data-k="consumo" inputmode="decimal" value="${n2(x.r.consumo)}"></td><td><input class="input num" data-k="valor" inputmode="decimal" value="${x.r.valor === "" ? "" : n2(Number(x.r.valor).toFixed(2))}"></td>
+      <td><input class="input" type="date" data-k="vencimento" value="${esc(x.r.vencimento)}"></td><td data-st></td></tr>`).join("")}</tbody></table></div>
+    <div class="actions" style="margin-top:12px"><button class="btn primary" type="button" id="mp-ok">Lançar contas</button><button class="btn" type="button" id="mp-x">Fechar</button><span class="hint" id="mp-msg"></span></div>`;
+  $("#mp-x").onclick = () => { $("#modal-box").classList.remove("largo", "md-pdf-box"); fecharModal(); renderMedTudo(); };
+  $("#mp-ok").onclick = async () => {
+    const btn = $("#mp-ok"), msg = $("#mp-msg"); btn.disabled = true; let ok = 0, falhas = 0, ultimo = null;
+    for (const tr of $$("#modal-box tr[data-i]")) {
+      const x = lista[+tr.dataset.i], g = k => tr.querySelector(`[data-k="${k}"]`), st = tr.querySelector("[data-st]");
+      if (!g("ok").checked || x.feito) continue;
+      const mes = mdMesDe(g("mes").value), ct = g("consumo").value.trim(), vt = g("valor").value.trim();
+      const erro = t => { st.innerHTML = `<span class="cc-al crit">${esc(t)}</span>`; falhas++; };
+      if (!mes) { erro("informe o mês"); continue; }
+      if (!ct && !vt) { erro("informe consumo ou valor"); continue; }
+      const c = ct ? mdNum(ct) : "", v = vt ? mdNum(vt) : "";
+      if ((ct && (isNaN(c) || c < 0)) || (vt && (isNaN(v) || v < 0))) { erro("número inválido"); continue; }
+      st.innerHTML = `<span class="spin" aria-hidden="true"></span>`;
+      try { ultimo = await api("medContas", {conta:{medidor:g("medidor").value, mes, consumo:c, valor:v, vencimento:g("vencimento").value, obs:"PDF: " + x.f.name.slice(0, 120), pdf:{nome:x.f.name, b64:x.b64}}});
+        x.feito = true; ok++; st.innerHTML = `<span class="cc-st ok">Lançada</span>`; g("ok").checked = false; g("ok").disabled = true; }
+      catch(e){ erro(e.message || "não foi possível lançar"); }
+    }
+    if (ultimo) mdAplicar(ultimo);
+    btn.disabled = false; msg.className = falhas ? "hint err" : "hint";
+    msg.textContent = `${ok} conta${ok === 1 ? "" : "s"} lançada${ok === 1 ? "" : "s"}${falhas ? `, ${falhas} com problema (veja a coluna Situação)` : ""}.`;
+    if (ok) toast(msg.textContent, !!falhas);
+  };
+}
+async function mdAbrirPDF(id, btn){
+  const w = window.open("", "_blank");
+  if (btn) btn.disabled = true;
+  try {
+    const r = await api("medContaPdf", {id}, {soLer:true});
+    const bin = atob(r.pdf.b64), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([u8], {type:"application/pdf"}));
+    if (w) w.location.href = url; else { const a = document.createElement("a"); a.href = url; a.download = r.pdf.nome || "conta.pdf"; document.body.appendChild(a); a.click(); a.remove(); }
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch(e){ if (w) w.close(); toast(e.message || "Não foi possível abrir o PDF.", true); }
+  finally { if (btn) btn.disabled = false; }
+}
 function mdNovaConta(o){
   if (!MD.d) return;
   o = o || {};
@@ -8399,6 +8513,8 @@ function mdNovaConta(o){
       <div class="field"><label for="mdc-cons">Consumo da conta (<span id="mdc-un"></span>)</label><input class="input num" id="mdc-cons" inputmode="decimal" value="${ed ? n(ed.consumo) : ""}"></div>
       <div class="field"><label for="mdc-val">Valor da conta (R$)</label><input class="input num" id="mdc-val" inputmode="decimal" value="${ed ? n(ed.valor) : ""}" placeholder="0,00"></div>
       <div class="field full"><label for="mdc-obs">Observação</label><input class="input" id="mdc-obs" maxlength="200" value="${ed ? esc(ed.obs || "") : ""}"></div>
+      <div class="field full"><label for="mdc-pdf">PDF da conta <span class="muted">(opcional: o sistema tenta preencher os campos)</span></label><input class="input" type="file" id="mdc-pdf" accept=".pdf,application/pdf">
+        ${ed && ed.pdf ? `<span class="hint">Já tem PDF: <button type="button" class="link" data-md-pdf="${esc(ed.id)}">abrir</button> · <label><input type="checkbox" id="mdc-tirar"> tirar o PDF</label></span>` : ""}<span class="hint" id="mdc-pdf-st"></span></div>
       <p class="hint full" id="mdc-prev"></p>
     </form>
     <div class="actions"><button class="btn primary" type="button" id="mdc-ok">${ed ? "Salvar correção" : "Lançar conta"}</button><button class="btn" type="button" id="mdc-x">Cancelar</button><span class="hint" id="mdc-msg"></span></div>`;
@@ -8414,6 +8530,21 @@ function mdNovaConta(o){
   atualizar();
   $("#mdc-f").oninput = atualizar; $("#mdc-f").onchange = atualizar;
   $("#mdc-x").onclick = fecharModal; $("#mdc-mes").focus();
+  let pdfConta = null;
+  $("#mdc-pdf").onchange = async ev => {
+    const f = ev.target.files[0], st = $("#mdc-pdf-st"); pdfConta = null; if (!f) return;
+    if (f.size > 10 * 1024 * 1024) { st.className = "hint err"; st.textContent = "O PDF passa de 10 MB."; ev.target.value = ""; return; }
+    st.className = "hint"; st.innerHTML = `<span class="spin" aria-hidden="true"></span> Lendo o PDF…`;
+    try {
+      const {b64, r} = await mdLerContaPDF(f); pdfConta = {nome:f.name, b64};
+      const poe = (sel, v, fmt) => { if (v !== "" && v !== undefined && !$(sel).value) $(sel).value = fmt ? fmt(v) : v; };
+      if (!ed && r.medidor) $("#mdc-med").value = r.medidor;
+      if (r.mes) $("#mdc-mes").value = r.mes;
+      poe("#mdc-venc", r.vencimento); poe("#mdc-cons", r.consumo, v => String(v).replace(".", ",")); poe("#mdc-val", r.valor, v => v.toFixed(2).replace(".", ","));
+      st.textContent = r.achou.length ? `Preenchido pelo PDF: ${r.achou.join(", ")}. Confira antes de lançar.` : "Não achei os dados neste PDF (pode ser uma imagem). Preencha à mão; o PDF fica guardado com a conta.";
+      atualizar();
+    } catch(e){ st.className = "hint err"; st.textContent = e.message || "Não consegui ler este PDF."; }
+  };
   $("#mdc-ok").onclick = () => {
     const msg = $("#mdc-msg"), mes = mdMesDe($("#mdc-mes").value), ct = $("#mdc-cons").value.trim(), vt = $("#mdc-val").value.trim();
     const erro = t => { msg.className = "hint err"; msg.textContent = t; };
@@ -8422,7 +8553,8 @@ function mdNovaConta(o){
     const c = ct ? mdNum(ct) : "", v = vt ? mdNum(vt) : "";
     if (ct && (isNaN(c) || c < 0)) return erro("Consumo inválido.");
     if (vt && (isNaN(v) || v < 0)) return erro("Valor inválido.");
-    enviar($("#mdc-ok"), msg, "medContas", {conta:Object.assign(ed ? {id:ed.id} : {}, {medidor:$("#mdc-med").value, mes, consumo:c, valor:v, vencimento:$("#mdc-venc").value, obs:$("#mdc-obs").value})}, r => { mdAplicar(r); fecharModal(); renderMedTudo(); });
+    enviar($("#mdc-ok"), msg, "medContas", {conta:Object.assign(ed ? {id:ed.id} : {}, {medidor:$("#mdc-med").value, mes, consumo:c, valor:v, vencimento:$("#mdc-venc").value, obs:$("#mdc-obs").value},
+      pdfConta ? {pdf:pdfConta} : $("#mdc-tirar") && $("#mdc-tirar").checked ? {tirarPdf:true} : {})}, r => { mdAplicar(r); fecharModal(); renderMedTudo(); });
   };
 }
 function mdExcluir(btn){
@@ -8891,6 +9023,9 @@ if ($("#t-medlanc")) {
   $("#ml-importar").addEventListener("click", () => $("#ml-arq").click());
   $("#ml-arq").addEventListener("change", async ev => { const f = ev.target.files[0]; ev.target.value = ""; if (f && !(await arqConferir("medImportar", [f]))) return; mdImportar(f); });
   $("#ml-modelo").addEventListener("click", mdModelo);
+  $("#ml-pdf").addEventListener("click", () => $("#ml-pdfs").click());
+  $("#ml-pdfs").addEventListener("change", ev => { const fs = [...ev.target.files]; ev.target.value = ""; if (fs.length) mdImportarPDFs(fs); });
+  document.addEventListener("click", ev => { const b = ev.target.closest("[data-md-pdf]"); if (b) { ev.preventDefault(); mdAbrirPDF(b.dataset.mdPdf, b); } });
   $("#md-novo").addEventListener("click", () => mdEditarMedidor(null));
   $("#mr-per").addEventListener("change", ev => { MD.rPer = ev.target.value; renderMedRel(); });
   $("#mr-tipo").addEventListener("change", ev => { MD.rTipo = ev.target.value; renderMedRel(); });

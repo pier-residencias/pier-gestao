@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="estilo.css?v=20261102lote">
-<link rel="stylesheet" href="visual-2.css?v=20261119cc">
+<link rel="stylesheet" href="visual-2.css?v=20261119pdf">
 <style>
 html.pier-iniciando body>main,html.pier-iniciando body>header,html.pier-iniciando body>aside,html.pier-iniciando #side-fundo {visibility:hidden;}
 #pier-inicio{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;background:#0c1117;color:#e9f0f5;padding:24px;font:14px system-ui,sans-serif;text-align:center;}
@@ -345,7 +345,7 @@ html.pier-iniciando body>main,html.pier-iniciando body>header,html.pier-iniciand
   <!-- RONDA (setor Administração): vistorias preventivas no modelo do Checklist Consolidado -->
   <section id="t-medlanc" hidden>
     <div class="un-head"><div><h2 class="sec">Sinalizar consumo</h2><p class="muted">Leituras dos relógios (lançamentos diários) e contas da concessionária (lançamentos mensais).</p></div>
-      <div class="un-ferr"><button class="btn" type="button" id="ml-importar">Importar do Excel</button><button class="btn" type="button" id="ml-modelo">Baixar modelo</button><button class="btn primary" type="button" id="ml-novo">+ Novo lançamento</button><input type="file" id="ml-arq" accept=".xlsx" hidden></div></div>
+      <div class="un-ferr"><button class="btn" type="button" id="ml-pdf">Importar contas (PDF)</button><input type="file" id="ml-pdfs" accept=".pdf,application/pdf" multiple hidden><button class="btn" type="button" id="ml-importar">Importar do Excel</button><button class="btn" type="button" id="ml-modelo">Baixar modelo</button><button class="btn primary" type="button" id="ml-novo">+ Novo lançamento</button><input type="file" id="ml-arq" accept=".xlsx" hidden></div></div>
     <div class="ind-vistas md-abas" id="ml-vistas" role="tablist" aria-label="Lançamentos"><button type="button" role="tab" data-v="dia" aria-selected="true">Lançamentos diários</button><button type="button" role="tab" data-v="mes" aria-selected="false">Lançamentos mensais</button></div>
     <div class="toolbar md-filtros"><label class="md-lbl">Medidor <select class="input" id="ml-med"><option value="">Todos</option></select></label>
       <label class="md-lbl">Período <select class="input" id="ml-per"><option value="7">Últimos 7 dias</option><option value="30" selected>Últimos 30 dias</option><option value="90">Últimos 90 dias</option><option value="365">Último ano</option><option value="todos">Tudo</option></select></label><span class="hint" id="ml-conta"></span></div>
@@ -826,7 +826,7 @@ html.pier-iniciando body>main,html.pier-iniciando body>header,html.pier-iniciand
 <script src="config.js"></script>
 <script src="nfe.js?v=20261101os5"></script>
 <script src="vendor/qrcode.js?v=2.0.4"></script>
-<script src="app.js?v=20261119cc"></script>
+<script src="app.js?v=20261119pdf"></script>
 
 </body>
 </html>
