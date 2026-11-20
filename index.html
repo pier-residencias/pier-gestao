@@ -15,7 +15,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="estilo.css?v=20261102lote">
-<link rel="stylesheet" href="visual-2.css?v=20261119pdf">
+<link rel="stylesheet" href="termo.css?v=20261119tg">
+<link rel="stylesheet" href="visual-2.css?v=20261119tg">
 <style>
 html.pier-iniciando body>main,html.pier-iniciando body>header,html.pier-iniciando body>aside,html.pier-iniciando #side-fundo {visibility:hidden;}
 #pier-inicio{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;background:#0c1117;color:#e9f0f5;padding:24px;font:14px system-ui,sans-serif;text-align:center;}
@@ -380,6 +381,26 @@ html.pier-iniciando body>main,html.pier-iniciando body>header,html.pier-iniciand
       <label class="md-lbl">Mostrar <select class="input" id="mi-filtro"><option value="">Todas as unidades</option><option value="alertas">Só os alertas</option></select></label>
       <label class="md-lbl">Ordenar <select class="input" id="mi-ord"><option value="">Bloco e unidade</option><option value="consumo">Maior consumo</option><option value="variacao">Maior aumento</option></select></label></div>
     <div id="mi-corpo"><div class="empty">Carregando…</div></div>
+  </section>
+
+  <!-- RESERVA DO ESPAÇO GOURMET -->
+  <section id="t-gourmet" hidden>
+    <div class="un-head"><div><h2 class="sec">Reserva do Espaço Gourmet</h2><p class="muted">Por padrão aparecem as reservas <b>em aberto</b> a partir de hoje: confirmadas e as que aguardam pagamento. A data com pagamento pendente fica bloqueada até alguém confirmar.</p></div>
+      <div class="un-ferr"><button class="btn" type="button" id="gr-config">Configurar espaço</button></div></div>
+    <div class="gr-resumo" id="gr-resumo"></div>
+    <div class="panel gr-filtros">
+      <input class="input gr-q" id="gr-q" type="search" placeholder="Pesquisar por espaço, solicitante, e-mail, CPF, unidade…" aria-label="Pesquisar">
+      <div class="gr-fl">
+        <div class="field"><label for="gr-esp">Espaço</label><select class="input" id="gr-esp"></select></div>
+        <div class="field"><label for="gr-estado">Estado</label><select class="input" id="gr-estado"><option value="aberto">Em aberto</option><option value="Confirmada">Confirmadas</option><option value="aguardando">Aguardando pagamento</option><option value="Realizada">Finalizadas</option><option value="Cancelada">Canceladas</option><option value="todas">Todas</option></select></div>
+        <div class="field"><label for="gr-origem">Origem</label><select class="input" id="gr-origem"><option value="">Todas as reservas</option><option value="Unidade">Unidades</option><option value="Externo">Externos</option></select></div>
+        <div class="field"><label for="gr-de">Data inicial</label><input class="input" type="date" id="gr-de"></div>
+        <div class="field"><label for="gr-ate">Data final</label><input class="input" type="date" id="gr-ate"></div>
+        <div class="field gr-hoje"><button class="btn" type="button" id="gr-hoje">Hoje</button></div>
+      </div>
+    </div>
+    <div class="gr-botoes"><button class="btn primary" type="button" id="gr-novo">+ Nova reserva</button><button class="btn" type="button" id="gr-limpar">Limpar filtros</button><button class="btn" type="button" id="gr-pdf">PDF</button><button class="btn" type="button" id="gr-xlsx">XLSX</button></div>
+    <div id="gr-lista"><div class="empty">Carregando…</div></div>
   </section>
 
   <section id="t-esreservas" hidden>
@@ -826,7 +847,8 @@ html.pier-iniciando body>main,html.pier-iniciando body>header,html.pier-iniciand
 <script src="config.js"></script>
 <script src="nfe.js?v=20261101os5"></script>
 <script src="vendor/qrcode.js?v=2.0.4"></script>
-<script src="app.js?v=20261119pdf"></script>
+<script src="termo.js?v=20261119tg"></script>
+<script src="app.js?v=20261119tg"></script>
 
 </body>
 </html>

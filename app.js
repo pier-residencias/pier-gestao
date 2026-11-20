@@ -40,7 +40,7 @@ const SETORES_PERM = [["Manutenção","setor_manutencao"],["Limpeza","setor_limp
 const setoresDasPerms = p => { const l = SETORES_PERM.filter(x => p && p[x[1]]).map(x => x[0]); return l.length ? l : ["Manutenção"]; };
 const doSetor = x => setorDe(x) === S.setor;
 const can = p => p === "__perfil_administracao" ? S.perfil === "Administração" : !!(S.perms && S.perms[p]);
-const ABAS_PERM = {gsul:["gua_sul"], gbarco:["gua_sul"], gnorte:["gua_norte"], correspondencias:["__perfil_administracao"],contagem:["contagem_registrar","__perfil_administracao"],aprovacoes:["__perfil_administracao"],painel:["painel"], demandas:["dem_ver","dem_executar","dem_delegar"], os:["os_ver","os_abrir","os_atender","os_gerenciar"], registrar:["registrar_saida","registrar_entrada","registrar_troca","registrar_emprestimo"], itens:["itens_ver"], historico:["historico_ver"], emprestimos:["devolver","registrar_emprestimo"], dashboard:["dashboard"], indicadores:["dashboard"], categorias:["itens_ver"], prestadores:["os_ver","os_abrir","os_atender","os_gerenciar","dem_ver","dem_executar","dem_delegar"], equipe:["os_gerenciar","dem_delegar"], minhaequipe:["os_gerenciar","dem_delegar"], usuarios:["usuarios"], inicio:["pendencias","usuarios","acessos"], pendencias:["pendencias"], pdpainel:["pendencias"], rondas:["ronda_ver","ronda_fazer"], unidades:["un_ver","un_editar"], uncadastro:["un_ver","un_editar"], unconfig:["un_editar"], medlanc:["med_lancar"], medidores:["med_ver","med_lancar"], medrel:["med_ver","med_lancar"], medind:["med_ver","med_lancar"], esreservas:["espacos"], fornecedores:["pendencias"],compras:["pendencias"], esvistorias:["espacos"], esespacos:["espacos"], cotacoes:["pendencias"], acessos:["acessos"]};
+const ABAS_PERM = {gsul:["gua_sul"], gbarco:["gua_sul"], gnorte:["gua_norte"], correspondencias:["__perfil_administracao"],contagem:["contagem_registrar","__perfil_administracao"],aprovacoes:["__perfil_administracao"],painel:["painel"], demandas:["dem_ver","dem_executar","dem_delegar"], os:["os_ver","os_abrir","os_atender","os_gerenciar"], registrar:["registrar_saida","registrar_entrada","registrar_troca","registrar_emprestimo"], itens:["itens_ver"], historico:["historico_ver"], emprestimos:["devolver","registrar_emprestimo"], dashboard:["dashboard"], indicadores:["dashboard"], categorias:["itens_ver"], prestadores:["os_ver","os_abrir","os_atender","os_gerenciar","dem_ver","dem_executar","dem_delegar"], equipe:["os_gerenciar","dem_delegar"], minhaequipe:["os_gerenciar","dem_delegar"], usuarios:["usuarios"], inicio:["pendencias","usuarios","acessos"], pendencias:["pendencias"], pdpainel:["pendencias"], rondas:["ronda_ver","ronda_fazer"], unidades:["un_ver","un_editar"], uncadastro:["un_ver","un_editar"], unconfig:["un_editar"], medlanc:["med_lancar"], medidores:["med_ver","med_lancar"], medrel:["med_ver","med_lancar"], medind:["med_ver","med_lancar"], esreservas:["espacos"],gourmet:["espacos"], fornecedores:["pendencias"],compras:["pendencias"], esvistorias:["espacos"], esespacos:["espacos"], cotacoes:["pendencias"], acessos:["acessos"]};
 // Se o navegador ainda estiver com a página antiga guardada, o menu Administração não existe nela:
 // o resto do sistema continua funcionando normalmente.
 const TEM_ADM = !!(document.getElementById("tab-adm") && document.getElementById("adm-menu") && document.getElementById("t-pendencias"));
@@ -63,7 +63,7 @@ if (!TEM_ADM || !document.getElementById("t-acessos")) delete ABAS_PERM.acessos;
 // O que aparece depende de como a pessoa entrou: Manutenção (tudo do estoque, OS e demandas),
 // Limpeza (só o estoque da limpeza) ou Administração (só o menu Administração).
 // "inicio" primeiro: é a tela que abre ao entrar pela Administração
-const ABAS_ADM = ["inicio","correspondencias","aprovacoes","pendencias","pdpainel","cotacoes","compras","rondas","unidades","uncadastro","unconfig","medlanc","medidores","medrel","medind","esreservas","esvistorias","esespacos","fornecedores","usuarios","acessos"];
+const ABAS_ADM = ["inicio","correspondencias","aprovacoes","pendencias","pdpainel","cotacoes","gourmet","compras","rondas","unidades","uncadastro","unconfig","medlanc","medidores","medrel","medind","esreservas","esvistorias","esespacos","fornecedores","usuarios","acessos"];
 // Setor Guaritas (pedido de 04/11/2026): só as telas da Guarita Sul e da Guarita Norte; entra-se pela opção Guaritas
 // "Guarita Sul" (visitantes) saiu do menu a pedido (11/11/2026): na Sul fica só o Barco. Os registros antigos continuam na planilha.
 const ABAS_GUA = ["gbarco","gnorte"];
@@ -78,7 +78,7 @@ const modo = () => S.gua ? "Guaritas" : S.adm ? "Administração" : S.setor;
 // Ronda: só no setor Administração (pedido de 24/10/2026)
 // Unidades e moradores: só no setor Administração (pedido de 24/10/2026; dados pessoais)
 // Central de medições (água, energia e gás): só no setor Administração (pedido de 24/10/2026)
-const SO_ADM = ["correspondencias","inicio","aprovacoes","pdpainel","pendencias","cotacoes","compras","rondas","unidades","uncadastro","unconfig","medlanc","medidores","medrel","medind","esreservas","esvistorias","esespacos","fornecedores"], FORA_LIMPEZA = ["demandas","emprestimos","minhaequipe"], SO_MANUT = ["prestadores","contagem"];
+const SO_ADM = ["correspondencias","inicio","aprovacoes","pdpainel","pendencias","cotacoes","gourmet","compras","rondas","unidades","uncadastro","unconfig","medlanc","medidores","medrel","medind","esreservas","esvistorias","esespacos","fornecedores"], FORA_LIMPEZA = ["demandas","emprestimos","minhaequipe"], SO_MANUT = ["prestadores","contagem"];
 const naManut = () => !S.adm && S.setor !== "Limpeza";
 const abaNoModo = t => ABAS_GUA.includes(t) ? !!S.gua : S.gua ? false : t === "painel" ? !S.adm : SO_ADM.includes(t) ? S.adm : SO_MANUT.includes(t) ? naManut() : !(!S.adm && S.setor === "Limpeza" && FORA_LIMPEZA.includes(t));
 const ehSindico = () => norm(S.perfil).includes("sindico");
@@ -443,6 +443,7 @@ function setTab(t){
   if (t==="medind") { renderMI(); carregarMI(); carregarMed(); }
   if (t==="esreservas" || t==="esvistorias" || t==="esespacos") { renderEspTudo(); carregarEsp(); }
   if (t==="fornecedores") { renderForn(); carregarForn(); }
+  if (t==="gourmet") { renderGourmet(); carregarGourmet(); }
   if (t==="compras") { renderCompras(); carregarCompras(); }
   if (t==="gbarco") { barcoRender(); barcoCarregar(); }
   if (t==="gsul" || t==="gnorte") { const g = t === "gsul" ? "Sul" : "Norte"; guaRender(g); if (g === "Sul" || AV.vista === "visit") guaCarregar(g); }
@@ -1271,6 +1272,7 @@ const MENU = [
     {t:"pendencias", rot:"Controle de pendências", b:"b-adm"}, {t:"pendencias", acao:"nova", rot:"Incluir pendência"}, {t:"compras", rot:"Controle de compras"}, {t:"cotacoes", rot:"Cotações"}, {t:"fornecedores", rot:"Fornecedores"}]},
   {g:"Guaritas", ico:'<path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6z"/>', itens:[
     {t:"gbarco", rot:"Barco (Guarita Sul)"}, {t:"gnorte", rot:"Guarita Norte"}]},
+  {t:"gourmet", rot:"Reserva do Espaço Gourmet", ico:'<path d="M4 6h16v14H4zM4 10h16M8 3v4M16 3v4M9 15l2 2 4-4"/>'},
   {t:"correspondencias",rot:"Correspondências",ico:'<path d="M3 6h18v12H3zM3 6l9 7 9-7"/>'},
   {g:"Unidades", ico:'<path d="M5 21V4h10v17M15 9h4v12M8 8h1M11 8h1M8 12h1M11 12h1M8 16h1M11 16h1M3 21h18"/>', itens:[
     {t:"unidades", rot:"Lista de unidades"}, {t:"uncadastro", rot:"Atualização cadastral"}, {t:"unconfig", rot:"Configurações"}]},
@@ -1290,7 +1292,7 @@ const menuLogado = () => !!S.token && !!$("#login") && $("#login").hidden;
 // menu da Administração (19/11/2026): só Home, Dashboard, Compras e pendências, Unidades, Central de medições, Pessoas e acessos e Gestão.
 // As telas continuam existindo (os cards do Início ainda levam a elas); só saem da barra de menu.
 const MENU_SO_ADM = ["Compras e pendências", "Unidades", "Central de medições", "Pessoas e acessos", "Gestão"];
-const MENU_TOPO_ADM = ["inicio", "painel", "pdpainel"];
+const MENU_TOPO_ADM = ["inicio", "painel", "pdpainel", "gourmet"];
 const menuNoModo = m => !(S.adm && modo() === "Administração") || (m.itens ? MENU_SO_ADM.includes(m.g) : MENU_TOPO_ADM.includes(m.t));
 const itemPode = it => (TEM_ADM || !ABAS_ADM.includes(it.t)) && podeAba(it.t) && !!$("#t-" + it.t) && (!it.perm || can(it.perm));
 function renderMenu(){
@@ -9437,6 +9439,269 @@ if ($("#t-compras")) {
     const e = ev.target.closest("[data-cc-ed]"); if (e) { ccEditar(e.dataset.ccEd); return; }
     const b = ev.target.closest("[data-cc-ent]"); if (b) enviar(b, null, "compraSalvar", {op:"entregue", compra:{id:b.dataset.ccEnt, entregaEm:hoje()}}, r => { ccAplicar(r); renderCompras(); });
   });
+}
+
+// ---------- Reserva do Espaço Gourmet ----------
+// Lista com resumo e filtros; "+ Nova reserva" abre o formulário com calendário (vagas por dia, prazo de antecedência)
+// e, ao guardar, o servidor envia o e-mail de confirmação ao solicitante.
+const GR = { d:null, carregando:false, erro:"", q:"", esp:"", estado:"aberto", origem:"", de:"", ate:"" };
+const GR_ABERTAS = ["Solicitada", "Aguardando assinatura", "Pré-reserva", "Confirmada"];
+const grStatusRot = s => s === "Aguardando assinatura" ? "Aguardando assinatura do termo" : s === "Pré-reserva" || s === "Solicitada" ? "Aguardando pagamento" : s === "Confirmada" ? "Reserva confirmada" : s === "Realizada" ? "Finalizada" : s || "—";
+const grStatusCls = s => s === "Confirmada" || s === "Realizada" ? "ok" : s === "Pré-reserva" || s === "Solicitada" || s === "Aguardando assinatura" ? "ag" : "dev";
+const grBRL = v => fBRL(Number(v) || 0);
+const grDataLonga = d => { const x = new Date(d + "T12:00:00"); const t = x.toLocaleDateString("pt-BR", {weekday:"long", day:"numeric", month:"long", year:"numeric"}); return t.charAt(0).toUpperCase() + t.slice(1); };
+const grRotUn = (bloco, andar, numero) => [bloco ? "Bloco " + unBlocoCurto(String(bloco)).replace(/^bloco\s*/i, "") : "", andar, numero].filter(Boolean).join(" - ");
+async function carregarGourmet(forcar){
+  if (!S.token || GR.carregando || !podeAba("gourmet")) return;
+  if (!forcar && GR.d && Date.now() - GR.em < 60000) { renderGourmet(); return; }
+  GR.carregando = true;
+  try { const r = await api("gourmet"); GR.d = {espacos:r.espacos || [], reservas:r.reservas || [], unidades:r.unidadesRes || []}; GR.em = Date.now(); GR.erro = ""; }
+  catch(e){ GR.erro = /desconhecida/i.test(e.message) ? "A Reserva do Espaço Gourmet precisa do Apps Script novo (colar o código e implantar uma nova versão)." : e.message; }
+  finally { GR.carregando = false; renderGourmet(); }
+}
+const grAplicar = r => { if (r && Array.isArray(r.reservas)) { GR.d = Object.assign(GR.d || {}, {espacos:r.espacos || [], reservas:r.reservas}); GR.em = Date.now(); if (typeof esAplicar === "function") esAplicar(r); return true; } return false; };
+const grEspacos = () => (GR.d ? GR.d.espacos : []).filter(e => e.ativo !== "Não");
+const grPadrao = () => { const l = grEspacos(); return (l.find(e => /gourmet/i.test(e.nome)) || l[0] || {}).nome || ""; };
+function grCfg(nome){
+  const e = (GR.d.espacos || []).find(x => x.nome === nome) || {};
+  return {e, antecedencia: e.antecedencia === "" || e.antecedencia === undefined ? 7 : Math.max(0, Number(e.antecedencia) || 0), vagas: Math.max(1, Number(e.vagasDia) || 1),
+    horario: e.horario || "00:00 – 23:59", valor: Number(e.valor) || 0, cobranca: e.cobranca || "boleto condominial", capacidade: e.capacidade || ""};
+}
+function grFiltradas(){
+  const h = hoje(), q = norm(GR.q).trim();
+  return (GR.d.reservas || []).filter(x => (!GR.esp || x.espaco === GR.esp)
+    && (GR.estado === "todas" || (GR.estado === "aberto" ? GR_ABERTAS.includes(x.status) && x.data >= h : GR.estado === "aguardando" ? x.status === "Pré-reserva" || x.status === "Solicitada" : x.status === GR.estado))
+    && (!GR.origem || (x.tipoSol || (x.unidade ? "Unidade" : "Externo")) === GR.origem)
+    && (!GR.de || x.data >= GR.de) && (!GR.ate || x.data <= GR.ate)
+    && (!q || norm([x.espaco, x.solicitante, x.email, x.cpf, x.bloco, x.unidade, x.solicitacao, x.obs].join(" ")).includes(q)))
+    .sort((a, b) => String(a.data).localeCompare(String(b.data)));
+}
+function renderGourmet(){
+  const sec = $("#t-gourmet"); if (!sec || sec.hidden) return;
+  const box = $("#gr-lista");
+  if (GR.erro && !GR.d) { box.innerHTML = `<div class="notice crit">${esc(GR.erro)}</div>`; return; }
+  if (!GR.d) { box.innerHTML = `<div class="empty"><span class="spin" aria-hidden="true"></span> Carregando as reservas…</div>`; return; }
+  if (!GR.de && GR.estado === "aberto") GR.de = hoje();
+  $("#gr-esp").innerHTML = `<option value="">Todos os espaços</option>` + (GR.d.espacos || []).map(e => `<option ${e.nome === GR.esp ? "selected" : ""}>${esc(e.nome)}</option>`).join("");
+  $("#gr-estado").value = GR.estado; $("#gr-origem").value = GR.origem; $("#gr-de").value = GR.de; $("#gr-ate").value = GR.ate; if ($("#gr-q").value !== GR.q) $("#gr-q").value = GR.q;
+  const l = grFiltradas();
+  const conf = l.filter(x => x.status === "Confirmada" || x.status === "Realizada").reduce((a, x) => a + (Number(x.valor) || 0), 0);
+  const ag = l.filter(x => x.status === "Pré-reserva" || x.status === "Solicitada").reduce((a, x) => a + (Number(x.valor) || 0), 0);
+  $("#gr-resumo").innerHTML = `<div><b>${grBRL(conf)}</b><span>Confirmadas e finalizadas</span></div><div><b>${grBRL(ag)}</b><span>Aguardando pagamento</span></div><div class="gr-n"><b>${l.length}</b><span>reserva${l.length === 1 ? "" : "s"} com os filtros atuais</span></div>`;
+  const un = x => x.unidade ? grRotUn(x.bloco, "", x.unidade) : "Externo";
+  box.innerHTML = l.length ? l.map(x => `<article class="gr-card">
+      <div class="gr-info"><h3>${esc(x.espaco)}</h3>
+        <p><b>Data:</b> ${fData(x.data)} · <b>Horário:</b> ${esc(x.horario || "—")}</p>
+        <p><b>Solicitante:</b> ${esc(x.solicitante || "—")}${x.email ? ` <span class="muted">· ${esc(x.email)}</span>` : ""}</p>
+        <p><b>Unidade:</b> ${esc(un(x))} · <b>Período:</b> ${esc(x.periodo || "Dia inteiro")}</p>
+        <p><b>Valor:</b> ${x.valor === "" ? "—" : grBRL(x.valor)}</p>
+        <div class="gr-tags"><span class="cc-st ${grStatusCls(x.status)}">${esc(grStatusRot(x.status))}</span>${x.termoAssinadoEm ? `<span class="gr-tag">✍ termo assinado</span>` : x.status === "Aguardando assinatura" ? `<span class="gr-tag">${x.termoLinkEm ? "✉ link do termo enviado" : "termo não assinado"}</span>` : ""}${x.avisoEm ? `<span class="gr-tag">✉ confirmação enviada</span>` : ""}${x.origem && x.origem !== "Pier Gestão" ? `<span class="gr-tag">${esc(x.origem)}</span>` : ""}</div></div>
+      <div class="gr-acoes"><button type="button" class="btn" data-gr-det="${esc(x.id)}">Detalhe</button><button type="button" class="btn gr-pdf" data-gr-pdf="${esc(x.id)}">PDF</button></div></article>`).join("")
+    : `<div class="empty">Nenhuma reserva com esses filtros. Use <b>+ Nova reserva</b>.</div>`;
+}
+// ---- nova reserva: unidade ou externo, espaço, calendário e período ----
+function grNova(){
+  if (!GR.d) return;
+  if (!grEspacos().length) { toast("Cadastre o espaço (com o valor) antes de reservar.", true); return; }
+  const st = {tipo:"unidade", un:null, mes:hoje().slice(0, 7), data:"", esp:grPadrao()};
+  $("#modal-box").classList.add("gr-box");
+  $("#modal-box").innerHTML = `<div class="gr-modal-h"><h3>Nova reserva</h3></div>
+    <div class="gr-tipo" role="tablist"><button type="button" class="chip" data-gr-tipo="unidade" aria-pressed="true">Unidade</button><button type="button" class="chip" data-gr-tipo="externo" aria-pressed="false">Externo</button></div>
+    <form class="form" id="gr-f" novalidate autocomplete="off">
+      <div class="full" id="gr-sol-un">
+        <div class="field gr-busca"><label for="gr-un-q">Unidade <span class="req">*</span></label><input class="input" id="gr-un-q" placeholder="Pesquisar bloco, andar, número da unidade…" autocomplete="off"><div class="gr-sug" id="gr-un-sug" hidden></div></div>
+        <div class="field"><label for="gr-pessoa">Condômino solicitante <span class="req">*</span></label><select class="input" id="gr-pessoa" disabled><option>Primeiro escolha a unidade</option></select><span class="hint" id="gr-pessoa-h"></span></div>
+      </div>
+      <div class="full gr-ext" id="gr-sol-ext" hidden>
+        <div class="field"><label for="gr-ext-nome">Nome do solicitante <span class="req">*</span></label><input class="input" id="gr-ext-nome" maxlength="80"></div>
+        <div class="field"><label for="gr-ext-email">E-mail (recebe a confirmação)</label><input class="input" id="gr-ext-email" type="email" maxlength="100"></div>
+        <div class="field"><label for="gr-ext-cpf">CPF</label><input class="input" id="gr-ext-cpf" inputmode="numeric" maxlength="14"></div>
+        <div class="field"><label for="gr-ext-tel">Telefone</label><input class="input" id="gr-ext-tel" maxlength="30"></div>
+        <p class="hint full">Externo: a reserva fica <b>aguardando pagamento</b> e a data fica bloqueada até alguém confirmar.</p>
+      </div>
+      <div class="field full"><label for="gr-espaco">Espaço <span class="req">*</span></label><select class="input" id="gr-espaco">${grEspacos().map(e => `<option ${e.nome === st.esp ? "selected" : ""}>${esc(e.nome)}</option>`).join("")}</select></div>
+      <div class="full" id="gr-cal"></div>
+      <div class="full" id="gr-per"></div>
+      <div class="field full"><label for="gr-obs">Observações</label><textarea class="input" id="gr-obs" rows="3" maxlength="300"></textarea></div>
+    </form>
+    <div class="actions"><button class="btn primary" type="button" id="gr-ok">Guardar</button><button class="btn" type="button" id="gr-x">Fechar</button><span class="hint" id="gr-msg"></span></div>`;
+  $("#modal").hidden = false;
+  const fechar = () => { $("#modal-box").classList.remove("gr-box"); fecharModal(); };
+  $("#gr-x").onclick = fechar;
+  $$("#modal-box [data-gr-tipo]").forEach(b => b.onclick = () => { st.tipo = b.dataset.grTipo; $$("#modal-box [data-gr-tipo]").forEach(x => x.setAttribute("aria-pressed", x === b)); $("#gr-sol-un").hidden = st.tipo !== "unidade"; $("#gr-sol-ext").hidden = st.tipo !== "externo"; });
+  // unidade: busca com sugestões
+  const unis = GR.d.unidades.map(u => Object.assign({}, u, {rot:grRotUn(u.bloco, u.andar, u.numero)}));
+  const sug = () => { const q = norm($("#gr-un-q").value).trim(), box = $("#gr-un-sug");
+    const l = (q ? unis.filter(u => norm(u.rot + " " + u.numero).includes(q) || norm(u.pessoas.map(p => p.nome).join(" ")).includes(q)) : unis).slice(0, 12);
+    box.hidden = !l.length || (st.un && $("#gr-un-q").value === st.un.rot); box.innerHTML = l.map(u => `<button type="button" data-gr-un="${esc(u.id)}"><span aria-hidden="true">▣</span> ${esc(u.rot)}</button>`).join(""); };
+  $("#gr-un-q").addEventListener("input", () => { st.un = null; $("#gr-pessoa").disabled = true; $("#gr-pessoa").innerHTML = "<option>Primeiro escolha a unidade</option>"; $("#gr-pessoa-h").textContent = ""; sug(); });
+  $("#gr-un-q").addEventListener("focus", sug);
+  $("#gr-un-sug").addEventListener("click", ev => { const b = ev.target.closest("[data-gr-un]"); if (!b) return; st.un = unis.find(u => u.id === b.dataset.grUn); $("#gr-un-q").value = st.un.rot; $("#gr-un-sug").hidden = true;
+    const ps = st.un.pessoas; $("#gr-pessoa").disabled = !ps.length;
+    $("#gr-pessoa").innerHTML = ps.length ? ps.map((p, i) => `<option value="${i}">${esc(p.nome)}${p.rel ? " (" + esc(p.rel) + ")" : ""}</option>`).join("") : "<option>Nenhum morador cadastrado nesta unidade</option>";
+    const dica = () => { const p = ps[+$("#gr-pessoa").value]; $("#gr-pessoa-h").textContent = p ? (p.email ? "Confirmação vai para " + p.email : "Sem e-mail no cadastro: a reserva é guardada, mas nenhum e-mail é enviado.") : ""; };
+    $("#gr-pessoa").onchange = dica; dica(); });
+  document.addEventListener("click", function fora(ev){ if (!$("#gr-un-sug")) return document.removeEventListener("click", fora); if (!ev.target.closest(".gr-busca")) $("#gr-un-sug").hidden = true; });
+  // calendário
+  const desenhar = () => {
+    const cfg = grCfg(st.esp), [a, m] = st.mes.split("-").map(Number), prim = new Date(a, m - 1, 1), dias = new Date(a, m, 0).getDate();
+    const h = hoje(), lim = new Date(); lim.setHours(0, 0, 0, 0); lim.setDate(lim.getDate() + cfg.antecedencia); const limIso = iso(lim);
+    const ocup = {}; GR.d.reservas.filter(x => x.espaco === st.esp && GR_ABERTAS.includes(x.status)).forEach(x => { ocup[x.data] = (ocup[x.data] || 0) + 1; });
+    const vazio = (prim.getDay() + 6) % 7;
+    let cel = ""; for (let i = 0; i < vazio; i++) cel += `<span class="gr-d vazio"></span>`;
+    for (let d = 1; d <= dias; d++) {
+      const ds = `${a}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`, n = ocup[ds] || 0, livre = cfg.vagas - n;
+      const est = ds < h ? ["passado", "Passado"] : ds < limIso ? ["prazo", "Prazo"] : livre <= 0 ? ["lotado", "Lotado"] : n ? ["parcial", `${livre} vaga${livre === 1 ? "" : "s"}`] : ["livre", `${livre} vaga${livre === 1 ? "" : "s"}`];
+      const pode = est[0] === "livre" || est[0] === "parcial";
+      cel += `<button type="button" class="gr-d ${est[0]} ${ds === st.data ? "sel" : ""}" ${pode ? `data-gr-dia="${ds}"` : "disabled"} aria-label="${d} — ${est[1]}"><b>${d}</b><span>${est[1]}</span></button>`;
+    }
+    const rotMes = prim.toLocaleDateString("pt-BR", {month:"long", year:"numeric"});
+    $("#gr-cal").innerHTML = `<label class="gr-lab">Escolha a data</label><p class="hint">Dias com vagas estão coloridos. Fora do prazo ou lotado, o dia fica indisponível.</p>
+      <div class="gr-cfg">Cobrança no ${esc(cfg.cobranca)} · ${grBRL(cfg.valor)}${cfg.capacidade ? ` · até ${esc(cfg.capacidade)} pessoas` : ""} · mínimo de ${cfg.antecedencia} dia${cfg.antecedencia === 1 ? "" : "s"} de antecedência</div>
+      <div class="gr-calbox"><div class="gr-calh"><b>${esc(rotMes.charAt(0).toUpperCase() + rotMes.slice(1))}</b><span><button type="button" class="btn small" data-gr-mes="-1" aria-label="Mês anterior">‹</button><button type="button" class="btn small" data-gr-mes="0">Hoje</button><button type="button" class="btn small" data-gr-mes="1" aria-label="Próximo mês">›</button></span></div>
+        <div class="gr-sem">${["SEG","TER","QUA","QUI","SEX","SÁB","DOM"].map(x => `<span>${x}</span>`).join("")}</div><div class="gr-grade">${cel}</div>
+        <div class="gr-leg"><span class="livre">Vagas livres</span><span class="parcial">Parcial</span><span class="lotado">Lotado</span><span class="passado">Indisponível</span></div></div>`;
+    $("#gr-per").innerHTML = st.data ? `<p class="gr-dia">${esc(grDataLonga(st.data))}</p><label class="gr-lab">Período</label>
+      <label class="gr-periodo"><input type="radio" name="gr-per" checked> <b>Dia inteiro · ${esc(cfg.horario)}</b> · ${grBRL(cfg.valor)}</label>` : "";
+  };
+  $("#gr-cal").addEventListener("click", ev => {
+    const d = ev.target.closest("[data-gr-dia]"); if (d) { st.data = d.dataset.grDia; desenhar(); $("#gr-per").scrollIntoView({block:"nearest"}); return; }
+    const mb = ev.target.closest("[data-gr-mes]"); if (!mb) return;
+    const k = +mb.dataset.grMes; if (!k) st.mes = hoje().slice(0, 7); else { const [a, m] = st.mes.split("-").map(Number), x = new Date(a, m - 1 + k, 1); st.mes = `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}`; }
+    desenhar();
+  });
+  $("#gr-espaco").onchange = () => { st.esp = $("#gr-espaco").value; st.data = ""; desenhar(); };
+  desenhar();
+  $("#gr-ok").onclick = () => {
+    const msg = $("#gr-msg"); msg.className = "hint err";
+    const v = {espaco:st.esp, data:st.data, obs:$("#gr-obs").value.trim(), tipo:st.tipo};
+    if (st.tipo === "unidade") { if (!st.un) { msg.textContent = "Escolha a unidade."; return; } if (!st.un.pessoas.length) { msg.textContent = "Esta unidade não tem morador cadastrado (Unidades › Atualização cadastral)."; return; } v.unidade = st.un.id; v.pessoa = +$("#gr-pessoa").value; }
+    else { v.nome = $("#gr-ext-nome").value.trim(); v.email = $("#gr-ext-email").value.trim(); v.cpf = $("#gr-ext-cpf").value.trim(); v.telefone = $("#gr-ext-tel").value.trim();
+      if (!v.nome) { msg.textContent = "Informe o nome do solicitante."; return; } }
+    if (!st.data) { msg.textContent = "Escolha a data no calendário."; return; }
+    enviar($("#gr-ok"), msg, "grReservar", {reserva:v}, r => { grAplicar(r); renderGourmet();
+      const id = r.gr && r.gr.id, x = id && GR.d.reservas.find(z => z.id === id);
+      $("#modal-box").innerHTML = `<div class="gr-ok"><svg viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="24"/><path d="M15 27l7 7 15-16"/></svg><h3>Guardado</h3>
+        <p>A data ficou reservada. <b>Para confirmar, ${esc(x ? x.solicitante.split(/\s+/)[0] : "o solicitante")} precisa ler as regras e assinar o termo.</b></p>
+        <div class="gr-ok-ac"><button type="button" class="btn primary" id="gr-ass">Assinar agora nesta tela</button>${x && x.email ? `<button type="button" class="btn" id="gr-link">Enviar link por e-mail</button>` : ""}<button type="button" class="btn" id="gr-fim">Depois</button></div>
+        ${x && !x.email ? `<p class="hint">Sem e-mail no cadastro: o termo precisa ser assinado aqui na Administração.</p>` : x ? `<p class="hint">O link vai para ${esc(x.email)}.</p>` : ""}<p class="hint" id="gr-ok-msg"></p></div>`;
+      $("#gr-fim").onclick = fechar;
+      $("#gr-ass").onclick = () => { $("#modal-box").classList.remove("gr-box"); grAssinarTela(id); };
+      if ($("#gr-link")) $("#gr-link").onclick = () => enviar($("#gr-link"), $("#gr-ok-msg"), "grAcao", {id, op:"enviarTermo"}, r2 => { grAplicar(r2); renderGourmet(); $("#gr-ok-msg").className = "hint"; $("#gr-ok-msg").textContent = r2.msg; $("#gr-link").disabled = true; });
+    });
+  };
+}
+// ---- detalhe: confirmar pagamento, reenviar e-mail, cancelar e comprovante ----
+function grDetalhe(id){
+  const x = GR.d.reservas.find(r => r.id === id); if (!x) return;
+  const aberta = GR_ABERTAS.includes(x.status), aguard = x.status === "Pré-reserva" || x.status === "Solicitada";
+  const li = (k, v) => v ? `<div><dt>${k}</dt><dd>${v}</dd></div>` : "";
+  $("#modal-box").innerHTML = `<h3>${esc(x.espaco)} · ${fData(x.data)}</h3><span class="cc-st ${grStatusCls(x.status)}">${esc(grStatusRot(x.status))}</span>
+    <dl class="gr-dl">${li("Data", esc(grDataLonga(x.data)))}${li("Horário", esc(x.horario || ""))}${li("Período", esc(x.periodo || "Dia inteiro"))}${li("Solicitante", esc(x.solicitante || ""))}
+      ${li("Unidade", x.unidade ? esc(grRotUn(x.bloco, "", x.unidade)) : "Externo")}${li("E-mail", esc(x.email || ""))}${li("Telefone", esc(x.telefone || ""))}${li("CPF", esc(x.cpf || ""))}
+      ${li("Valor", x.valor === "" ? "" : grBRL(x.valor))}${li("Observações", esc(x.obs || ""))}${li("Registrada", esc(fDataHora(x.registradoEm) + (x.registradoPor ? " por " + x.registradoPor : "")))}${li("Termo", x.termoAssinadoEm ? esc("Assinado por " + (x.termoNome || "") + " em " + fDataHora(x.termoAssinadoEm) + (x.termoVia ? " · " + x.termoVia : "")) : x.status === "Aguardando assinatura" ? (x.termoLinkEm ? "Link enviado em " + esc(fDataHora(x.termoLinkEm)) + ", ainda não assinado" : "Ainda não assinado") : "")}${li("E-mail de confirmação", x.avisoEm ? esc(fDataHora(x.avisoEm)) : "")}</dl>
+    <div class="actions" id="gr-det-ac">${x.status === "Aguardando assinatura" ? `<button class="btn primary" type="button" data-gr-ass="${esc(x.id)}">Assinar termo agora</button>${x.email ? `<button class="btn" type="button" data-gr-op="enviarTermo">${x.termoLinkEm ? "Reenviar" : "Enviar"} link do termo</button>` : ""}` : ""}${x.termoArquivo ? `<button class="btn" type="button" data-gr-termo="${esc(x.id)}">Ver termo assinado</button>` : ""}${aguard ? `<button class="btn primary" type="button" data-gr-op="confirmar">Confirmar pagamento</button>` : ""}${x.email ? `<button class="btn" type="button" data-gr-op="reenviar">Reenviar e-mail</button>` : ""}
+      <button class="btn" type="button" data-gr-pdf="${esc(x.id)}">Comprovante (PDF)</button>${aberta ? `<button class="btn danger" type="button" data-gr-op="cancelar">Cancelar reserva</button>` : ""}<button class="btn" type="button" id="gr-dx">Fechar</button><span class="hint" id="gr-dmsg"></span></div>
+    <div id="gr-canc" hidden><div class="field"><label for="gr-mot">Motivo do cancelamento</label><input class="input" id="gr-mot" maxlength="200"></div>${x.email ? `<label class="md-chk"><input type="checkbox" id="gr-av" checked> Avisar o solicitante por e-mail</label>` : ""}
+      <div class="actions"><button class="btn danger" type="button" id="gr-cok">Confirmar cancelamento</button></div></div>`;
+  $("#modal").hidden = false; $("#gr-dx").onclick = fecharModal;
+  const fim = r => { grAplicar(r); fecharModal(); renderGourmet(); };
+  $("#gr-det-ac").addEventListener("click", ev => {
+    const a = ev.target.closest("[data-gr-ass]"); if (a) { grAssinarTela(a.dataset.grAss); return; }
+    const tt = ev.target.closest("[data-gr-termo]"); if (tt) { grVerTermo(tt.dataset.grTermo, tt); return; }
+    const b = ev.target.closest("[data-gr-op]"); if (!b) return;
+    if (b.dataset.grOp === "cancelar") { $("#gr-canc").hidden = false; $("#gr-mot").focus(); return; }
+    enviar(b, $("#gr-dmsg"), "grAcao", {id:x.id, op:b.dataset.grOp}, fim); });
+  $("#gr-cok").onclick = () => enviar($("#gr-cok"), $("#gr-dmsg"), "grAcao", {id:x.id, op:"cancelar", motivo:$("#gr-mot").value.trim(), avisar:!!($("#gr-av") && $("#gr-av").checked)}, fim);
+}
+// assinatura na tela da Administração (o morador lê, marca que concorda e assina no próprio computador/tablet)
+async function grAssinarTela(id){
+  $("#modal-box").classList.add("largo", "tg-box");
+  $("#modal-box").innerHTML = `<div class="empty"><span class="spin" aria-hidden="true"></span> Abrindo o termo…</div>`; $("#modal").hidden = false;
+  const fechar = () => { $("#modal-box").classList.remove("largo", "tg-box"); fecharModal(); };
+  let d; try { d = (await api("grTermo", {id}, {soLer:true})).termo; } catch(e){ $("#modal-box").innerHTML = `<p class="hint err">${esc(e.message || "Não foi possível abrir o termo.")}</p><div class="actions"><button class="btn" type="button" id="tg-x">Fechar</button></div>`; $("#tg-x").onclick = fechar; return; }
+  if (d.reserva.status !== "Aguardando assinatura") { $("#modal-box").innerHTML = `<p>Esta reserva não está aguardando assinatura.</p><div class="actions"><button class="btn" type="button" id="tg-x">Fechar</button></div>`; $("#tg-x").onclick = fechar; return; }
+  $("#modal-box").innerHTML = `<div id="tg-area"></div><div class="actions"><button class="btn" type="button" id="tg-x">Fechar sem assinar</button></div>`;
+  $("#tg-x").onclick = fechar;
+  TermoGourmet.montar($("#tg-area"), d, { onAssinar: async a => {
+    const r = await api("grAcao", Object.assign({id, op:"assinar"}, a)); grAplicar(r); renderGourmet();
+    $("#modal-box").innerHTML = `<div class="gr-ok"><svg viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="24"/><path d="M15 27l7 7 15-16"/></svg><h3>Termo assinado</h3><p>${esc(r.msg || "")}</p><button type="button" class="btn primary" id="gr-fim">OK</button></div>`;
+    $("#gr-fim").onclick = fechar; } });
+}
+async function grVerTermo(id, btn){
+  const w = window.open("", "_blank"); if (btn) btn.disabled = true;
+  try {
+    const r = await api("grTermoPdf", {id}, {soLer:true}), bin = atob(r.pdf.b64), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([u8], {type:r.pdf.mime || "application/pdf"}));
+    if (w) w.location.href = url; else { const a = document.createElement("a"); a.href = url; a.download = r.pdf.nome || "termo.pdf"; document.body.appendChild(a); a.click(); a.remove(); }
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch(e){ if (w) w.close(); toast(e.message || "Não foi possível abrir o termo.", true); }
+  finally { if (btn) btn.disabled = false; }
+}
+function grImprimir(html){
+  let fr = $("#gr-print"); if (fr) fr.remove();
+  fr = document.createElement("iframe"); fr.id = "gr-print"; fr.setAttribute("aria-hidden", "true"); fr.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
+  document.body.appendChild(fr); fr.contentDocument.open(); fr.contentDocument.write(html); fr.contentDocument.close();
+  setTimeout(() => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch(e){ toast("Não foi possível abrir a impressão.", true); } }, 150);
+}
+const GR_CSS = `body{font:13px Arial,sans-serif;color:#163047;margin:28px}h1{font-size:18px;margin:0 0 4px}.sub{color:#5b6b7a;margin:0 0 16px}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #d9e1e8;padding:7px 6px;text-align:left;vertical-align:top}th{background:#17324d;color:#fff;font-size:12px}.cab{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #397d9d;padding-bottom:10px;margin-bottom:14px}.cab img{height:44px}dl{display:grid;grid-template-columns:200px 1fr;gap:8px 12px}dt{color:#5b6b7a}dd{margin:0;font-weight:bold}`;
+function grPDF(id){
+  const v = s => esc(s == null ? "" : String(s)), logo = new URL("img/logo.png", location.href).href;
+  if (id) { const x = GR.d.reservas.find(r => r.id === id); if (!x) return;
+    grImprimir(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Reserva ${v(x.espaco)} ${fData(x.data)}</title><style>${GR_CSS}</style></head><body>
+      <div class="cab"><div><h1>Comprovante de reserva</h1><div class="sub">${v(x.espaco)} · ${v(grStatusRot(x.status))}</div></div><img src="${logo}" alt="Pier Residências"></div>
+      <dl><dt>Data</dt><dd>${v(grDataLonga(x.data))}</dd><dt>Horário</dt><dd>${v(x.horario)}</dd><dt>Período</dt><dd>${v(x.periodo || "Dia inteiro")}</dd><dt>Solicitante</dt><dd>${v(x.solicitante)}</dd>
+      <dt>Unidade</dt><dd>${x.unidade ? v(grRotUn(x.bloco, "", x.unidade)) : "Externo"}</dd>${x.cpf ? `<dt>CPF</dt><dd>${v(x.cpf)}</dd>` : ""}${x.email ? `<dt>E-mail</dt><dd>${v(x.email)}</dd>` : ""}<dt>Valor</dt><dd>${x.valor === "" ? "—" : grBRL(x.valor)}</dd>
+      ${x.obs ? `<dt>Observações</dt><dd>${v(x.obs)}</dd>` : ""}<dt>Registrada</dt><dd>${v(fDataHora(x.registradoEm))}${x.registradoPor ? " por " + v(x.registradoPor) : ""}</dd></dl>
+      <p class="sub" style="margin-top:28px">Pier Residências · Administração · impresso em ${fData(hoje())}</p></body></html>`); return; }
+  const l = grFiltradas();
+  grImprimir(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Reservas ${fData(hoje())}</title><style>${GR_CSS}</style></head><body>
+    <div class="cab"><div><h1>Reservas de espaços</h1><div class="sub">${l.length} reserva(s) · impresso em ${fData(hoje())}</div></div><img src="${logo}" alt="Pier Residências"></div>
+    <table><tr><th>Data</th><th>Espaço</th><th>Solicitante</th><th>Unidade</th><th>Horário</th><th>Valor</th><th>Situação</th></tr>
+    ${l.map(x => `<tr><td>${fData(x.data)}</td><td>${v(x.espaco)}</td><td>${v(x.solicitante)}</td><td>${x.unidade ? v(grRotUn(x.bloco, "", x.unidade)) : "Externo"}</td><td>${v(x.horario)}</td><td>${x.valor === "" ? "—" : grBRL(x.valor)}</td><td>${v(grStatusRot(x.status))}</td></tr>`).join("")}</table></body></html>`);
+}
+function grXLSX(){
+  try {
+    const X = xlsxMini(), cab = {b:true, cor:"FFFFFFFF", fill:"FF1F4E79", wrap:false};
+    const cols = [["Data",12],["Espaço",22],["Solicitante",28],["Unidade",22],["E-mail",28],["Horário",14],["Período",12],["Valor (R$)",12],["Situação",22],["Observações",30]];
+    cols.forEach(([r, w], j) => { X.cel(1, j + 1, r, cab); X.col(j + 1, w); });
+    grFiltradas().forEach((x, i) => [fData(x.data), x.espaco, x.solicitante || "", x.unidade ? grRotUn(x.bloco, "", x.unidade) : "Externo", x.email || "", x.horario || "", x.periodo || "", x.valor === "" ? "" : Number(x.valor), grStatusRot(x.status), x.obs || ""]
+      .forEach((val, j) => X.cel(i + 2, j + 1, val)));
+    mdBaixar(X.gerar("Reservas"), `Reservas - Pier ${hoje()}.xlsx`);
+  } catch(e){ toast(e.message || "Não foi possível gerar a planilha.", true); }
+}
+// configuração do espaço: valor, antecedência, vagas por dia, horário e cobrança
+function grConfig(){
+  const nome = GR.esp || grPadrao(), e = (GR.d.espacos || []).find(x => x.nome === nome); if (!e) { toast("Nenhum espaço cadastrado.", true); return; }
+  const c = grCfg(nome);
+  $("#modal-box").innerHTML = `<h3>Configurar: ${esc(e.nome)}</h3><form class="form" id="gc-f" novalidate>
+    <div class="field"><label for="gc-val">Valor da reserva (R$)</label><input class="input num" id="gc-val" inputmode="decimal" value="${e.valor === "" ? "" : String(e.valor).replace(".", ",")}"></div>
+    <div class="field"><label for="gc-ant">Antecedência mínima (dias)</label><input class="input num" id="gc-ant" type="number" min="0" max="365" value="${c.antecedencia}"></div>
+    <div class="field"><label for="gc-vag">Reservas por dia</label><input class="input num" id="gc-vag" type="number" min="1" max="20" value="${c.vagas}"></div>
+    <div class="field"><label for="gc-cap">Capacidade (pessoas)</label><input class="input" id="gc-cap" maxlength="20" value="${esc(e.capacidade || "")}"></div>
+    <div class="field"><label for="gc-hor">Horário do dia inteiro</label><input class="input" id="gc-hor" maxlength="40" value="${esc(c.horario)}"></div>
+    <div class="field"><label for="gc-cob">Cobrança</label><input class="input" id="gc-cob" maxlength="80" value="${esc(c.cobranca)}"></div></form>
+    <div class="actions"><button class="btn primary" type="button" id="gc-ok">Salvar</button><button class="btn" type="button" id="gc-x">Cancelar</button><span class="hint" id="gc-msg"></span></div>`;
+  $("#modal").hidden = false; $("#gc-x").onclick = fecharModal;
+  $("#gc-ok").onclick = () => enviar($("#gc-ok"), $("#gc-msg"), "espEspaco", {espaco:{id:e.id, nome:e.nome, regras:e.regras || "", itens:e.itens || [], ativo:e.ativo !== "Não",
+    valor:$("#gc-val").value.trim(), capacidade:$("#gc-cap").value.trim(), horario:$("#gc-hor").value.trim(), antecedencia:$("#gc-ant").value, vagasDia:$("#gc-vag").value, cobranca:$("#gc-cob").value.trim()}},
+    r => { grAplicar(r); fecharModal(); renderGourmet(); });
+}
+if ($("#t-gourmet")) {
+  $("#gr-novo").addEventListener("click", grNova);
+  $("#gr-config").addEventListener("click", () => GR.d && grConfig());
+  $("#gr-pdf").addEventListener("click", () => GR.d && grPDF(""));
+  $("#gr-xlsx").addEventListener("click", () => GR.d && grXLSX());
+  $("#gr-q").addEventListener("input", ev => { GR.q = ev.target.value; renderGourmet(); });
+  $("#gr-esp").addEventListener("change", ev => { GR.esp = ev.target.value; renderGourmet(); });
+  $("#gr-estado").addEventListener("change", ev => { GR.estado = ev.target.value; renderGourmet(); });
+  $("#gr-origem").addEventListener("change", ev => { GR.origem = ev.target.value; renderGourmet(); });
+  $("#gr-de").addEventListener("change", ev => { GR.de = ev.target.value; renderGourmet(); });
+  $("#gr-ate").addEventListener("change", ev => { GR.ate = ev.target.value; renderGourmet(); });
+  $("#gr-hoje").addEventListener("click", () => { GR.de = hoje(); GR.ate = hoje(); GR.estado = "todas"; renderGourmet(); });
+  $("#gr-limpar").addEventListener("click", () => { Object.assign(GR, {q:"", esp:"", estado:"aberto", origem:"", de:hoje(), ate:""}); renderGourmet(); });
+  $("#gr-lista").addEventListener("click", ev => { const d = ev.target.closest("[data-gr-det]"); if (d) { grDetalhe(d.dataset.grDet); return; } const p = ev.target.closest("[data-gr-pdf]"); if (p) grPDF(p.dataset.grPdf); });
+  document.addEventListener("click", ev => { const p = ev.target.closest("#modal-box [data-gr-pdf]"); if (p) grPDF(p.dataset.grPdf); });
 }
 
 // ---------- fornecedores (Pendências e compras; só Administração) ----------
