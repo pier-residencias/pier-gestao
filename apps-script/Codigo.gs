@@ -442,7 +442,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-19 Pier Gestão 2.0 — Reserva do Espaço Gourmet com termo assinado';
+const VERSAO = '2026-11-19 Pier Gestão 2.0 — Reserva do Espaço Gourmet: e-mail na reserva';
 
 function doGet() {
   TABS = {};
@@ -3191,16 +3191,28 @@ function espReserva(r, conta) {
 // fica bloqueada até alguém confirmar. Uma vaga por dia (ou o que estiver no cadastro do espaço).
 let GR_ULTIMA = '';
 const GR_ATIVAS = ['Solicitada', 'Aguardando assinatura', 'Pré-reserva', 'Confirmada'];
+const grFoneDe = s => { const m = String(s || '').match(/\(?\d{2}\)?\s*9?\d{4}[-\s]?\d{4}/); return m ? m[0].trim() : ''; };
 const grEmailDe = s => (String(s || '').toLowerCase().match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/g) || []).filter(emailValido);
 function grUnidades() {
   const pes = linhas(tabela('unp'));
   return linhas(tabela('un')).map(u => {
     const pessoas = [];
-    if (u.proprietario) pessoas.push({ nome: texto(u.proprietario, 80), rel: 'Proprietário', email: grEmailDe(u.contatos)[0] || '' });
+    if (u.proprietario) pessoas.push({ nome: texto(u.proprietario, 80), rel: 'Proprietário', email: grEmailDe(u.contatos)[0] || '', telefone: grFoneDe(u.contatos), fonte: 'un', pid: u.id });
     pes.filter(p => p.unidade === u.id && p.nome).sort((a, b) => (Number(a.ordem) || 0) - (Number(b.ordem) || 0))
-      .forEach(p => { if (!pessoas.some(x => chaveNome(x.nome) === chaveNome(p.nome))) pessoas.push({ nome: texto(p.nome, 80), rel: texto(p.parentesco, 40), email: grEmailDe(p.contatos)[0] || '' }); });
+      .forEach(p => { if (!pessoas.some(x => chaveNome(x.nome) === chaveNome(p.nome))) pessoas.push({ nome: texto(p.nome, 80), rel: texto(p.parentesco, 40), email: grEmailDe(p.contatos)[0] || '', telefone: grFoneDe(p.contatos), fonte: 'unp', pid: p.id }); });
     return { id: u.id, bloco: u.bloco, andar: u.andar, numero: u.numero, pessoas };
   }).filter(u => u.numero);
+}
+// grava e-mail/telefone no campo Contatos do cadastro (proprietário: aba Unidades; morador: aba Moradores)
+function grSalvarContato(p, email, telefone, conta) {
+  if (!p || !p.pid) return false;
+  const t = tabela(p.fonte === 'un' ? 'un' : 'unp'), x = linhas(t).find(z => z.id === p.pid); if (!x) return false;
+  let c = String(x.contatos || '').trim(); const antes = c;
+  if (email && grEmailDe(c).indexOf(email) < 0) { const velho = grEmailDe(c)[0]; c = velho ? c.replace(new RegExp(velho.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), email) : (c ? c + ' · ' : '') + email; }
+  if (telefone && String(c).replace(/\D/g, '').indexOf(telefone.replace(/\D/g, '')) < 0) c = (c ? c + ' · ' : '') + telefone;
+  if (c === antes) return false;
+  const upd = { contatos: texto(c, 500) }; if (p.fonte === 'un') { upd.atualizadoEm = agora(); upd.atualizadoPor = conta.nome; }
+  gravar(t, upd, x._row); return true;
 }
 function grEspaco(nome) {
   const e = linhas(tabela('esp')).find(x => x.nome === nome && x.ativo !== 'Não');
@@ -3231,22 +3243,34 @@ function grReservar(r, conta) {
     if (!u) throw falha('Escolha a unidade.');
     const p = u.pessoas[Number(v.pessoa)];
     if (!p) throw falha('Escolha o condômino solicitante.');
-    Object.assign(o, { tipoSol: 'Unidade', unidadeId: u.id, bloco: texto(u.bloco, 60), unidade: texto(u.numero, 20), solicitante: p.nome, email: p.email, status: 'Aguardando assinatura' });
+    const em = String(v.email === undefined ? p.email : v.email || '').trim().toLowerCase(), fone = texto(v.telefone === undefined ? p.telefone : v.telefone, 30);
+    if (em && !emailValido(em)) throw falha('E-mail para a confirmação inválido.');
+    Object.assign(o, { tipoSol: 'Unidade', unidadeId: u.id, bloco: texto(u.bloco, 60), unidade: texto(u.numero, 20), solicitante: p.nome, email: em, telefone: fone, status: 'Aguardando assinatura' });
+    if (v.salvarCadastro && (em !== p.email || (fone && fone !== p.telefone))) o.cadastroAtualizado = grSalvarContato(p, em !== p.email ? em : '', fone !== p.telefone ? fone : '', conta);
     o.andar = u.andar;
   }
-  delete o.andar;
+  delete o.andar; const cadAt = o.cadastroAtualizado; delete o.cadastroAtualizado;
   gravar(t, o);
   GR_ULTIMA = o.id;
   let env = false;
   if (v.enviarLink && o.email) { try { grTermoLink(linhas(t).find(x => x.id === o.id), conta); env = true; } catch (e) {} }
   AUDIT_DET = 'Reserva do ' + o.espaco + ' em ' + data.split('-').reverse().join('/') + ' para ' + o.solicitante + (o.unidade ? ' (unidade ' + o.unidade + ')' : ' (externo)') + ' · ' + o.status;
-  return 'Reserva guardada. Falta o solicitante ler e assinar o termo para confirmar.' + (env ? ' Link do termo enviado para ' + o.email + '.' : '');
+  return 'Reserva guardada. Falta o solicitante ler e assinar o termo para confirmar.' + (cadAt ? ' O contato foi salvo no cadastro da unidade.' : '') + (env ? ' Link do termo enviado para ' + o.email + '.' : '');
 }
 function grAcao(r, conta) {
   const t = tabela('esr'), x = linhas(t).find(z => z.id === String(r.id || ''));
   if (!x) throw falha('Reserva não encontrada. Atualize a tela.');
   let cfg = null; try { cfg = grEspaco(x.espaco); } catch (e) { cfg = { horario: x.horario || '00:00 – 23:59', cobranca: 'boleto condominial' }; }
   const andar = (linhas(tabela('un')).find(u => u.id === x.unidadeId) || {}).andar || '';
+  if (r.op === 'email') {
+    const em = String(r.email || '').trim().toLowerCase(), fone = texto(r.telefone, 30);
+    if (em && !emailValido(em)) throw falha('E-mail inválido.');
+    gravar(t, { email: em, telefone: fone || x.telefone || '', atualizadoEm: agora(), atualizadoPor: conta.nome }, x._row);
+    let cad = false;
+    if (r.salvarCadastro && x.unidadeId) { const u = grUnidades().find(z => z.id === x.unidadeId), p = u && u.pessoas.find(z => chaveNome(z.nome) === chaveNome(x.solicitante)); if (p) cad = grSalvarContato(p, em !== p.email ? em : '', fone && fone !== p.telefone ? fone : '', conta); }
+    AUDIT_DET = 'Corrigiu o contato da reserva de ' + x.solicitante + ' (' + x.data + ')' + (cad ? ' e o cadastro da unidade' : '');
+    return 'Contato da reserva salvo.' + (cad ? ' O cadastro da unidade também foi atualizado.' : '');
+  }
   if (r.op === 'enviarTermo') { const m = grTermoLink(x, conta); AUDIT_DET = 'Enviou o link do termo para ' + x.solicitante + ' (' + x.data + ')'; return m; }
   if (r.op === 'assinar') {
     if (x.status !== 'Aguardando assinatura') throw falha('Esta reserva não está aguardando assinatura.');
