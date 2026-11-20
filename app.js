@@ -40,7 +40,7 @@ const SETORES_PERM = [["Manutenção","setor_manutencao"],["Limpeza","setor_limp
 const setoresDasPerms = p => { const l = SETORES_PERM.filter(x => p && p[x[1]]).map(x => x[0]); return l.length ? l : ["Manutenção"]; };
 const doSetor = x => setorDe(x) === S.setor;
 const can = p => p === "__perfil_administracao" ? S.perfil === "Administração" : !!(S.perms && S.perms[p]);
-const ABAS_PERM = {gsul:["gua_sul"], gbarco:["gua_sul"], gnorte:["gua_norte"], correspondencias:["__perfil_administracao"],contagem:["contagem_registrar","__perfil_administracao"],aprovacoes:["__perfil_administracao"],painel:["painel"], demandas:["dem_ver","dem_executar","dem_delegar"], os:["os_ver","os_abrir","os_atender","os_gerenciar"], registrar:["registrar_saida","registrar_entrada","registrar_troca","registrar_emprestimo"], itens:["itens_ver"], historico:["historico_ver"], emprestimos:["devolver","registrar_emprestimo"], dashboard:["dashboard"], indicadores:["dashboard"], categorias:["itens_ver"], prestadores:["os_ver","os_abrir","os_atender","os_gerenciar","dem_ver","dem_executar","dem_delegar"], equipe:["os_gerenciar","dem_delegar"], minhaequipe:["os_gerenciar","dem_delegar"], usuarios:["usuarios"], inicio:["pendencias","usuarios","acessos"], pendencias:["pendencias"], pdpainel:["pendencias"], rondas:["ronda_ver","ronda_fazer"], unidades:["un_ver","un_editar"], uncadastro:["un_ver","un_editar"], unconfig:["un_editar"], medlanc:["med_lancar"], medidores:["med_ver","med_lancar"], medrel:["med_ver","med_lancar"], medind:["med_ver","med_lancar"], esreservas:["espacos"], fornecedores:["pendencias"], esvistorias:["espacos"], esespacos:["espacos"], cotacoes:["pendencias"], acessos:["acessos"]};
+const ABAS_PERM = {gsul:["gua_sul"], gbarco:["gua_sul"], gnorte:["gua_norte"], correspondencias:["__perfil_administracao"],contagem:["contagem_registrar","__perfil_administracao"],aprovacoes:["__perfil_administracao"],painel:["painel"], demandas:["dem_ver","dem_executar","dem_delegar"], os:["os_ver","os_abrir","os_atender","os_gerenciar"], registrar:["registrar_saida","registrar_entrada","registrar_troca","registrar_emprestimo"], itens:["itens_ver"], historico:["historico_ver"], emprestimos:["devolver","registrar_emprestimo"], dashboard:["dashboard"], indicadores:["dashboard"], categorias:["itens_ver"], prestadores:["os_ver","os_abrir","os_atender","os_gerenciar","dem_ver","dem_executar","dem_delegar"], equipe:["os_gerenciar","dem_delegar"], minhaequipe:["os_gerenciar","dem_delegar"], usuarios:["usuarios"], inicio:["pendencias","usuarios","acessos"], pendencias:["pendencias"], pdpainel:["pendencias"], rondas:["ronda_ver","ronda_fazer"], unidades:["un_ver","un_editar"], uncadastro:["un_ver","un_editar"], unconfig:["un_editar"], medlanc:["med_lancar"], medidores:["med_ver","med_lancar"], medrel:["med_ver","med_lancar"], medind:["med_ver","med_lancar"], esreservas:["espacos"], fornecedores:["pendencias"],compras:["pendencias"], esvistorias:["espacos"], esespacos:["espacos"], cotacoes:["pendencias"], acessos:["acessos"]};
 // Se o navegador ainda estiver com a página antiga guardada, o menu Administração não existe nela:
 // o resto do sistema continua funcionando normalmente.
 const TEM_ADM = !!(document.getElementById("tab-adm") && document.getElementById("adm-menu") && document.getElementById("t-pendencias"));
@@ -50,6 +50,7 @@ if (!TEM_ADM || !document.getElementById("t-inicio")) delete ABAS_PERM.inicio;
 if (!TEM_ADM || !document.getElementById("t-rondas")) delete ABAS_PERM.rondas;
 if (!TEM_ADM || !document.getElementById("t-unidades")) { delete ABAS_PERM.unidades; delete ABAS_PERM.uncadastro; delete ABAS_PERM.unconfig; }
 if (!TEM_ADM || !document.getElementById("t-fornecedores")) delete ABAS_PERM.fornecedores;
+if (!TEM_ADM || !document.getElementById("t-compras")) delete ABAS_PERM.compras;
 // Espaços (reservas, checklist e espaços) tirados do sistema a pedido da administração (02/11/2026): as telas somem; os dados ficam na planilha.
 // Para voltar, troque ESPACOS_ATIVO para true (e no Apps Script também).
 const ESPACOS_ATIVO = false;
@@ -62,7 +63,7 @@ if (!TEM_ADM || !document.getElementById("t-acessos")) delete ABAS_PERM.acessos;
 // O que aparece depende de como a pessoa entrou: Manutenção (tudo do estoque, OS e demandas),
 // Limpeza (só o estoque da limpeza) ou Administração (só o menu Administração).
 // "inicio" primeiro: é a tela que abre ao entrar pela Administração
-const ABAS_ADM = ["inicio","correspondencias","aprovacoes","pendencias","pdpainel","cotacoes","rondas","unidades","uncadastro","unconfig","medlanc","medidores","medrel","medind","esreservas","esvistorias","esespacos","fornecedores","usuarios","acessos"];
+const ABAS_ADM = ["inicio","correspondencias","aprovacoes","pendencias","pdpainel","cotacoes","compras","rondas","unidades","uncadastro","unconfig","medlanc","medidores","medrel","medind","esreservas","esvistorias","esespacos","fornecedores","usuarios","acessos"];
 // Setor Guaritas (pedido de 04/11/2026): só as telas da Guarita Sul e da Guarita Norte; entra-se pela opção Guaritas
 // "Guarita Sul" (visitantes) saiu do menu a pedido (11/11/2026): na Sul fica só o Barco. Os registros antigos continuam na planilha.
 const ABAS_GUA = ["gbarco","gnorte"];
@@ -77,7 +78,7 @@ const modo = () => S.gua ? "Guaritas" : S.adm ? "Administração" : S.setor;
 // Ronda: só no setor Administração (pedido de 24/10/2026)
 // Unidades e moradores: só no setor Administração (pedido de 24/10/2026; dados pessoais)
 // Central de medições (água, energia e gás): só no setor Administração (pedido de 24/10/2026)
-const SO_ADM = ["correspondencias","inicio","aprovacoes","pdpainel","pendencias","cotacoes","rondas","unidades","uncadastro","unconfig","medlanc","medidores","medrel","medind","esreservas","esvistorias","esespacos","fornecedores"], FORA_LIMPEZA = ["demandas","emprestimos","minhaequipe"], SO_MANUT = ["prestadores","contagem"];
+const SO_ADM = ["correspondencias","inicio","aprovacoes","pdpainel","pendencias","cotacoes","compras","rondas","unidades","uncadastro","unconfig","medlanc","medidores","medrel","medind","esreservas","esvistorias","esespacos","fornecedores"], FORA_LIMPEZA = ["demandas","emprestimos","minhaequipe"], SO_MANUT = ["prestadores","contagem"];
 const naManut = () => !S.adm && S.setor !== "Limpeza";
 const abaNoModo = t => ABAS_GUA.includes(t) ? !!S.gua : S.gua ? false : t === "painel" ? !S.adm : SO_ADM.includes(t) ? S.adm : SO_MANUT.includes(t) ? naManut() : !(!S.adm && S.setor === "Limpeza" && FORA_LIMPEZA.includes(t));
 const ehSindico = () => norm(S.perfil).includes("sindico");
@@ -442,6 +443,7 @@ function setTab(t){
   if (t==="medind") { renderMI(); carregarMI(); carregarMed(); }
   if (t==="esreservas" || t==="esvistorias" || t==="esespacos") { renderEspTudo(); carregarEsp(); }
   if (t==="fornecedores") { renderForn(); carregarForn(); }
+  if (t==="compras") { renderCompras(); carregarCompras(); }
   if (t==="gbarco") { barcoRender(); barcoCarregar(); }
   if (t==="gsul" || t==="gnorte") { const g = t === "gsul" ? "Sul" : "Norte"; guaRender(g); if (g === "Sul" || AV.vista === "visit") guaCarregar(g); }
   if (t==="gnorte") avCarregar();
@@ -1266,7 +1268,7 @@ const MENU = [
     {t:"indicadores", rot:"Indicadores"}, {t:"os", acao:"osnova", perm:"os_abrir", rot:"Abrir OS"}, {t:"demandas", acao:"preventiva", perm:"dem_delegar", rot:"Manutenção preventiva"}, {t:"rondas", rot:"Ronda", b:"b-ronda"}, {t:"prestadores", rot:"Prestadores de serviço", b:"b-prest"},
     {t:"os", rot:"Ordens de serviço (OS)", b:"b-os"}]}, // "Demandas" saiu do menu (02/11/2026); a Manutenção preventiva continua abrindo a tela
   {g:"Compras e pendências", ico:'<path d="M8 5h11M8 12h11M8 19h11M4 5h.01M4 12h.01M4 19h.01"/>', itens:[
-    {t:"pendencias", rot:"Controle de pendências", b:"b-adm"}, {t:"pendencias", acao:"nova", rot:"Incluir pendência"}, {t:"cotacoes", rot:"Cotações"}, {t:"fornecedores", rot:"Fornecedores"}]},
+    {t:"pendencias", rot:"Controle de pendências", b:"b-adm"}, {t:"pendencias", acao:"nova", rot:"Incluir pendência"}, {t:"compras", rot:"Controle de compras"}, {t:"cotacoes", rot:"Cotações"}, {t:"fornecedores", rot:"Fornecedores"}]},
   {g:"Guaritas", ico:'<path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6z"/>', itens:[
     {t:"gbarco", rot:"Barco (Guarita Sul)"}, {t:"gnorte", rot:"Guarita Norte"}]},
   {t:"correspondencias",rot:"Correspondências",ico:'<path d="M3 6h18v12H3zM3 6l9 7 9-7"/>'},
@@ -9165,6 +9167,141 @@ async function esImportarPDF(file){
 if ($("#t-esreservas")) {
   $("#er-pdf").addEventListener("click", () => $("#er-arq").click());
   $("#er-arq").addEventListener("change", async ev => { const f = ev.target.files[0]; ev.target.value = ""; if (f && !(await arqConferir("espImportar", [f]))) return; esImportarPDF(f); });
+}
+
+// ---------- controle de compras (Compras e pendências; Administração) ----------
+// Igual à planilha "Controle de Compras e Cotações": Nº, Item, Status, Data de Compra, Previsão e Data Efetiva da Entrega.
+// Os alertas repetem as regras de cor da planilha (atrasada, sem previsão, datas trocadas, entregue sem data, item repetido).
+const CC = { lista:null, carregando:false, erro:"", em:0, q:"", st:"" };
+const CC_ST = ["Aguardando Entrega", "Entregue", "Devolvido"];
+async function carregarCompras(forcar){
+  if (!TEM_ADM || !S.token || CC.carregando || !podeAba("compras")) return;
+  if (!forcar && CC.lista && Date.now() - CC.em < 60000) { renderCompras(); return; }
+  CC.carregando = true;
+  try { const r = await api("compras"); CC.lista = r.compras || []; CC.em = Date.now(); CC.erro = ""; }
+  catch(e){ CC.erro = /desconhecida/i.test(e.message) ? "O Controle de compras precisa do Apps Script novo (colar o código e implantar uma nova versão)." : e.message; }
+  finally { CC.carregando = false; renderCompras(); }
+}
+const ccAplicar = r => { if (r && Array.isArray(r.compras)) { CC.lista = r.compras; CC.em = Date.now(); return true; } return false; };
+function ccAlertas(c, repetidos){
+  const a = [], h = hoje(), ag = c.status === "Aguardando Entrega";
+  if (ag && c.previsao && c.previsao < h) a.push({t:"Atrasada", g:"crit"});
+  if (ag && !c.previsao) a.push({t:"Sem previsão", g:"warn"});
+  if (c.previsao && c.dataCompra && c.previsao < c.dataCompra) a.push({t:"Previsão antes da compra", g:"warn"});
+  if (c.status === "Entregue" && !c.entregaEm) a.push({t:"Entregue sem data", g:"warn"});
+  if (c.entregaEm && c.dataCompra && c.entregaEm < c.dataCompra) a.push({t:"Entrega antes da compra", g:"warn"});
+  if ([c.dataCompra, c.previsao, c.entregaEm].some(d => d && d < "2020-01-01")) a.push({t:"Data suspeita", g:"warn"});
+  if (repetidos.has(norm(c.item).trim())) a.push({t:"Item repetido", g:"warn"});
+  return a;
+}
+function renderCompras(){
+  const sec = $("#t-compras"); if (!sec || sec.hidden) return;
+  const box = $("#cc-corpo");
+  if (CC.erro && !CC.lista) { box.innerHTML = `<div class="notice crit">${esc(CC.erro)}</div>`; return; }
+  if (!CC.lista) { box.innerHTML = `<div class="empty"><span class="spin" aria-hidden="true"></span> Carregando o controle de compras…</div>`; return; }
+  const cont = {}; CC.lista.forEach(c => { const k = norm(c.item).trim(); cont[k] = (cont[k] || 0) + 1; });
+  const rep = new Set(Object.keys(cont).filter(k => cont[k] > 1));
+  const L = CC.lista.map(c => Object.assign({}, c, {_al: ccAlertas(c, rep)}));
+  const n = st => L.filter(c => c.status === st).length, atras = L.filter(c => c._al.some(a => a.t === "Atrasada")).length;
+  const card = (k, rot, v, cls) => `<button type="button" class="pd-stat ${cls || ""}" aria-pressed="${CC.st === k}" data-cc-f="${k}"><b>${v}</b><span>${rot}</span></button>`;
+  $("#cc-resumo").innerHTML = card("", "Total", L.length) + card("Aguardando Entrega", "Aguardando entrega", n("Aguardando Entrega")) + card("atrasadas", "Atrasadas", atras, atras ? "late" : "")
+    + card("Entregue", "Entregues", n("Entregue")) + card("Devolvido", "Devolvidos", n("Devolvido"));
+  $("#cc-st").value = CC.st;
+  const q = norm(CC.q).trim();
+  const vis = L.filter(c => (!CC.st || (CC.st === "atrasadas" ? c._al.some(a => a.t === "Atrasada") : CC.st === "alertas" ? c._al.length : c.status === CC.st)) && (!q || norm([c.item, c.obs, c.numero].join(" ")).includes(q)));
+  $("#cc-conta").textContent = `${vis.length} de ${L.length} compra${L.length === 1 ? "" : "s"}`;
+  const pill = st => `<span class="cc-st ${st === "Entregue" ? "ok" : st === "Devolvido" ? "dev" : "ag"}">${esc(st)}</span>`;
+  const d = v => v ? fData(v) : "—";
+  box.innerHTML = `<div class="tablebox md-hist cc-tab"><table><thead><tr><th class="num">Nº</th><th>Item</th><th>Status</th><th>Data de compra</th><th>Previsão de entrega</th><th>Entrega efetiva</th><th class="md-ac"><span class="sr-only">Ações</span></th></tr></thead><tbody>
+    ${vis.length ? vis.map(c => `<tr class="cc-${c.status === "Entregue" ? "ok" : c.status === "Devolvido" ? "dev" : "ag"}"><td class="num">${c.numero}</td>
+      <td><b>${esc(c.item)}</b>${c.obs ? `<span class="sub">${esc(c.obs)}</span>` : ""}${c._al.length ? `<span class="cc-als">${c._al.map(a => `<span class="cc-al ${a.g}">${esc(a.t)}</span>`).join("")}</span>` : ""}</td>
+      <td>${pill(c.status)}</td><td>${d(c.dataCompra)}</td><td class="${c._al.some(a => a.t === "Atrasada") ? "cc-atr" : ""}">${d(c.previsao)}</td><td>${d(c.entregaEm)}</td>
+      <td class="md-ac">${c.status === "Aguardando Entrega" ? `<button type="button" class="btn small" data-cc-ent="${esc(c.id)}">Entregue</button>` : ""}<button type="button" class="md-ib" data-cc-ed="${esc(c.id)}" title="Editar" aria-label="Editar ${esc(c.item)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></svg></button></td></tr>`).join("")
+      : `<tr><td colspan="7"><div class="empty">${L.length ? "Nenhuma compra com esses filtros." : "Nenhuma compra registrada. Use <b>+ Nova compra</b> ou <b>Importar planilha</b>."}</div></td></tr>`}</tbody></table></div>`;
+}
+function ccEditar(id){
+  const c = id ? CC.lista.find(x => x.id === id) : null, v = c || {status:"Aguardando Entrega", dataCompra:hoje()};
+  $("#modal-box").innerHTML = `<h3>${c ? `Compra nº ${c.numero}` : "Nova compra"}</h3>
+    <form class="form" id="cc-f" novalidate autocomplete="off">
+      <div class="field full"><label for="cc-item">Item <span class="req">*</span></label><input class="input" id="cc-item" maxlength="150" value="${esc(v.item || "")}" placeholder="Ex.: Envelopamento dos armários"></div>
+      <div class="field"><label for="cc-status">Status</label><select class="input" id="cc-status">${CC_ST.map(x => `<option ${x === v.status ? "selected" : ""}>${x}</option>`).join("")}</select></div>
+      <div class="field"><label for="cc-dc">Data de compra</label><input class="input" type="date" id="cc-dc" value="${esc(v.dataCompra || "")}"></div>
+      <div class="field"><label for="cc-pv">Previsão de entrega</label><input class="input" type="date" id="cc-pv" value="${esc(v.previsao || "")}"></div>
+      <div class="field"><label for="cc-ee">Data efetiva da entrega</label><input class="input" type="date" id="cc-ee" value="${esc(v.entregaEm || "")}"></div>
+      <div class="field full"><label for="cc-obs">Observação</label><textarea class="input" id="cc-obs" rows="2" maxlength="500">${esc(v.obs || "")}</textarea></div>
+    </form>
+    ${c && c.atualizadoPor ? `<p class="hint">Última alteração: ${esc(c.atualizadoPor)} em ${esc(fDataHora(c.atualizadoEm))}.</p>` : c && c.criadoPor ? `<p class="hint">Incluída por ${esc(c.criadoPor)}.</p>` : ""}
+    <div class="actions"><button class="btn primary" type="button" id="cc-ok">Salvar</button><button class="btn" type="button" id="cc-x">Cancelar</button>${c ? `<button class="link danger" type="button" id="cc-del">Excluir</button>` : ""}<span class="hint" id="cc-msg"></span></div>`;
+  $("#modal").hidden = false; $("#cc-x").onclick = fecharModal; $("#cc-item").focus();
+  $("#cc-status").onchange = () => { if ($("#cc-status").value === "Entregue" && !$("#cc-ee").value) $("#cc-ee").value = hoje(); };
+  const fim = r => { if (ccAplicar(r)) { fecharModal(); renderCompras(); } };
+  $("#cc-ok").onclick = () => {
+    const m = $("#cc-msg"); m.className = "hint err";
+    if (!$("#cc-item").value.trim()) { m.textContent = "Escreva o item comprado."; return; }
+    enviar($("#cc-ok"), m, "compraSalvar", {compra:Object.assign(c ? {id:c.id} : {}, {item:$("#cc-item").value.trim(), status:$("#cc-status").value, dataCompra:$("#cc-dc").value, previsao:$("#cc-pv").value, entregaEm:$("#cc-ee").value, obs:$("#cc-obs").value.trim()})}, fim);
+  };
+  if ($("#cc-del")) $("#cc-del").onclick = ev => { const b = ev.target; if (!b.dataset.conf) { b.dataset.conf = "1"; b.textContent = "Confirmar exclusão"; return; } enviar(b, $("#cc-msg"), "compraSalvar", {op:"excluir", compra:{id:c.id}}, fim); };
+}
+// planilha: mesmas colunas da planilha do Pier
+const CC_COLS = [["numero","Itens",6],["item","Item",40],["status","Status",20],["dataCompra","Datas de Compra",16],["previsao","Previsão de Entrega",18],["entregaEm","Data Efetiva da Entrega",20],["obs","Observação",34]];
+const CC_CAB = h => { const n = norm(h).replace(/\s+/g, " ").trim();
+  return /^(item|descricao|produto|servico)$/.test(n) ? "item" : /^status|^situacao/.test(n) ? "status" : /compra/.test(n) && /data/.test(n) ? "dataCompra" : /^previs/.test(n) ? "previsao" : /efetiva|entregue em|data de entrega|entrega efetiva/.test(n) ? "entregaEm" : /^observ/.test(n) ? "obs" : ""; };
+function ccExportar(){
+  if (!CC.lista) return;
+  try {
+    const X = xlsxMini(), cab = {b:true, cor:"FFFFFFFF", fill:"FF1F4E79", wrap:false};
+    CC_COLS.forEach(([, rot, w], j) => { X.cel(1, j + 1, rot, cab); X.col(j + 1, w); });
+    CC.lista.forEach((c, i) => CC_COLS.forEach(([k], j) => X.cel(i + 2, j + 1, k === "numero" ? c.numero : /^(dataCompra|previsao|entregaEm)$/.test(k) ? (c[k] ? fData(c[k]) : "") : String(c[k] ?? ""))));
+    mdBaixar(X.gerar("Controle de Compras"), `Controle de Compras - Pier ${hoje()}.xlsx`);
+  } catch(e){ toast(e.message || "Não foi possível gerar a planilha.", true); }
+}
+async function ccImportar(file){
+  if (!file || !CC.lista) return;
+  if (!/\.xlsx$/i.test(file.name)) { toast("Escolha a planilha em .xlsx.", true); return; }
+  let wb;
+  try { await carregarXLSX(); wb = XLSX.read(await file.arrayBuffer(), {type:"array", cellDates:true}); }
+  catch(e){ toast(e.message || "Não foi possível ler a planilha.", true); return; }
+  let lista = [], aba = "";
+  for (const nome of wb.SheetNames) {
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[nome], {header:1, defval:"", raw:true});
+    for (let r = 0; r < Math.min(rows.length, 15) && !lista.length; r++) {
+      const col = {}; (rows[r] || []).forEach((h, c) => { const k = CC_CAB(h); if (k && !(k in col)) col[k] = c; });
+      if (!("item" in col) || !("status" in col)) continue;
+      for (let rr = r + 1; rr < rows.length; rr++) {
+        const L = rows[rr] || [], o = {_linha:rr + 1};
+        o.item = String(L[col.item] ?? "").trim(); if (!o.item) continue;
+        o.status = String(L[col.status] ?? "").trim();
+        ["dataCompra","previsao","entregaEm"].forEach(k => { o[k] = k in col ? dataPlanilha(L[col[k]]) : ""; });
+        o.obs = "obs" in col ? String(L[col.obs] ?? "").trim() : "";
+        lista.push(o);
+      }
+      aba = nome;
+    }
+    if (lista.length) break;
+  }
+  if (!lista.length) { toast('Não encontrei as compras (a planilha precisa das colunas "Item" e "Status").', true); return; }
+  const chave = x => norm(x.item).trim() + "|" + (x.dataCompra || "");
+  const ja = new Set(CC.lista.map(chave)), novas = lista.filter(x => !ja.has(chave(x))).length;
+  $("#modal-box").innerHTML = `<h3>Importar planilha de compras</h3>
+    <p>Aba <b>${esc(aba)}</b>: <b>${lista.length}</b> compra${lista.length === 1 ? "" : "s"} — <b>${novas}</b> nova${novas === 1 ? "" : "s"} e <b>${lista.length - novas}</b> já no sistema (mesmo item e data de compra), que ${lista.length - novas === 1 ? "será atualizada" : "serão atualizadas"}.</p>
+    <div class="tablebox md-hist"><table><thead><tr><th>Item</th><th>Status</th><th>Compra</th><th>Previsão</th><th>Entrega</th></tr></thead><tbody>${lista.slice(0, 8).map(x => `<tr><td>${esc(x.item)}</td><td>${esc(x.status || "Aguardando Entrega")}</td><td>${x.dataCompra ? fData(x.dataCompra) : "—"}</td><td>${x.previsao ? fData(x.previsao) : "—"}</td><td>${x.entregaEm ? fData(x.entregaEm) : "—"}</td></tr>`).join("")}</tbody></table></div>
+    ${lista.length > 8 ? `<p class="hint">… e mais ${lista.length - 8}.</p>` : ""}
+    <div class="actions" style="margin-top:12px"><button class="btn primary" type="button" id="ci-ok">Importar</button><button class="btn" type="button" id="ci-x">Cancelar</button><span class="hint" id="ci-msg"></span></div>`;
+  $("#modal").hidden = false; $("#ci-x").onclick = fecharModal;
+  $("#ci-ok").onclick = () => enviar($("#ci-ok"), $("#ci-msg"), "compraImportar", {lista}, r => { if (ccAplicar(r)) { fecharModal(); renderCompras(); } });
+}
+if ($("#t-compras")) {
+  $("#cc-exp").addEventListener("click", ccExportar);
+  $("#cc-imp").addEventListener("click", () => $("#cc-arq").click());
+  $("#cc-arq").addEventListener("change", ev => { const f = ev.target.files[0]; ev.target.value = ""; ccImportar(f); });
+  $("#cc-novo").addEventListener("click", () => CC.lista && ccEditar(null));
+  $("#cc-q").addEventListener("input", ev => { CC.q = ev.target.value; renderCompras(); });
+  $("#cc-st").addEventListener("change", ev => { CC.st = ev.target.value; renderCompras(); });
+  $("#cc-resumo").addEventListener("click", ev => { const b = ev.target.closest("[data-cc-f]"); if (b) { CC.st = CC.st === b.dataset.ccF ? "" : b.dataset.ccF; renderCompras(); } });
+  $("#cc-corpo").addEventListener("click", ev => {
+    const e = ev.target.closest("[data-cc-ed]"); if (e) { ccEditar(e.dataset.ccEd); return; }
+    const b = ev.target.closest("[data-cc-ent]"); if (b) enviar(b, null, "compraSalvar", {op:"entregue", compra:{id:b.dataset.ccEnt, entregaEm:hoje()}}, r => { ccAplicar(r); renderCompras(); });
+  });
 }
 
 // ---------- fornecedores (Pendências e compras; só Administração) ----------

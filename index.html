@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="estilo.css?v=20261102lote">
-<link rel="stylesheet" href="visual-2.css?v=20261117com2">
+<link rel="stylesheet" href="visual-2.css?v=20261119cc">
 <style>
 html.pier-iniciando body>main,html.pier-iniciando body>header,html.pier-iniciando body>aside,html.pier-iniciando #side-fundo {visibility:hidden;}
 #pier-inicio{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;background:#0c1117;color:#e9f0f5;padding:24px;font:14px system-ui,sans-serif;text-align:center;}
@@ -408,6 +408,17 @@ html.pier-iniciando body>main,html.pier-iniciando body>header,html.pier-iniciand
     <div class="toolbar md-filtros"><input class="input" id="fo-q" type="search" placeholder="Empresa, contato ou CNPJ" aria-label="Pesquisar"><select class="input" id="fo-cat" aria-label="Categoria"><option value="">Todas as categorias</option></select>
       <label class="md-chk"><input type="checkbox" id="fo-inat"> Mostrar inativos</label><span class="hint" id="fo-conta"></span></div>
     <div id="fo-corpo"><div class="empty">Carregando…</div></div>
+  </section>
+
+  <!-- CONTROLE DE COMPRAS (Compras e pendências; Administração) -->
+  <section id="t-compras" hidden>
+    <div class="un-head"><div><h2 class="sec">Controle de compras</h2><p class="muted">O que foi comprado, a previsão e a entrega efetiva. Mesmas colunas da planilha de controle de compras.</p></div>
+      <div class="un-ferr"><button class="btn" type="button" id="cc-imp">Importar planilha</button><button class="btn" type="button" id="cc-exp">Exportar planilha</button><input type="file" id="cc-arq" accept=".xlsx" hidden><button class="btn primary" type="button" id="cc-novo">+ Nova compra</button></div></div>
+    <div class="pd-stats cc-stats" id="cc-resumo"></div>
+    <div class="toolbar md-filtros"><input class="input" id="cc-q" type="search" placeholder="Pesquisar item" aria-label="Pesquisar item">
+      <select class="input" id="cc-st" aria-label="Status"><option value="">Todos os status</option><option>Aguardando Entrega</option><option>Entregue</option><option>Devolvido</option><option value="atrasadas">Atrasadas</option><option value="alertas">Com alerta</option></select>
+      <span class="hint" id="cc-conta"></span></div>
+    <div id="cc-corpo"><div class="empty">Carregando…</div></div>
   </section>
 
   <section id="t-rondas" hidden>
@@ -815,7 +826,7 @@ html.pier-iniciando body>main,html.pier-iniciando body>header,html.pier-iniciand
 <script src="config.js"></script>
 <script src="nfe.js?v=20261101os5"></script>
 <script src="vendor/qrcode.js?v=2.0.4"></script>
-<script src="app.js?v=20261119menu"></script>
+<script src="app.js?v=20261119cc"></script>
 
 </body>
 </html>
