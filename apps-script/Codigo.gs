@@ -442,7 +442,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-19 Pier Gestão 2.0 — Reserva do Espaço Gourmet: e-mail na reserva';
+const VERSAO = '2026-11-19 Pier Gestão 2.0 — Reserva do Espaço Gourmet: excluir reserva';
 
 function doGet() {
   TABS = {};
@@ -3170,7 +3170,7 @@ function espReserva(r, conta) {
   const t = tabela('esr'), rs = linhas(t), v = r.reserva || {};
   const ja = v.id ? rs.find(x => x.id === String(v.id)) : null;
   if (v.id && !ja) throw falha('Reserva não encontrada. Atualize a tela.');
-  if (r.op === 'excluir') { if (!ja) throw falha('Reserva não encontrada.'); t.sh.deleteRow(ja._row); AUDIT_DET = 'Excluiu a reserva ' + (ja.solicitacao || ja.id); return 'Reserva excluída.'; }
+  if (r.op === 'excluir') { grSoAdm(conta); if (!ja) throw falha('Reserva não encontrada.'); t.sh.deleteRow(ja._row); AUDIT_DET = 'Excluiu a reserva ' + (ja.solicitacao || ja.id) + ' (' + (ja.solicitante || '') + ', ' + ja.data + ')'; return 'Reserva excluída.'; }
   const data = String(v.data || '');
   if (!dataOk(data)) throw falha('Informe a data da reserva.');
   const status = ESP_STATUS.indexOf(v.status) >= 0 ? v.status : 'Confirmada';
@@ -3214,6 +3214,7 @@ function grSalvarContato(p, email, telefone, conta) {
   const upd = { contatos: texto(c, 500) }; if (p.fonte === 'un') { upd.atualizadoEm = agora(); upd.atualizadoPor = conta.nome; }
   gravar(t, upd, x._row); return true;
 }
+function grSoAdm(conta) { if (!conta || conta.perfil !== PERFIL_TOTAL) { const e = falha('Só o perfil Administração pode excluir reservas.'); e.negado = true; throw e; } }
 function grEspaco(nome) {
   const e = linhas(tabela('esp')).find(x => x.nome === nome && x.ativo !== 'Não');
   if (!e) throw falha('Espaço não encontrado ou inativo.');
@@ -3262,6 +3263,12 @@ function grAcao(r, conta) {
   if (!x) throw falha('Reserva não encontrada. Atualize a tela.');
   let cfg = null; try { cfg = grEspaco(x.espaco); } catch (e) { cfg = { horario: x.horario || '00:00 – 23:59', cobranca: 'boleto condominial' }; }
   const andar = (linhas(tabela('un')).find(u => u.id === x.unidadeId) || {}).andar || '';
+  if (r.op === 'excluir') {
+    grSoAdm(conta);
+    t.sh.deleteRow(x._row);
+    AUDIT_DET = 'Excluiu a reserva do ' + x.espaco + ' de ' + (x.solicitante || '—') + ' em ' + String(x.data).split('-').reverse().join('/') + ' (' + x.status + ')' + (r.motivo ? ': ' + texto(r.motivo, 200) : '') + (x.termoArquivo ? '; o termo assinado continua guardado no Drive' : '');
+    return 'Reserva excluída. A data ficou livre.';
+  }
   if (r.op === 'email') {
     const em = String(r.email || '').trim().toLowerCase(), fone = texto(r.telefone, 30);
     if (em && !emailValido(em)) throw falha('E-mail inválido.');

@@ -349,3 +349,4 @@
 .gr-contbox{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:12px}.gr-contbox .md-chk,.gr-contbox .actions{grid-column:1/-1}
 @media (max-width:640px){.gr-contbox{grid-template-columns:1fr}}
 .un-gr{margin-top:12px}.un-gr-l{list-style:none;padding:0;margin:6px 0 10px;display:grid;gap:6px}.un-gr-l li{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:14px}
+.gr-delbox{grid-template-columns:1fr;border-color:color-mix(in srgb,var(--crit,#c0392b) 50%,var(--line))}.gr-delbox p{margin:0}
