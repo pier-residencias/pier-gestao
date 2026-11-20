@@ -443,7 +443,7 @@ function setTab(t){
   if (t==="medind") { renderMI(); carregarMI(); carregarMed(); }
   if (t==="esreservas" || t==="esvistorias" || t==="esespacos") { renderEspTudo(); carregarEsp(); }
   if (t==="fornecedores") { renderForn(); carregarForn(); }
-  if (t==="gourmet") { renderGourmet(); carregarGourmet(); }
+  if (t==="gourmet") { renderGourmet(); carregarGourmet(true); }
   if (t==="compras") { renderCompras(); carregarCompras(); }
   if (t==="gbarco") { barcoRender(); barcoCarregar(); }
   if (t==="gsul" || t==="gnorte") { const g = t === "gsul" ? "Sul" : "Norte"; guaRender(g); if (g === "Sul" || AV.vista === "visit") guaCarregar(g); }
@@ -7304,12 +7304,26 @@ function unFicha(id){
     <div class="os-grid"><section><h4>Pets (${u.pets.length})</h4>${u.pets.length ? `<ul class="pr-docs">${u.pets.map(p => `<li>${esc(p.descricao)}</li>`).join("")}</ul>` : `<p class="muted">Nenhum.</p>`}</section>
       <section><h4>Veículos (${u.veiculos.length})</h4>${u.veiculos.length ? `<ul class="pr-docs">${u.veiculos.map(v => `<li><b class="mono">${esc(v.placa || "sem placa")}</b> ${esc([v.marca, v.modelo, v.cor].filter(Boolean).join(" · "))}${v.vaga ? ` · vaga ${esc(v.vaga)}` : ""}${v.tag ? ` · TAG ${esc(v.tag)}` : ""}</li>`).join("")}</ul>` : `<p class="muted">Nenhum.</p>`}</section></div>
     ${miPode() ? `<section class="un-agua" id="un-f-agua"></section>` : ""}
+    ${podeAba("gourmet") && $("#t-gourmet") ? `<section class="un-gr" id="un-f-gr"><h4>Espaço Gourmet</h4><div class="empty"><span class="spin" aria-hidden="true"></span> Carregando as reservas…</div></section>` : ""}
     <div class="actions" style="margin-top:12px">${unPode() ? `<button class="btn primary" type="button" id="un-f-ed">Atualizar cadastro</button>` : ""}<button class="btn" type="button" id="un-f-pr">Imprimir ficha</button><button class="btn" type="button" id="un-f-x">Fechar</button></div>`;
   $("#modal").hidden = false;
   $("#un-f-x").onclick = fecharModal; $("#un-f-x").focus();
   $("#un-f-pr").onclick = () => unImprimir(u);
   if ($("#un-f-ed")) $("#un-f-ed").onclick = () => { fecharModal(); unEditar(u.id); };
   miNaFicha(u);
+  grNaFicha(u);
+}
+// Unidades › ficha: reservas do Espaço Gourmet desta unidade e atalho para reservar já com a unidade escolhida
+async function grNaFicha(u){
+  const box = $("#un-f-gr"); if (!box) return;
+  if (!GR.d) { try { const r = await api("gourmet", {}, {soLer:true}); GR.d = {espacos:r.espacos || [], reservas:r.reservas || [], unidades:r.unidadesRes || []}; GR.em = Date.now(); } catch(e){ box.innerHTML = `<h4>Espaço Gourmet</h4><p class="muted">${esc(e.message || "Não foi possível carregar as reservas.")}</p>`; return; } }
+  if (!$("#un-f-gr")) return;
+  const l = GR.d.reservas.filter(x => x.unidadeId === u.id || (!x.unidadeId && x.unidade && String(x.unidade) === String(u.numero) && unBlocoCurto(String(x.bloco)) === unBlocoCurto(String(u.bloco)))).sort((a, b) => String(b.data).localeCompare(String(a.data)));
+  const prox = l.filter(x => GR_ABERTAS.includes(x.status) && x.data >= hoje());
+  box.innerHTML = `<h4>Espaço Gourmet <span class="muted">(${l.length} reserva${l.length === 1 ? "" : "s"}${prox.length ? `, ${prox.length} em aberto` : ""})</span></h4>
+    ${l.length ? `<ul class="un-gr-l">${l.slice(0, 6).map(x => `<li><b>${fData(x.data)}</b> · ${esc(x.solicitante || "—")} <span class="cc-st ${grStatusCls(x.status)}">${esc(grStatusRot(x.status))}</span>${x.termoAssinadoEm ? ` <span class="gr-tag">✍ termo assinado</span>` : ""}</li>`).join("")}</ul>${l.length > 6 ? `<p class="hint">… e mais ${l.length - 6} na aba Reserva do Espaço Gourmet.</p>` : ""}` : `<p class="muted">Nenhuma reserva desta unidade.</p>`}
+    <button type="button" class="btn small" id="un-f-gr-novo">+ Reservar Espaço Gourmet para esta unidade</button>`;
+  $("#un-f-gr-novo").onclick = () => { $("#modal-box").classList.remove("largo"); fecharModal(); GR.q = ""; setTab("gourmet"); setTimeout(() => grNova({unidade:u.id}), 50); };
 }
 function unExportar(){
   if (!UN.lista) return;
@@ -9500,7 +9514,7 @@ function renderGourmet(){
     : `<div class="empty">Nenhuma reserva com esses filtros. Use <b>+ Nova reserva</b>.</div>`;
 }
 // ---- nova reserva: unidade ou externo, espaço, calendário e período ----
-function grNova(){
+function grNova(pre){
   if (!GR.d) return;
   if (!grEspacos().length) { toast("Cadastre o espaço (com o valor) antes de reservar.", true); return; }
   const st = {tipo:"unidade", un:null, mes:hoje().slice(0, 7), data:"", esp:grPadrao()};
@@ -9511,6 +9525,9 @@ function grNova(){
       <div class="full" id="gr-sol-un">
         <div class="field gr-busca"><label for="gr-un-q">Unidade <span class="req">*</span></label><input class="input" id="gr-un-q" placeholder="Pesquisar bloco, andar, número da unidade…" autocomplete="off"><div class="gr-sug" id="gr-un-sug" hidden></div></div>
         <div class="field"><label for="gr-pessoa">Condômino solicitante <span class="req">*</span></label><select class="input" id="gr-pessoa" disabled><option>Primeiro escolha a unidade</option></select><span class="hint" id="gr-pessoa-h"></span></div>
+        <div class="field"><label for="gr-email">E-mail para a confirmação</label><input class="input" id="gr-email" type="email" maxlength="100" placeholder="nome@exemplo.com" disabled></div>
+        <div class="field"><label for="gr-tel">Telefone</label><input class="input" id="gr-tel" maxlength="30" placeholder="(21) 90000-0000" disabled></div>
+        <label class="md-chk full gr-salvar" hidden><input type="checkbox" id="gr-salvar" checked> Salvar este contato no cadastro da unidade</label>
       </div>
       <div class="full gr-ext" id="gr-sol-ext" hidden>
         <div class="field"><label for="gr-ext-nome">Nome do solicitante <span class="req">*</span></label><input class="input" id="gr-ext-nome" maxlength="80"></div>
@@ -9536,11 +9553,17 @@ function grNova(){
     box.hidden = !l.length || (st.un && $("#gr-un-q").value === st.un.rot); box.innerHTML = l.map(u => `<button type="button" data-gr-un="${esc(u.id)}"><span aria-hidden="true">▣</span> ${esc(u.rot)}</button>`).join(""); };
   $("#gr-un-q").addEventListener("input", () => { st.un = null; $("#gr-pessoa").disabled = true; $("#gr-pessoa").innerHTML = "<option>Primeiro escolha a unidade</option>"; $("#gr-pessoa-h").textContent = ""; sug(); });
   $("#gr-un-q").addEventListener("focus", sug);
-  $("#gr-un-sug").addEventListener("click", ev => { const b = ev.target.closest("[data-gr-un]"); if (!b) return; st.un = unis.find(u => u.id === b.dataset.grUn); $("#gr-un-q").value = st.un.rot; $("#gr-un-sug").hidden = true;
+  const escolherUn = id => { st.un = unis.find(u => u.id === id); if (!st.un) return; $("#gr-un-q").value = st.un.rot; $("#gr-un-sug").hidden = true;
     const ps = st.un.pessoas; $("#gr-pessoa").disabled = !ps.length;
     $("#gr-pessoa").innerHTML = ps.length ? ps.map((p, i) => `<option value="${i}">${esc(p.nome)}${p.rel ? " (" + esc(p.rel) + ")" : ""}</option>`).join("") : "<option>Nenhum morador cadastrado nesta unidade</option>";
-    const dica = () => { const p = ps[+$("#gr-pessoa").value]; $("#gr-pessoa-h").textContent = p ? (p.email ? "Confirmação vai para " + p.email : "Sem e-mail no cadastro: a reserva é guardada, mas nenhum e-mail é enviado.") : ""; };
-    $("#gr-pessoa").onchange = dica; dica(); });
+    const dica = () => { const p = ps[+$("#gr-pessoa").value];
+      $("#gr-email").disabled = $("#gr-tel").disabled = !p; $("#gr-email").value = p ? p.email || "" : ""; $("#gr-tel").value = p ? p.telefone || "" : "";
+      $("#gr-pessoa-h").textContent = p ? (p.email ? "E-mail do cadastro. Corrija abaixo se precisar." : "Sem e-mail no cadastro: digite abaixo para mandar o link do termo e a confirmação.") : "";
+      mudou(); };
+    const mudou = () => { const p = ps[+$("#gr-pessoa").value]; const dif = !!p && (($("#gr-email").value.trim().toLowerCase() !== (p.email || "")) || ($("#gr-tel").value.trim() && $("#gr-tel").value.trim() !== (p.telefone || ""))); $("#modal-box .gr-salvar").hidden = !dif; };
+    $("#gr-email").oninput = mudou; $("#gr-tel").oninput = mudou;
+    $("#gr-pessoa").onchange = dica; dica(); };
+  $("#gr-un-sug").addEventListener("click", ev => { const b = ev.target.closest("[data-gr-un]"); if (b) escolherUn(b.dataset.grUn); });
   document.addEventListener("click", function fora(ev){ if (!$("#gr-un-sug")) return document.removeEventListener("click", fora); if (!ev.target.closest(".gr-busca")) $("#gr-un-sug").hidden = true; });
   // calendário
   const desenhar = () => {
@@ -9572,14 +9595,18 @@ function grNova(){
   });
   $("#gr-espaco").onchange = () => { st.esp = $("#gr-espaco").value; st.data = ""; desenhar(); };
   desenhar();
+  if (pre && pre.unidade) escolherUn(pre.unidade);
   $("#gr-ok").onclick = () => {
     const msg = $("#gr-msg"); msg.className = "hint err";
     const v = {espaco:st.esp, data:st.data, obs:$("#gr-obs").value.trim(), tipo:st.tipo};
-    if (st.tipo === "unidade") { if (!st.un) { msg.textContent = "Escolha a unidade."; return; } if (!st.un.pessoas.length) { msg.textContent = "Esta unidade não tem morador cadastrado (Unidades › Atualização cadastral)."; return; } v.unidade = st.un.id; v.pessoa = +$("#gr-pessoa").value; }
+    if (st.tipo === "unidade") { if (!st.un) { msg.textContent = "Escolha a unidade."; return; } if (!st.un.pessoas.length) { msg.textContent = "Esta unidade não tem morador cadastrado (Unidades › Atualização cadastral)."; return; } v.unidade = st.un.id; v.pessoa = +$("#gr-pessoa").value;
+      v.email = $("#gr-email").value.trim(); v.telefone = $("#gr-tel").value.trim(); v.salvarCadastro = !$("#modal-box .gr-salvar").hidden && $("#gr-salvar").checked;
+      if (v.email && !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(v.email)) { msg.textContent = "E-mail inválido."; return; } }
     else { v.nome = $("#gr-ext-nome").value.trim(); v.email = $("#gr-ext-email").value.trim(); v.cpf = $("#gr-ext-cpf").value.trim(); v.telefone = $("#gr-ext-tel").value.trim();
       if (!v.nome) { msg.textContent = "Informe o nome do solicitante."; return; } }
     if (!st.data) { msg.textContent = "Escolha a data no calendário."; return; }
     enviar($("#gr-ok"), msg, "grReservar", {reserva:v}, r => { grAplicar(r); renderGourmet();
+      if (v.salvarCadastro) { const u = GR.d.unidades.find(z => z.id === v.unidade), pp = u && u.pessoas[v.pessoa]; if (pp) { pp.email = v.email.toLowerCase(); if (v.telefone) pp.telefone = v.telefone; } }
       const id = r.gr && r.gr.id, x = id && GR.d.reservas.find(z => z.id === id);
       $("#modal-box").innerHTML = `<div class="gr-ok"><svg viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="24"/><path d="M15 27l7 7 15-16"/></svg><h3>Guardado</h3>
         <p>A data ficou reservada. <b>Para confirmar, ${esc(x ? x.solicitante.split(/\s+/)[0] : "o solicitante")} precisa ler as regras e assinar o termo.</b></p>
@@ -9598,14 +9625,21 @@ function grDetalhe(id){
   const li = (k, v) => v ? `<div><dt>${k}</dt><dd>${v}</dd></div>` : "";
   $("#modal-box").innerHTML = `<h3>${esc(x.espaco)} · ${fData(x.data)}</h3><span class="cc-st ${grStatusCls(x.status)}">${esc(grStatusRot(x.status))}</span>
     <dl class="gr-dl">${li("Data", esc(grDataLonga(x.data)))}${li("Horário", esc(x.horario || ""))}${li("Período", esc(x.periodo || "Dia inteiro"))}${li("Solicitante", esc(x.solicitante || ""))}
-      ${li("Unidade", x.unidade ? esc(grRotUn(x.bloco, "", x.unidade)) : "Externo")}${li("E-mail", esc(x.email || ""))}${li("Telefone", esc(x.telefone || ""))}${li("CPF", esc(x.cpf || ""))}
+      ${li("Unidade", x.unidade ? esc(grRotUn(x.bloco, "", x.unidade)) : "Externo")}${li("E-mail", x.email ? esc(x.email) : `<span class="muted">sem e-mail</span>`)}${li("Telefone", esc(x.telefone || ""))}${li("CPF", esc(x.cpf || ""))}
       ${li("Valor", x.valor === "" ? "" : grBRL(x.valor))}${li("Observações", esc(x.obs || ""))}${li("Registrada", esc(fDataHora(x.registradoEm) + (x.registradoPor ? " por " + x.registradoPor : "")))}${li("Termo", x.termoAssinadoEm ? esc("Assinado por " + (x.termoNome || "") + " em " + fDataHora(x.termoAssinadoEm) + (x.termoVia ? " · " + x.termoVia : "")) : x.status === "Aguardando assinatura" ? (x.termoLinkEm ? "Link enviado em " + esc(fDataHora(x.termoLinkEm)) + ", ainda não assinado" : "Ainda não assinado") : "")}${li("E-mail de confirmação", x.avisoEm ? esc(fDataHora(x.avisoEm)) : "")}</dl>
     <div class="actions" id="gr-det-ac">${x.status === "Aguardando assinatura" ? `<button class="btn primary" type="button" data-gr-ass="${esc(x.id)}">Assinar termo agora</button>${x.email ? `<button class="btn" type="button" data-gr-op="enviarTermo">${x.termoLinkEm ? "Reenviar" : "Enviar"} link do termo</button>` : ""}` : ""}${x.termoArquivo ? `<button class="btn" type="button" data-gr-termo="${esc(x.id)}">Ver termo assinado</button>` : ""}${aguard ? `<button class="btn primary" type="button" data-gr-op="confirmar">Confirmar pagamento</button>` : ""}${x.email ? `<button class="btn" type="button" data-gr-op="reenviar">Reenviar e-mail</button>` : ""}
-      <button class="btn" type="button" data-gr-pdf="${esc(x.id)}">Comprovante (PDF)</button>${aberta ? `<button class="btn danger" type="button" data-gr-op="cancelar">Cancelar reserva</button>` : ""}<button class="btn" type="button" id="gr-dx">Fechar</button><span class="hint" id="gr-dmsg"></span></div>
+      <button class="btn" type="button" data-gr-pdf="${esc(x.id)}">Comprovante (PDF)</button>${aberta ? `<button class="btn danger" type="button" data-gr-op="cancelar">Cancelar reserva</button>` : ""}${aberta ? `<button class="btn" type="button" id="gr-cont">${x.email ? "Corrigir e-mail" : "Adicionar e-mail"}</button>` : ""}<button class="btn" type="button" id="gr-dx">Fechar</button><span class="hint" id="gr-dmsg"></span></div>
+    <div id="gr-contbox" class="gr-contbox" hidden><div class="field"><label for="gr-cem">E-mail</label><input class="input" id="gr-cem" type="email" maxlength="100" value="${esc(x.email || "")}"></div><div class="field"><label for="gr-ctel">Telefone</label><input class="input" id="gr-ctel" maxlength="30" value="${esc(x.telefone || "")}"></div>
+      ${x.unidadeId ? `<label class="md-chk"><input type="checkbox" id="gr-csalvar" checked> Salvar também no cadastro da unidade</label>` : ""}<div class="actions"><button class="btn primary" type="button" id="gr-csave">Salvar contato</button></div></div>
     <div id="gr-canc" hidden><div class="field"><label for="gr-mot">Motivo do cancelamento</label><input class="input" id="gr-mot" maxlength="200"></div>${x.email ? `<label class="md-chk"><input type="checkbox" id="gr-av" checked> Avisar o solicitante por e-mail</label>` : ""}
       <div class="actions"><button class="btn danger" type="button" id="gr-cok">Confirmar cancelamento</button></div></div>`;
   $("#modal").hidden = false; $("#gr-dx").onclick = fecharModal;
   const fim = r => { grAplicar(r); fecharModal(); renderGourmet(); };
+  if ($("#gr-cont")) $("#gr-cont").onclick = () => { $("#gr-contbox").hidden = false; $("#gr-cem").focus(); };
+  if ($("#gr-csave")) $("#gr-csave").onclick = () => { const em = $("#gr-cem").value.trim(); if (em && !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(em)) { $("#gr-dmsg").className = "hint err"; $("#gr-dmsg").textContent = "E-mail inválido."; return; }
+    enviar($("#gr-csave"), $("#gr-dmsg"), "grAcao", {id:x.id, op:"email", email:em, telefone:$("#gr-ctel").value.trim(), salvarCadastro:!!($("#gr-csalvar") && $("#gr-csalvar").checked)}, r => { grAplicar(r);
+      if ($("#gr-csalvar") && $("#gr-csalvar").checked) { const u = GR.d.unidades.find(z => z.id === x.unidadeId), pp = u && u.pessoas.find(z => norm(z.nome) === norm(x.solicitante)); if (pp) { pp.email = em.toLowerCase(); if ($("#gr-ctel").value.trim()) pp.telefone = $("#gr-ctel").value.trim(); } }
+      renderGourmet(); grDetalhe(x.id); }); };
   $("#gr-det-ac").addEventListener("click", ev => {
     const a = ev.target.closest("[data-gr-ass]"); if (a) { grAssinarTela(a.dataset.grAss); return; }
     const tt = ev.target.closest("[data-gr-termo]"); if (tt) { grVerTermo(tt.dataset.grTermo, tt); return; }
