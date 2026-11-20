@@ -206,7 +206,7 @@ const ABAS = {
     nome: 'Contas de consumo',
     criar: true,
     cols: [['id', 'ID'], ['medidor', 'ID do medidor'], ['mes', 'Mês de referência'], ['consumo', 'Consumo da conta'], ['valor', 'Valor (R$)'], ['vencimento', 'Vencimento'],
-      ['obs', 'Observação'], ['registradoEm', 'Registrado em'], ['registradoPor', 'Registrado por'], ['atualizadoEm', 'Corrigido em'], ['atualizadoPor', 'Corrigido por']],
+      ['obs', 'Observação'], ['registradoEm', 'Registrado em'], ['registradoPor', 'Registrado por'], ['atualizadoEm', 'Corrigido em'], ['atualizadoPor', 'Corrigido por'], ['pdf', 'PDF da conta']],
     num: ['consumo', 'valor']
   },
   // registro dos arquivos importados (impressão digital SHA-256): avisa quando o mesmo arquivo vai ser importado de novo
@@ -438,7 +438,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-19 Pier Gestão 2.0 — Controle de compras';
+const VERSAO = '2026-11-19 Pier Gestão 2.0 — Contas de consumo em PDF';
 
 function doGet() {
   TABS = {};
@@ -535,6 +535,7 @@ function doPost(e) {
     }
     if (req.acao === 'arqVerificar') return json(Object.assign(base, { iguais: arqVerificar(req.hashes) }));
     if (req.acao === 'medicoes') { medExigir(conta, false); return json(Object.assign(base, medLista())); }
+    if (req.acao === 'medContaPdf') { medExigir(conta, false); return json(Object.assign(base, { pdf: medContaPdf(req) })); }
     if (req.acao === 'miLista') { algum(['med_ver', 'med_lancar', 'un_ver', 'un_editar']); return json(Object.assign(base, miLista())); }
     if (req.acao === 'rondaPontoConsultar') { rondaExigir(conta, false); const p = rondaQrPontos().find(p => p.token === texto(req.codigo,80) && rondaQrAtivo(p)); if (!p) throw falha('QR inválido, inativo ou substituído.'); return json(Object.assign(base, {pontoQr: rondaQrLista(conta).pontosQr.find(x => x.id === p.id)})); }
     if (req.acao === 'rondaPontos') return json(Object.assign(base, rondaQrLista(conta)));
@@ -2766,6 +2767,15 @@ function medLeituras(r, conta) {
   AUDIT_DET = (edits.length ? 'Corrigiu ' : 'Lançou ') + lista.length + ' leitura(s): ' + nomes.slice(0, 6).join(', ') + (nomes.length > 6 ? '…' : '');
   return edits.length && !novas.length ? 'Leitura corrigida.' : novas.length === 1 ? 'Leitura lançada.' : novas.length + ' leituras lançadas.';
 }
+function medPdfLixo(id) { if (!id) return; try { DriveApp.getFileById(String(id)).setTrashed(true); } catch (e) {} }
+// abre o PDF guardado de uma conta (o navegador recebe o arquivo; nada fica público no Drive)
+function medContaPdf(r) {
+  const c = linhas(tabela('medc')).find(x => x.id === String(r.id || ''));
+  if (!c || !c.pdf) throw falha('Esta conta não tem PDF.');
+  let f; try { f = DriveApp.getFileById(String(c.pdf)); } catch (e) { throw falha('O PDF desta conta não foi encontrado no Drive.'); }
+  const b = f.getBlob();
+  return { nome: f.getName(), b64: Utilities.base64Encode(b.getBytes()) };
+}
 // conta mensal da concessionária: consumo e valor (R$) de um medidor num mês
 function medConta(x, meds, todas, conta) {
   const m = meds.find(z => z.id === String(x.medidor || ''));
@@ -2789,6 +2799,7 @@ function medContas(r, conta) {
     if (!x) throw falha('Conta não encontrada. Atualize a tela.');
     const m = meds.find(z => z.id === x.medidor) || { nome: 'medidor' };
     t.sh.deleteRow(x._row);
+    medPdfLixo(x.pdf);
     AUDIT_DET = 'Excluiu a conta de ' + m.nome + ' de ' + x.mes;
     return 'Conta excluída.';
   }
@@ -2797,6 +2808,16 @@ function medContas(r, conta) {
   if (v.id && !atual) throw falha('Conta não encontrada. Atualize a tela.');
   const { m, o } = medConta(v, meds, todas, conta);
   if (todas.some(z => (!atual || z.id !== atual.id) && z.medidor === o.medidor && z.mes === o.mes)) throw falha('Já há conta de ' + m.nome + ' em ' + o.mes.split('-').reverse().join('/') + '. Edite a que já existe.');
+  // PDF da conta (opcional): guardado no Drive, numa pasta própria, sem compartilhar
+  if (v.pdf && v.pdf.b64) {
+    const b64 = String(v.pdf.b64);
+    if (b64.length > 14000000) throw falha('O PDF da conta de ' + m.nome + ' passa de 10 MB.');
+    if (!conteudoConfere(b64, 'application/pdf')) throw falha('O arquivo da conta de ' + m.nome + ' não é um PDF.');
+    const nomeArq = (m.nome + ' - ' + o.mes + '.pdf').replace(/[\\/:*?"<>|]/g, '_');
+    const f = pastaDrive('PASTA_CONTAS_CONSUMO', 'Contas de consumo - Pier Gestão').createFile(Utilities.newBlob(Utilities.base64Decode(b64), 'application/pdf', nomeArq));
+    o.pdf = f.getId();
+    if (atual && atual.pdf) medPdfLixo(atual.pdf);
+  } else if (v.tirarPdf && atual && atual.pdf) { medPdfLixo(atual.pdf); o.pdf = ''; }
   if (atual) { o.atualizadoEm = agora(); o.atualizadoPor = conta.nome; gravar(t, o, atual._row); }
   else { o.id = novoId('MC'); o.registradoEm = agora(); o.registradoPor = conta.nome; gravar(t, o); }
   AUDIT_DET = (atual ? 'Corrigiu' : 'Lançou') + ' a conta de ' + m.nome + ' de ' + o.mes.split('-').reverse().join('/') + (o.valor !== '' ? ': R$ ' + Number(o.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '');

@@ -303,3 +303,9 @@
 .cc-al.crit{color:#fff;background:var(--crit,#c0392b);border-color:transparent}.cc-al.warn{color:var(--fg);background:color-mix(in srgb,var(--warn) 18%,transparent)}
 .cc-atr{color:var(--crit,#c0392b);font-weight:700}
 .cc-tab .md-ac{white-space:nowrap}.cc-tab .md-ac .btn{margin-right:6px}
+
+/* Contas de consumo em PDF */
+.md-pdf{margin-left:8px;font-size:10px;font-weight:700;letter-spacing:.05em;padding:2px 6px;border-radius:5px;border:1px solid var(--line);background:var(--accent-soft);color:var(--accent-ink);cursor:pointer}
+#modal-box.md-pdf-box{width:min(1200px,100%)}
+.md-pdf-tab .input{min-width:0;padding:6px 8px}.md-pdf-tab td{vertical-align:top}.md-pdf-tab input.num{width:110px}.md-pdf-tab select{min-width:180px;max-width:230px}.md-pdf-tab input[type=date]{min-width:140px}.md-pdf-tab input[type=month]{min-width:150px}
+.md-pdf-nome{max-width:200px;overflow-wrap:anywhere;font-size:13px}
