@@ -1285,6 +1285,11 @@ let menuAbertos = null;
 try { const x = JSON.parse(localStorage.getItem("menu-abertos") || "null"); if (Array.isArray(x)) menuAbertos = new Set(x); } catch(e){}
 const menuGuardar = () => { try { localStorage.setItem("menu-abertos", JSON.stringify([...menuAbertos])); } catch(e){} };
 const menuLogado = () => !!S.token && !!$("#login") && $("#login").hidden;
+// menu da Administração (19/11/2026): só Home, Dashboard, Compras e pendências, Unidades, Central de medições, Pessoas e acessos e Gestão.
+// As telas continuam existindo (os cards do Início ainda levam a elas); só saem da barra de menu.
+const MENU_SO_ADM = ["Compras e pendências", "Unidades", "Central de medições", "Pessoas e acessos", "Gestão"];
+const MENU_TOPO_ADM = ["inicio", "painel", "pdpainel"];
+const menuNoModo = m => !(S.adm && modo() === "Administração") || (m.itens ? MENU_SO_ADM.includes(m.g) : MENU_TOPO_ADM.includes(m.t));
 const itemPode = it => (TEM_ADM || !ABAS_ADM.includes(it.t)) && podeAba(it.t) && !!$("#t-" + it.t) && (!it.perm || can(it.perm));
 function renderMenu(){
   const side = $("#side"); if (!side) return;
@@ -1299,6 +1304,7 @@ function renderMenu(){
   menuGrupoAtual = grupoAtual ? grupoAtual.g : "";
   const item = (it, sub) => `<button type="button" class="side-item ${sub ? "sub" : ""}" data-mtab="${it.t}"${it.acao ? ` data-macao="${it.acao}"` : ""} ${it.t === S.tab && !it.acao ? 'aria-current="page"' : ""}>${sub ? "" : MENU_ICO(it.ico)}<span class="side-rot">${esc(it.rot)}</span>${it.b ? `<span class="badge side-b" data-b="${it.b}" hidden></span>` : ""}</button>`;
   $("#side-nav").innerHTML = MENU.map((m, k) => {
+    if (!menuNoModo(m)) return "";
     if (!m.itens) return itemPode(m) ? item(m, false) : "";
     const vis = m.itens.filter(itemPode); if (!vis.length) return "";
     const aberto = menuAbertos.has(m.g), ativo = m === grupoAtual;
