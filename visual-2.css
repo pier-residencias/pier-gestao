@@ -294,3 +294,12 @@
 .com-acoes{flex-wrap:wrap}.com-esp{flex:1}
 .com-iframe{width:100%;height:640px;border:1px solid var(--line);border-radius:12px;background:#f2f5f7}
 .com-hist .pill{white-space:nowrap}
+
+/* Controle de compras: cores como na planilha (aguardando = amarelo, devolvido = vermelho, entregue = verde) */
+.cc-st{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap}
+.cc-st.ag{background:color-mix(in srgb,var(--warn) 22%,transparent);color:var(--fg)}.cc-st.ok{background:color-mix(in srgb,var(--ok,#2e8b57) 22%,transparent);color:var(--fg)}.cc-st.dev{background:color-mix(in srgb,var(--crit,#c0392b) 22%,transparent);color:var(--fg)}
+.cc-tab tr.cc-ag td{background:color-mix(in srgb,var(--warn) 6%,transparent)}.cc-tab tr.cc-dev td{background:color-mix(in srgb,var(--crit,#c0392b) 7%,transparent)}
+.cc-als{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}.cc-al{font-size:11px;font-weight:600;padding:1px 7px;border-radius:6px;border:1px solid var(--line)}
+.cc-al.crit{color:#fff;background:var(--crit,#c0392b);border-color:transparent}.cc-al.warn{color:var(--fg);background:color-mix(in srgb,var(--warn) 18%,transparent)}
+.cc-atr{color:var(--crit,#c0392b);font-weight:700}
+.cc-tab .md-ac{white-space:nowrap}.cc-tab .md-ac .btn{margin-right:6px}

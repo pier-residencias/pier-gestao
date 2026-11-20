@@ -17,6 +17,13 @@
  */
 
 const ABAS = {
+  compra: {
+    nome: 'Controle de Compras',
+    criar: true,
+    cols: [['id', 'ID'], ['numero', 'Nº'], ['item', 'Item'], ['status', 'Status'], ['dataCompra', 'Data de Compra'], ['previsao', 'Previsão de Entrega'],
+      ['entregaEm', 'Data Efetiva da Entrega'], ['obs', 'Observação'], ['criadoEm', 'Criado em'], ['criadoPor', 'Criado por'], ['atualizadoEm', 'Atualizado em'], ['atualizadoPor', 'Atualizado por']],
+    num: ['numero']
+  },
   com: {
     nome: 'Comunicados',
     criar: true,
@@ -431,7 +438,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-17 Pier Gestão 2.0 — Comunicado por e-mail completo';
+const VERSAO = '2026-11-19 Pier Gestão 2.0 — Controle de compras';
 
 function doGet() {
   TABS = {};
@@ -515,6 +522,7 @@ function doPost(e) {
     if (req.acao === 'correspondencias') { corrExigir(conta); return json(Object.assign(base, {correspondencias:linhas(tabela('correspondencias')).map(corrPublica)})); }
     if (req.acao === 'pendVerAnexo') { pode('pendencias'); const f = pendVerAnexo(req); auditar(conta, 'Abriu comprovação de pendência', f.nome); return json(Object.assign(base, { arquivo: f })); }
     if (req.acao === 'fornecedores') { pode('pendencias'); return json(Object.assign(base, fornLista())); }
+    if (req.acao === 'compras') { pode('pendencias'); return json(Object.assign(base, comprasLista())); }
     if (req.acao === 'cotLista') { pode('pendencias'); return json(Object.assign(base, cotLista())); }
     if (req.acao === 'cotVerArquivo') { pode('pendencias'); const f = cotVerArquivo(req); auditar(conta, 'Abriu arquivo de cotação', f.nome); delete f.nome; return json(Object.assign(base, { arquivo: f })); }
     if (req.acao === 'unidades') { unExigir(conta, false); return json(Object.assign(base, unLista())); }
@@ -582,6 +590,8 @@ function doPost(e) {
         case 'barcoSalvar': msg = barcoSalvar(req, conta); extra.semDados = true; break;
         case 'correspondenciaSalvar': corrExigir(conta); msg = corrSalvar(req, conta); extra.semDados = true; break;
         case 'fornSalvar': pode('pendencias'); msg = fornSalvar(req, conta); extra.forn = true; extra.semDados = true; break;
+        case 'compraSalvar': pode('pendencias'); msg = compraSalvar(req, conta); extra.compras = true; extra.semDados = true; break;
+        case 'compraImportar': pode('pendencias'); msg = compraImportar(req, conta); extra.compras = true; extra.semDados = true; break;
         case 'fornImportar': pode('pendencias'); msg = fornImportar(req, conta); extra.forn = true; extra.semDados = true; break;
         case 'fornDasCotacoes': pode('pendencias'); msg = fornDasCotacoes(conta); extra.forn = true; extra.semDados = true; break;
         case 'cotSalvar': pode('pendencias'); msg = cotSalvar(req, conta); extra.cot = msg.cot; msg = msg.texto; extra.semDados = true; break;
@@ -632,7 +642,7 @@ function doPost(e) {
     }
     if (extra.pendencias) return json(Object.assign(base, { msg, pendencias: pendLista(), pendVersao: PEND_VERSAO }));
     if (extra.equipe) return json(Object.assign(base, { msg }, extra));
-    if (extra.semDados) return json(Object.assign(base, { msg }, extra.avisos ? { avisos: extra.avisos } : {}, extra.cot ? { cot: extra.cot } : {}, extra.ronda ? { ronda: extra.ronda } : {}, extra.med ? medLista() : {}, extra.esp ? espLista() : {}, extra.forn ? fornLista() : {}, extra.mi ? miLista() : {}, extra.lida ? { lida: extra.lida } : {}, extra.com ? { com: comPainel(conta) } : {}));
+    if (extra.semDados) return json(Object.assign(base, { msg }, extra.avisos ? { avisos: extra.avisos } : {}, extra.cot ? { cot: extra.cot } : {}, extra.ronda ? { ronda: extra.ronda } : {}, extra.med ? medLista() : {}, extra.esp ? espLista() : {}, extra.forn ? fornLista() : {}, extra.compras ? comprasLista() : {}, extra.mi ? miLista() : {}, extra.lida ? { lida: extra.lida } : {}, extra.com ? { com: comPainel(conta) } : {}));
     return json(Object.assign(base, { msg, dados: dados(req.meses, conta) }, extra));
   } catch (err) {
     // Falhas dos serviços de auditoria não podem impedir uma resposta segura.
@@ -4420,6 +4430,60 @@ const fornSo = s => String(s || '').replace(/\D/g, '');
 const fornN = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\b(ltda|me|epp|eireli|s\.?a\.?|comercio|com\.?)\b/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
 const fornIgual = (f, x) => (fornSo(f.cnpj).length >= 11 && fornSo(f.cnpj) === fornSo(x.cnpj)) || (!!fornN(f.nome) && fornN(f.nome) === fornN(x.nome || x.empresa));
 // cadastro + histórico nas cotações (participações, vitórias e valor ganho)
+// ---------- controle de compras (Compras e pendências) ----------
+// Mesmas colunas da planilha "Controle de Compras e Cotações": Item, Status, Data de Compra, Previsão e Data Efetiva da Entrega.
+const COMPRA_ST = ['Aguardando Entrega', 'Entregue', 'Devolvido'];
+function compraData(v) { const s = String(v || '').trim(); return /^\d{4}-\d{2}-\d{2}$/.test(s) && !isNaN(new Date(s + 'T12:00:00')) ? s : ''; }
+function compraStatus(v) { const k = chaveNome(v); return COMPRA_ST.find(x => chaveNome(x) === k) || (/^entreg/.test(k) ? 'Entregue' : /^devol/.test(k) ? 'Devolvido' : /aguard/.test(k) ? 'Aguardando Entrega' : ''); }
+function comprasLista() {
+  return { compras: linhas(tabela('compra')).map(x => ({ id: x.id, numero: Number(x.numero) || 0, item: x.item, status: x.status, dataCompra: x.dataCompra, previsao: x.previsao,
+    entregaEm: x.entregaEm, obs: x.obs, criadoPor: x.criadoPor, atualizadoEm: x.atualizadoEm, atualizadoPor: x.atualizadoPor })).sort((a, b) => a.numero - b.numero) };
+}
+function compraLimpa(v) {
+  const o = { item: texto(v.item, 150), status: compraStatus(v.status) || 'Aguardando Entrega', dataCompra: compraData(v.dataCompra), previsao: compraData(v.previsao), entregaEm: compraData(v.entregaEm), obs: texto(v.obs, 500) };
+  if (!o.item) throw falha('Escreva o item comprado.');
+  return o;
+}
+function compraSalvar(r, conta) {
+  const t = tabela('compra'), todas = linhas(t), v = r.compra || {};
+  const ja = v.id ? todas.find(x => x.id === String(v.id)) : null;
+  if (v.id && !ja) throw falha('Compra não encontrada. Atualize a tela.');
+  if (r.op === 'excluir') { if (!ja) throw falha('Compra não encontrada.'); t.sh.deleteRow(ja._row); AUDIT_DET = 'Excluiu a compra ' + ja.numero + ' (' + ja.item + ')'; return 'Compra excluída.'; }
+  if (r.op === 'entregue') {
+    if (!ja) throw falha('Compra não encontrada.');
+    const quando = compraData(v.entregaEm) || hoje();
+    gravar(t, { status: 'Entregue', entregaEm: quando, atualizadoEm: agora(), atualizadoPor: conta.nome }, ja._row);
+    AUDIT_DET = 'Marcou como entregue a compra ' + ja.numero + ' (' + ja.item + ') em ' + quando; return 'Compra marcada como entregue.';
+  }
+  const o = compraLimpa(v);
+  if (ja) { gravar(t, Object.assign(o, { atualizadoEm: agora(), atualizadoPor: conta.nome }), ja._row); AUDIT_DET = 'Editou a compra ' + ja.numero + ' (' + o.item + ', ' + o.status + ')'; return 'Compra salva.'; }
+  const numero = todas.reduce((m, x) => Math.max(m, Number(x.numero) || 0), 0) + 1;
+  gravar(t, Object.assign(o, { id: novoId('CP'), numero, criadoEm: agora(), criadoPor: conta.nome }));
+  AUDIT_DET = 'Nova compra ' + numero + ' (' + o.item + ', ' + o.status + ')';
+  return 'Compra nº ' + numero + ' incluída.';
+}
+// planilha: inclui as linhas novas; a mesma compra (mesmo item e mesma data de compra) é atualizada em vez de repetir
+function compraImportar(r, conta) {
+  const lista = Array.isArray(r.lista) ? r.lista.slice(0, 500) : [];
+  if (!lista.length) throw falha('A planilha não tem compras.');
+  const t = tabela('compra'), todas = linhas(t);
+  let numero = todas.reduce((m, x) => Math.max(m, Number(x.numero) || 0), 0), novos = 0, atual = 0; const erros = [];
+  const chave = x => chaveNome(x.item) + '|' + (x.dataCompra || '');
+  const mapa = {}; todas.forEach(x => { mapa[chave(x)] = x; });
+  const novasLinhas = [];
+  lista.forEach((v, i) => {
+    try {
+      const o = compraLimpa(v), ja = mapa[chave(o)];
+      if (ja) { gravar(t, Object.assign(o, { atualizadoEm: agora(), atualizadoPor: conta.nome }), ja._row); atual++; return; }
+      const nova = Object.assign(o, { id: novoId('CP'), numero: ++numero, criadoEm: agora(), criadoPor: conta.nome });
+      novasLinhas.push(nova); mapa[chave(nova)] = nova; novos++;
+    } catch (e) { erros.push('linha ' + (v._linha || i + 2) + ': ' + e.message); }
+  });
+  if (novasLinhas.length) gravarVarias(t, novasLinhas);
+  AUDIT_DET = 'Planilha do controle de compras: ' + novos + ' nova(s), ' + atual + ' atualizada(s)' + (erros.length ? ', ' + erros.length + ' com erro' : '');
+  return 'Planilha importada: ' + novos + ' compra(s) nova(s), ' + atual + ' atualizada(s).' + (erros.length ? ' Não entraram ' + erros.length + ': ' + erros.slice(0, 3).join('; ') + '.' : '');
+}
+
 function fornLista() {
   const fs = linhas(tabela('forn')).map(unLimpa);
   const cots = SpreadsheetApp.getActive().getSheetByName(ABAS.cot.nome) ? linhas(tabela('cot')).map(cotLer) : [];
@@ -5394,6 +5458,7 @@ const ACOES_AUDIT = {
   cotSalvar: 'Cotação', cotArquivo: 'Arquivo de cotação', pendAnexo: 'Comprovação de pendência', guaritaSalvar: 'Guarita (visitante/prestador)', barcoSalvar: 'Barco (passageiros)', avisoSalvar: 'Quadro de avisos (Guarita Norte)',
   prestSalvar: 'Prestador de serviço', prestVisita: 'Visita de prestador', prestDoc: 'Documento de prestador', prestDocRemover: 'Tirou documento de prestador', prestImportar: 'Importou planilha de prestadores',
   unSalvar: 'Unidade', unConfig: 'Configuração das unidades', unOcupadas: 'Marcou unidades ocupadas', unImportar: 'Importou cadastro de moradores',
+  compraSalvar: 'Controle de compras', compraImportar: 'Importou planilha do controle de compras',
   fornSalvar: 'Fornecedor', fornImportar: 'Importou planilha de fornecedores', fornDasCotacoes: 'Trouxe fornecedores das cotações',
   espReserva: 'Reserva de espaço', espEspaco: 'Espaço', espVistoria: 'Vistoria de espaço', espColar: 'Reserva colada do e-mail', espImportar: 'Importou PDF de reservas', espEmails: 'Leu e-mails de reserva',
   medMedidor: 'Medidor', medLeituras: 'Leitura de medidor', medContas: 'Conta de consumo', medImportar: 'Importou planilha de medições',
