@@ -443,7 +443,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-21 Pier Gestão 2.0 — Limpeza: importar de novo a mesma planilha (confirmação)';
+const VERSAO = '2026-11-21 Pier Gestão 2.0 — Limpeza: lista vazia importa a planilha sem pedir confirmação';
 
 function doGet() {
   TABS = {};
@@ -3902,7 +3902,8 @@ function importarContagem(r, conta) {
   // a mesma planilha enviada de novo: pede confirmação (mesmo confirmada, nada é lançado duas vezes)
   const digesto = digestoImportacao(setor, r);
   const ja = props.getProperty('IMPORT_' + digesto);
-  if (ja && !r.confirmarRepeticao) {
+  // com a lista do setor vazia (apagada para recomeçar) não há o que repetir: segue sem pedir confirmação
+  if (ja && !r.confirmarRepeticao && linhas(ti).some(x => setorDe(x) === setor)) {
     let x; try { x = JSON.parse(ja); } catch (e) { x = {}; }
     const e = falha('Esta mesma planilha já foi importada em ' + (x.em || '?') + ' por ' + (x.porNome || '?') + ' (lote ' + (x.lote || '?') + '). ' +
       'Importar de novo não lança nada em dobro, mas cria outra rodada de conferências. Confirme se quer mesmo enviar outra vez.');
