@@ -4076,6 +4076,7 @@ function abrirImportacao(){
   };
   $("#imp-arq").addEventListener("change", async () => {
     const f = $("#imp-arq").files[0]; if (!f) return;
+    repetir = false; $("#imp-ok").textContent = "Importar"; $("#imp-ok").classList.remove("danger");
     $("#imp-prev").innerHTML = `<div class="empty"><span class="spin" aria-hidden="true"></span> Conferindo se o arquivo já foi importado…</div>`;
     if (!(await arqConferir("importarContagem", [f], $("#imp-prev")))) { $("#imp-arq").value = ""; return; }
     const msg = $("#imp-msg"); msg.className = "hint"; msg.innerHTML = `<span class="spin" aria-hidden="true"></span> Lendo a planilha…`;
@@ -4093,12 +4094,15 @@ function abrirImportacao(){
       prever();
     } catch(e){ lido = null; msg.className = "hint err"; msg.textContent = e.message || "Não foi possível ler a planilha."; }
   });
+  let repetir = false;
   $("#f-imp").addEventListener("submit", async ev => {
     ev.preventDefault(); if (!lido) return;
     const modo = ($("input[name=imp-modo]:checked") || {}).value || "atualizar";
     const comHist = lido.hist && lido.hist.length && $("#imp-hist") && $("#imp-hist").checked;
     const extraHist = comHist ? {historico: lido.hist, dataAjuste: lido.hist.map(h => h.data).sort()[0]} : {};
-    await enviar($("#imp-ok"), $("#imp-msg"), "importarContagem", Object.assign({linhas: lido.itens, modo, motivo: $("#imp-mot").value.trim(), setor: S.setor}, extraHist), () => { fecharModal(); setTab("itens"); });
+    const r = await enviar($("#imp-ok"), $("#imp-msg"), "importarContagem", Object.assign({linhas: lido.itens, modo, motivo: $("#imp-mot").value.trim(), setor: S.setor}, extraHist, repetir ? {confirmarRepeticao:true} : {}), () => { fecharModal(); setTab("itens"); });
+    // a mesma planilha já foi importada: o servidor pede confirmação; o botão passa a enviar confirmando
+    if (!r && /já foi importada/.test($("#imp-msg").textContent) && !repetir) { repetir = true; $("#imp-ok").textContent = "Importar mesmo assim"; $("#imp-ok").classList.add("danger"); }
   });
 }
 $("#i-importar").addEventListener("click", abrirImportacao);

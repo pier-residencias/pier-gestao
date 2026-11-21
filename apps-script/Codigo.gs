@@ -443,7 +443,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-21 Pier Gestão 2.0 — Limpeza: apagar a lista também libera as planilhas já importadas';
+const VERSAO = '2026-11-21 Pier Gestão 2.0 — Limpeza: importar de novo a mesma planilha (confirmação)';
 
 function doGet() {
   TABS = {};
@@ -844,6 +844,9 @@ function apagarListaSetor(r, conta) {
   // libera o reenvio das planilhas de contagem deste setor (o aviso "Arquivo já importado" deixa de aparecer)
   const ta = tabela('arq'), regs = linhas(ta).filter(x => x.tipo === ARQ_TIPOS.importarContagem && String(x.resumo || '').indexOf('Inventário de ' + setor) === 0);
   regs.map(x => x._row).sort((a, b) => b - a).forEach(rw => ta.sh.deleteRow(rw));
+  // e a marca "esta mesma planilha já foi importada" das contagens deste setor (as antigas não guardavam o setor)
+  const pr = PropertiesService.getScriptProperties(), todas = pr.getProperties();
+  Object.keys(todas).filter(k => k.indexOf('IMPORT_') === 0).forEach(k => { let v = {}; try { v = JSON.parse(todas[k]); } catch (e) {} if (!v.setor || v.setor === setor) pr.deleteProperty(k); });
   if (!its.length) {
     AUDIT_DET = 'Lista da ' + setor + ' já vazia: liberou ' + regs.length + ' planilha(s) já importada(s)';
     return 'A lista da ' + setor + ' já estava vazia. ' + (regs.length ? regs.length + ' planilha(s) já importada(s) liberada(s): agora dá para importar de novo sem o aviso.' : 'Nada para liberar.');
@@ -4077,7 +4080,7 @@ function importarContagem(r, conta) {
   if (FALHA_SIMULADA === 'import_apos_pedidos') throw new Error('Falha simulada depois das solicitações');
   gravarVarias(tabela('movs'), conferencias);
   pedidos.forEach(c => auditarContagem(conta, 'Contagem enviada para aprovação', c, 'importação de inventário, lote ' + lote));
-  props.setProperty('IMPORT_' + digesto, JSON.stringify({ lote, em: agora(), porNome: conta.nome }));
+  props.setProperty('IMPORT_' + digesto, JSON.stringify({ lote, em: agora(), porNome: conta.nome, setor }));
   props.deleteProperty('IMPORT_ANDAMENTO');
   auditar(conta, 'Importou inventário', 'setor ' + setor + '; lote ' + lote + '; ' + pedidos.length + ' ajuste(s) para aprovação; ' + conferencias.length + ' conferido(s); ' + criados + ' item(ns) novo(s) com saldo 0; ' + removidos + ' removido(s) com saldo 0; ' +
     histNaFila + ' lançamento(s) do histórico na fila; ' + histJaNoSistema + ' já no sistema; ' + histDataRuim + ' sem data válida; ' + histAmbiguo + ' ambíguo(s); cópia ' + nomeCopia + (r.confirmarRepeticao && ja ? '; reimportação confirmada' : ''));
