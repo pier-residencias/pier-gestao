@@ -443,7 +443,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-21 Pier Gestão 2.0 — Gourmet: painel do termo e conta do Gmail lida';
+const VERSAO = '2026-11-21 Pier Gestão 2.0 — Gourmet: avisar de uma vez quem falta assinar o termo';
 
 function doGet() {
   TABS = {};
@@ -622,6 +622,7 @@ function doPost(e) {
         case 'espReserva': espExigir(conta); msg = espReserva(req, conta); extra.esp = true; extra.semDados = true; break;
         case 'grReservar': espExigir(conta); msg = grReservar(req, conta); extra.esp = true; extra.semDados = true; extra.gr = { id: GR_ULTIMA }; break;
         case 'grAcao': espExigir(conta); msg = grAcao(req, conta); extra.esp = true; extra.semDados = true; break;
+        case 'grAvisarTermo': espExigir(conta); msg = grAvisarTermo(req, conta); extra.esp = true; extra.semDados = true; break;
         case 'grAuto': espExigir(conta); msg = grAutoSalvar(req, conta); extra.semDados = true; extra.grAuto = true; break;
         case 'grAutoAgora': espExigir(conta); grSoAdm(conta); msg = 'Conferido: ' + grAutoRodar(conta); AUDIT_DET = msg; extra.esp = true; extra.semDados = true; extra.grAuto = true; break;
         case 'espEspaco': espExigir(conta); msg = espEspaco(req, conta); extra.esp = true; extra.semDados = true; break;
@@ -3389,14 +3390,7 @@ function grAcao(r, conta) {
   }
   if (r.op === 'enviarTermo') { const m = grTermoLink(x, conta, { prazo: x.termoPrazo && grMs(x.termoPrazo) > Date.now() ? x.termoPrazo : '' }); AUDIT_DET = 'Enviou o link do termo para ' + x.solicitante + ' (' + x.data + ')'; return m; }
   if (r.op === 'pedirTermo') {
-    if (['Solicitada', 'Pré-reserva'].indexOf(x.status) < 0 || x.termoAssinadoEm) throw falha('Esta reserva não está esperando o termo.');
-    const u = x.unidadeId ? grUnidades().find(z => z.id === x.unidadeId) : grAcharUnidade(x.bloco, x.unidade); if (!u) throw falha('Não achei a unidade ' + (x.bloco || '') + ' ' + (x.unidade || '') + ' no cadastro.');
-    const cfgA = grAutoCfg(), prazo = grQuando(Math.min(Date.now() + cfgA.prazoH * 3600000, grMs(x.data) - 3600000));
-    const p = (x.solicitante && u.pessoas.find(z => chaveNome(z.nome) === chaveNome(x.solicitante))) || u.pessoas.find(z => z.email) || u.pessoas[0]; if (!p) throw falha('A unidade não tem morador cadastrado.');
-    const o = { tipoSol: 'Unidade', unidadeId: u.id, solicitante: x.solicitante || p.nome, email: x.email || p.email || '', status: 'Aguardando assinatura', termoPrazo: prazo, termoAvisoEm: agora(), termoObs: '' };
-    gravar(t, o, x._row); Object.assign(x, o);
-    let m = 'Reserva passou para Aguardando assinatura (prazo ' + prazo.slice(8, 10) + '/' + prazo.slice(5, 7) + ' ' + prazo.slice(11) + ').';
-    if (x.email) { grTermoLink(x, conta, { prazo, presencial: true }); m += ' E-mail enviado para ' + x.email + ' pedindo para assinar o termo na Administração.'; } else m += ' Sem e-mail: assine na tela ou adicione o e-mail.';
+    const m = grPedirTermo(x, t, conta);
     AUDIT_DET = 'Pediu o termo da reserva de ' + (x.solicitante || '') + ' (' + x.data + ')'; return m;
   }
   if (r.op === 'assinar') {
@@ -3450,6 +3444,45 @@ function grTermoDados(x) {
     termo: TERMO_GOURMET, rodape: TERMO_RODAPE, mapa: TERMO_MAPA_B64 };
 }
 // novo link (o anterior deixa de valer) e e-mail com o botão "Ler e assinar o termo"
+// pede ao morador que compareça à Administração para assinar o termo (reserva iniciada ou aguardando assinatura).
+// Prazo vencido (ou sem prazo) ganha um prazo novo; prazo ainda valendo é mantido.
+function grPedirTermo(x, t, conta) {
+  if (x.termoAssinadoEm || ['Solicitada', 'Pré-reserva', 'Aguardando assinatura'].indexOf(x.status) < 0) throw falha('Esta reserva não está esperando o termo.');
+  if (x.data <= hoje()) throw falha('A data da reserva já chegou.');
+  const cfgA = grAutoCfg(), ms = x.termoPrazo ? grMs(x.termoPrazo) : 0, manter = x.status === 'Aguardando assinatura' && ms > Date.now() + 3600000;
+  const prazo = manter ? x.termoPrazo : grQuando(Math.min(Date.now() + cfgA.prazoH * 3600000, grMs(x.data) - 3600000));
+  const o = { status: 'Aguardando assinatura', termoPrazo: prazo, termoAvisoEm: agora(), termoObs: '' };
+  if (!manter) { o.termoVencidoEm = ''; o.termoLembreteEm = ''; }
+  if (!x.email || !emailValido(x.email)) {
+    const u = x.unidadeId ? grUnidades().find(z => z.id === x.unidadeId) : grAcharUnidade(x.bloco, x.unidade);
+    if (!u && x.status !== 'Aguardando assinatura') throw falha('Não achei a unidade ' + (x.bloco || '') + ' ' + (x.unidade || '') + ' no cadastro.');
+    if (u) {
+      const p = (x.solicitante && u.pessoas.find(z => chaveNome(z.nome) === chaveNome(x.solicitante))) || u.pessoas.find(z => z.email) || u.pessoas[0];
+      if (!p && x.status !== 'Aguardando assinatura') throw falha('A unidade não tem morador cadastrado.');
+      if (p) Object.assign(o, { tipoSol: 'Unidade', unidadeId: u.id, solicitante: x.solicitante || p.nome, email: p.email || '', telefone: x.telefone || p.telefone || '' });
+    }
+  }
+  gravar(t, o, x._row); Object.assign(x, o);
+  const pz = prazo.slice(8, 10) + '/' + prazo.slice(5, 7) + ' ' + prazo.slice(11, 16);
+  if (!x.email || !emailValido(x.email)) return 'Reserva aguardando assinatura (prazo ' + pz + '). Sem e-mail no cadastro: avise o morador por telefone ou adicione o e-mail.';
+  grTermoLink(x, conta, { prazo, presencial: true });
+  return 'E-mail enviado para ' + x.email + ' pedindo para assinar o termo na Administração até ' + pz + '.';
+}
+// envia o aviso de uma vez para várias reservas que faltam assinar (Administração)
+function grAvisarTermo(r, conta) {
+  grSoAdm(conta);
+  const ids = (Array.isArray(r.ids) ? r.ids : []).map(String).slice(0, 200);
+  if (!ids.length) throw falha('Nenhuma reserva para avisar.');
+  const t = tabela('esr'), rs = linhas(t); let env = 0; const sem = [], erro = [];
+  ids.forEach(id => {
+    const x = rs.find(z => z.id === id); if (!x) return;
+    const quem = () => (x.solicitante ? x.solicitante + ' · ' : '') + ((x.bloco || '') + ' ' + (x.unidade || '')).trim() + ' (' + String(x.data).split('-').reverse().join('/') + ')';
+    try { const m = grPedirTermo(x, t, conta); if (/^E-mail enviado/.test(m)) env++; else sem.push(quem()); }
+    catch (e) { erro.push(quem() + ': ' + texto(e.message, 100)); }
+  });
+  AUDIT_DET = 'Avisou ' + env + ' morador(es) para assinar o termo na Administração' + (sem.length ? '; ' + sem.length + ' sem e-mail' : '') + (erro.length ? '; ' + erro.length + ' não enviados' : '');
+  return env + ' e-mail(s) enviado(s) pedindo para assinar o termo na Administração.' + (sem.length ? ' Sem e-mail no cadastro: ' + sem.join(', ') + '.' : '') + (erro.length ? ' Não enviados: ' + erro.join('; ') + '.' : '');
+}
 function grTermoLink(x, conta, op) {
   op = op || {}; const prazoTxt = op.prazo ? String(op.prazo).slice(8, 10) + '/' + String(op.prazo).slice(5, 7) + ' às ' + String(op.prazo).slice(11, 16) : '';
   if (x.status !== 'Aguardando assinatura') throw falha('Esta reserva não está aguardando assinatura.');
@@ -5895,7 +5928,7 @@ const ACOES_AUDIT = {
   compraSalvar: 'Controle de compras', compraImportar: 'Importou planilha do controle de compras',
   fornSalvar: 'Fornecedor', fornImportar: 'Importou planilha de fornecedores', fornDasCotacoes: 'Trouxe fornecedores das cotações',
   grAuto: 'Termo automático das reservas', grAutoAgora: 'Conferiu as reservas da administradora',
-  grReservar: 'Nova reserva do Espaço Gourmet', grAcao: 'Reserva do Espaço Gourmet',
+  grReservar: 'Nova reserva do Espaço Gourmet', grAcao: 'Reserva do Espaço Gourmet', grAvisarTermo: 'Avisou quem falta assinar o termo',
   espReserva: 'Reserva de espaço', espEspaco: 'Espaço', espVistoria: 'Vistoria de espaço', espColar: 'Reserva colada do e-mail', espImportar: 'Importou PDF de reservas', espEmails: 'Leu e-mails de reserva',
   medMedidor: 'Medidor', medLeituras: 'Leitura de medidor', medContas: 'Conta de consumo', medImportar: 'Importou planilha de medições',
   miImportar: 'Importou medição individual (Exista)', miBlocos: 'Nomes dos blocos (medição individual)', miExcluir: 'Excluiu período da medição individual',
