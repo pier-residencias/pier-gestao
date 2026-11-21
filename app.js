@@ -1282,7 +1282,7 @@ const MENU = [
     {t:"esvistorias", rot:"Checklist"}, {t:"esreservas", rot:"Reservas", b:"b-esp"}, {t:"esespacos", rot:"Espaços"}]},
   {g:"Pessoas e acessos", ico:'<path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 6.5M18 14.5a6 6 0 0 1 3.5 5.5"/>', itens:[
     {t:"usuarios", rot:"Usuários"}, {t:"equipe", rot:"Equipe"}, {t:"minhaequipe", rot:"Minha equipe"}, {t:"acessos", rot:"Histórico de acessos"}]},
-  {g:"Gestão", ico:'<path d="M5 19V11M10 19V6M15 19v-5M20 19V9"/>', itens:[{t:"dashboard", rot:"Dashboard do estoque"}]}
+  {g:"Gestão", ico:'<path d="M5 19V11M10 19V6M15 19v-5M20 19V9"/>', itens:[{t:"dashboard", rot:"Dashboard do estoque"}, {t:"aprovacoes", rot:"Aprovações de estoque", b:"b-aprov"}]}
 ];
 const MENU_ICO = d => `<svg viewBox="0 0 24 24" aria-hidden="true" class="side-ico">${d}</svg>`;
 let menuAbertos = null;
@@ -1302,7 +1302,7 @@ function renderMenu(){
   document.body.classList.toggle("com-menu", logado);
   if (!logado) return;
   // grupo da tela atual sempre aberto; os outros como a pessoa deixou
-  const grupoAtual = MENU.find(m => m.itens && m.itens.some(i => i.t === S.tab && !i.acao));
+  const grupoAtual = MENU.find(m => m.itens && menuNoModo(m) && m.itens.some(i => i.t === S.tab && !i.acao)) || MENU.find(m => m.itens && m.itens.some(i => i.t === S.tab && !i.acao));
   if (!menuAbertos) menuAbertos = new Set(grupoAtual ? [grupoAtual.g] : []);
   if (grupoAtual && !menuAbertos.has(grupoAtual.g) && menuGrupoAtual !== grupoAtual.g) { menuAbertos.add(grupoAtual.g); menuGuardar(); }
   menuGrupoAtual = grupoAtual ? grupoAtual.g : "";
@@ -9987,7 +9987,7 @@ function renderContagem(){
   const rec = invCtParaRecontar();
   const avisos = [];
   if (rec.length) avisos.push(`<div class="notice warn"><b>${rec.length === 1 ? "1 item precisa" : rec.length + " itens precisam"} ser contado${rec.length===1?"":"s"} de novo:</b> ${rec.slice(0,6).map(c => `<button type="button" class="link" data-recontar="${esc(c.itemId)}">${esc(c.itemNome)}</button>`).join(", ")}${rec.length>6?" e mais "+(rec.length-6):""}. Veja o motivo em “Minhas contagens”, abaixo.</div>`);
-  if (ehAdminTotal() && !S.adm) { const n = invApDecidiveis().length; if (n) avisos.push(`<div class="notice">Há <b>${n}</b> ajuste${n===1?"":"s"} aguardando a sua aprovação. Para aprovar, troque o setor para <b>Administração</b> e abra <b>Aprovações de estoque</b>.</div>`); }
+  if (ehAdminTotal() && !S.adm) { const n = invApDecidiveis().length; if (n) avisos.push(`<div class="notice">Há <b>${n}</b> ajuste${n===1?"":"s"} aguardando a sua aprovação. Para aprovar, troque o setor para <b>Administração</b> e abra <b>Gestão → Aprovações de estoque</b>. Quem fez a contagem (ou importou a planilha) não aprova a própria: precisa ser outra pessoa da Administração.</div>`); }
   if (INV_CT.msg) avisos.push(INV_CT.msg);
   $("#invct-avisos").innerHTML = avisos.join("");
   // lista (não refaz enquanto alguém está digitando nela)
