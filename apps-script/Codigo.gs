@@ -443,7 +443,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-21 Pier Gestão 2.0 — Limpeza: apagar toda a lista do estoque (Administração)';
+const VERSAO = '2026-11-21 Pier Gestão 2.0 — Limpeza: apagar a lista também libera as planilhas já importadas';
 
 function doGet() {
   TABS = {};
@@ -841,7 +841,13 @@ function apagarListaSetor(r, conta) {
   if (setor !== 'Limpeza') throw falha('Só a lista da Limpeza pode ser apagada por aqui.');
   if (String(r.confirma || '').trim().toUpperCase() !== 'EXCLUIR') throw falha('Digite EXCLUIR para confirmar.');
   const ti = tabela('itens'), its = linhas(ti).filter(x => setorDe(x) === setor);
-  if (!its.length) throw falha('A lista da ' + setor + ' já está vazia.');
+  // libera o reenvio das planilhas de contagem deste setor (o aviso "Arquivo já importado" deixa de aparecer)
+  const ta = tabela('arq'), regs = linhas(ta).filter(x => x.tipo === ARQ_TIPOS.importarContagem && String(x.resumo || '').indexOf('Inventário de ' + setor) === 0);
+  regs.map(x => x._row).sort((a, b) => b - a).forEach(rw => ta.sh.deleteRow(rw));
+  if (!its.length) {
+    AUDIT_DET = 'Lista da ' + setor + ' já vazia: liberou ' + regs.length + ' planilha(s) já importada(s)';
+    return 'A lista da ' + setor + ' já estava vazia. ' + (regs.length ? regs.length + ' planilha(s) já importada(s) liberada(s): agora dá para importar de novo sem o aviso.' : 'Nada para liberar.');
+  }
   const ids = {}; its.forEach(x => { ids[x.id] = true; });
   const tc = tabela('cont'), conts = linhas(tc).filter(c => ids[c.itemId]);
   if (conts.some(c => c.etapa === 'aplicando')) throw falha('Há um ajuste de contagem sendo aplicado agora. Tente de novo em alguns minutos.');
@@ -859,7 +865,7 @@ function apagarListaSetor(r, conta) {
   its.map(x => x._row).sort((a, b) => b - a).forEach(rw => ti.sh.deleteRow(rw));
   its.forEach(x => { SALDO_OK[x.id] = true; });
   AUDIT_DET = 'Apagou a lista do estoque da ' + setor + ': ' + its.length + ' item(ns)' + (canc ? ', ' + canc + ' contagem(ns) pendente(s) cancelada(s)' : '') + '. Cópia: ' + nomeArq;
-  return its.length + ' ite' + (its.length === 1 ? 'm excluído' : 'ns excluídos') + ' da lista da ' + setor + '. Cópia de segurança no Drive: "' + nomeArq + '" (pasta Cópias do estoque - Pier Gestão).' + (canc ? ' ' + canc + ' contagem(ns) pendente(s) cancelada(s).' : '');
+  return its.length + ' ite' + (its.length === 1 ? 'm excluído' : 'ns excluídos') + ' da lista da ' + setor + '. Cópia de segurança no Drive: "' + nomeArq + '" (pasta Cópias do estoque - Pier Gestão).' + (canc ? ' ' + canc + ' contagem(ns) pendente(s) cancelada(s).' : '') + (regs.length ? ' As planilhas já importadas foram liberadas para importar de novo.' : '');
 }
 function excluirItem(id, conta) {
   const ti = tabela('itens');
