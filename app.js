@@ -9496,6 +9496,19 @@ function grAutoFaixa(){
   const el = $("#gr-auto-faixa"); if (!el || !GR.d) return; const c = GR.d.auto || {};
   el.innerHTML = `<div class="gr-auto ${c.ativo ? "on" : ""}"><b>Termo automático ${c.ativo ? "ligado" : "desligado"}</b><span>${c.ativo ? `Reservas da administradora (e-mail ou PDF da BCF) recebem o e-mail para assinar o termo na Administração em até ${c.prazoH} h (lembrete ${c.lembreteH} h antes).` : "Ligue para pedir o termo sozinho a cada reserva feita no sistema da administradora."}${c.ultima ? ` Última conferência: ${esc(fDataHora(c.ultima))} — ${esc(c.resumo || "")}` : ""}</span></div>`;
 }
+function grAvisarTela(lista){
+  const futuras = lista.filter(x => x.data > hoje()), em = x => x.email || ((GR.d.unidades || []).find(u => u.id === x.unidadeId) || {pessoas:[]}).pessoas.map(p => p.email).find(Boolean) || "";
+  $("#modal-box").classList.add("largo");
+  $("#modal-box").innerHTML = `<h3>Avisar quem falta assinar o termo</h3>
+    <p class="muted">Cada morador recebe um e-mail pedindo para <b>comparecer à Administração e assinar o termo</b> até o prazo (${(GR.d.auto || {}).prazoH || 48} h; quem ainda está dentro do prazo mantém o mesmo). O e-mail avisa que, sem a assinatura, a reserva poderá ser cancelada.</p>
+    <div class="tablebox flat"><table><thead><tr><th>Data</th><th>Unidade</th><th>Solicitante</th><th>E-mail</th></tr></thead><tbody>
+      ${futuras.map(x => `<tr><td class="md-nw">${fData(x.data)}</td><td>${esc(x.unidade ? grRotUn(x.bloco, "", x.unidade) : "Externo")}</td><td>${esc(x.solicitante || "—")}</td><td>${em(x) ? esc(em(x)) : `<span class="md-st warn">busca no cadastro</span>`}</td></tr>`).join("")}
+    </tbody></table></div>
+    ${lista.length > futuras.length ? `<p class="hint">${lista.length - futuras.length} reserva(s) com data de hoje ou já passada ficam de fora.</p>` : ""}
+    <div class="actions" style="margin-top:12px"><button class="btn primary" type="button" id="gv-ok" ${futuras.length ? "" : "disabled"}>Enviar ${futuras.length} e-mail${futuras.length === 1 ? "" : "s"}</button><button class="btn" type="button" id="gv-x">Cancelar</button><span class="hint" id="gv-msg"></span></div>`;
+  $("#modal").hidden = false; $("#gv-x").onclick = fecharModal;
+  $("#gv-ok").onclick = () => enviar($("#gv-ok"), $("#gv-msg"), "grAvisarTermo", {ids:futuras.map(x => x.id)}, x => { grAplicar(x); renderGourmet(); $("#gv-msg").className = "hint"; $("#gv-msg").textContent = x.msg || ""; $("#gv-ok").hidden = true; $("#gv-x").textContent = "Fechar"; });
+}
 function grAutoTela(){
   if (!GR.d) return; const c = GR.d.auto || {prazoH:48, lembreteH:24};
   $("#modal-box").innerHTML = `<h3>Termo automático · reservas da administradora</h3>
@@ -9529,7 +9542,8 @@ function renderGourmet(){
   const assin = ativas.filter(x => x.termoAssinadoEm || x.status === "Termo assinado").length;
   const falta = ativas.filter(x => !x.termoAssinadoEm && (x.status === "Aguardando assinatura" || x.status === "Solicitada" || x.status === "Pré-reserva")).length;
   $("#gr-resumo").innerHTML = `<div><b>${l.length}</b><span>Reserva${l.length === 1 ? "" : "s"} (filtros atuais)</span><small>${grBRL(conf)} confirmadas · ${grBRL(ag)} aguardando pagamento</small></div>
-    <div><b>${assin}</b><span>Termo assinado</span></div><div class="${falta ? "gr-alerta" : ""}"><b>${falta}</b><span>Falta assinar ou iniciada</span></div>`;
+    <div><b>${assin}</b><span>Termo assinado</span></div><div class="${falta ? "gr-alerta" : ""}"><b>${falta}</b><span>Falta assinar ou iniciada</span>${falta && S.perfil === "Administração" ? `<button class="btn gr-avisar" type="button" id="gr-avisar">Avisar por e-mail para assinar</button>` : ""}</div>`;
+  if ($("#gr-avisar")) $("#gr-avisar").onclick = () => grAvisarTela(ativas.filter(x => !x.termoAssinadoEm && (x.status === "Aguardando assinatura" || x.status === "Solicitada" || x.status === "Pré-reserva")));
   const un = x => x.unidade ? grRotUn(x.bloco, "", x.unidade) : "Externo";
   box.innerHTML = l.length ? l.map(x => `<article class="gr-card">
       <div class="gr-info"><h3>${esc(x.espaco)}</h3>
