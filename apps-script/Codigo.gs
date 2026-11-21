@@ -443,7 +443,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-21 Pier Gestão 2.0 — Gourmet: avisar de uma vez quem falta assinar o termo';
+const VERSAO = '2026-11-21 Pier Gestão 2.0 — Gourmet: texto do aviso para assinar o termo';
 
 function doGet() {
   TABS = {};
@@ -3498,11 +3498,11 @@ function grTermoLink(x, conta, op) {
     + (op.presencial ? 'Para <b>confirmar</b>, compareça à <b>Administração do condomínio</b> para ler as regras e assinar o Termo de Responsabilidade da reserva.'
       : 'Para <b>confirmar</b>, leia as regras e assine o Termo de Responsabilidade pelo botão abaixo (dá para assinar com o dedo, no celular).')
     + (prazoTxt ? '<div style="margin-top:12px;border-left:4px solid #c0392b;background:#fdf3f2;border-radius:8px;padding:10px 12px"><b>' + (op.presencial ? 'Compareça até ' : 'Assine até ') + prazoTxt + '.</b> Se o termo não for assinado até lá, a reserva poderá ser cancelada pela Administração.</div>' : '') + '</td></tr>'
-    + (op.presencial ? '<tr><td style="padding:6px 30px 22px;' + F + 'font-size:12.5px;color:#5b6b7a;line-height:1.5">Leve um documento com foto. Se não for assinado, a reserva não é confirmada.</td></tr>' : '<tr><td align="center" style="padding:14px 30px 22px"><a href="' + link + '" style="display:inline-block;background:#17324d;color:#fff;' + F + 'font-size:16px;font-weight:bold;text-decoration:none;padding:14px 28px;border-radius:8px">Ler e assinar o termo</a></td></tr>'
+    + (op.presencial ? '<tr><td style="padding:6px 30px 22px;' + F + 'font-size:13px;color:#163047;line-height:1.5"><b>CANCELAMENTO:</b> Conforme consta do item 9.12 do Regulamento Interno, o cancelamento ou alteração da data do evento, garantido o crédito correspondente ao desconto realizado, somente será considerado se avisado por escrito a Administração com Antecedência Mínima de 07 (Sete Dias) corridos, caso contrário, o evento ter-se-á como havido.<div style="margin-top:12px;font-size:12.5px;color:#5b6b7a"><b>Obs.:</b> Caso já tenha assinado o termo na administração, favor desconsiderar este e-mail.</div></td></tr>' : '<tr><td align="center" style="padding:14px 30px 22px"><a href="' + link + '" style="display:inline-block;background:#17324d;color:#fff;' + F + 'font-size:16px;font-weight:bold;text-decoration:none;padding:14px 28px;border-radius:8px">Ler e assinar o termo</a></td></tr>'
     + '<tr><td style="padding:0 30px 22px;' + F + 'font-size:12.5px;color:#5b6b7a;line-height:1.5">O link é pessoal e vale até a véspera da reserva. Se não for assinado, a reserva não é confirmada.</td></tr>')
     + '<tr><td style="padding:14px 30px 22px;border-top:1px solid #d9e1e8;' + F + 'font-size:12px;color:#5b6b7a;text-align:center">Administração · Pier Residências · enviado pelo Pier Gestão</td></tr></table></div>';
   MailApp.sendEmail({ to: x.email, subject: (op.lembrete ? 'Lembrete: ' : '') + (op.presencial ? 'Compareça à Administração para assinar o termo da sua reserva – ' : 'Assine o termo para confirmar sua reserva – ') + x.espaco + ' – ' + String(x.data).split('-').reverse().join('/') + (prazoTxt ? ' (prazo: ' + prazoTxt + ')' : ''), htmlBody: html,
-    body: op.presencial ? 'Para confirmar sua reserva do ' + x.espaco + ' (' + String(x.data).split('-').reverse().join('/') + '), compareça à Administração do condomínio para assinar o termo' + (prazoTxt ? ' até ' + prazoTxt + ' (senão a reserva poderá ser cancelada)' : '') + '.'
+    body: op.presencial ? 'Para confirmar sua reserva do ' + x.espaco + ' (' + String(x.data).split('-').reverse().join('/') + '), compareça à Administração do condomínio para assinar o termo' + (prazoTxt ? ' até ' + prazoTxt : '') + '.\n\nCANCELAMENTO: Conforme consta do item 9.12 do Regulamento Interno, o cancelamento ou alteração da data do evento, garantido o crédito correspondente ao desconto realizado, somente será considerado se avisado por escrito a Administração com Antecedência Mínima de 07 (Sete Dias) corridos, caso contrário, o evento ter-se-á como havido.\n\nObs.: Caso já tenha assinado o termo na administração, favor desconsiderar este e-mail.'
       : 'Para confirmar sua reserva, leia e assine o termo' + (prazoTxt ? ' até ' + prazoTxt + ' (senão a reserva poderá ser cancelada)' : '') + ': ' + link, inlineImages: { logo: lembLogoBlob() }, name: 'Pier Residências' });
   return (op.presencial ? 'Aviso para assinar na Administração enviado para ' : 'Link do termo enviado para ') + x.email + '.';
 }
