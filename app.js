@@ -4100,7 +4100,7 @@ function abrirImportacao(){
     const modo = ($("input[name=imp-modo]:checked") || {}).value || "atualizar";
     const comHist = lido.hist && lido.hist.length && $("#imp-hist") && $("#imp-hist").checked;
     const extraHist = comHist ? {historico: lido.hist, dataAjuste: lido.hist.map(h => h.data).sort()[0]} : {};
-    const r = await enviar($("#imp-ok"), $("#imp-msg"), "importarContagem", Object.assign({linhas: lido.itens, modo, motivo: $("#imp-mot").value.trim(), setor: S.setor}, extraHist, repetir ? {confirmarRepeticao:true} : {}), () => { fecharModal(); setTab("itens"); });
+    const r = await enviar($("#imp-ok"), $("#imp-msg"), "importarContagem", Object.assign({linhas: lido.itens, modo, motivo: $("#imp-mot").value.trim(), setor: S.setor}, extraHist, repetir || !itensArr().length ? {confirmarRepeticao:true} : {}), () => { fecharModal(); setTab("itens"); });
     // a mesma planilha já foi importada: o servidor pede confirmação; o botão passa a enviar confirmando
     if (!r && /já foi importada/.test($("#imp-msg").textContent) && !repetir) { repetir = true; $("#imp-ok").textContent = "Importar mesmo assim"; $("#imp-ok").classList.add("danger"); }
   });
