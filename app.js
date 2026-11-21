@@ -1964,6 +1964,7 @@ function aplicarPermissoes(){
   $("#i-novo").hidden = !can("itens_cadastrar");
   $("#i-importar").hidden = !can("itens_editar");
   $("#i-exportar").hidden = !can("exportar");
+  $("#i-apagar").hidden = !(S.perfil === "Administração" && S.setor === "Limpeza");
   $("#o-nova").hidden = !can("os_abrir");
   $("#dm-nova").hidden = !can("dem_delegar");
   $("#pv-box").hidden = !can("dem_delegar");
@@ -4118,6 +4119,21 @@ function exportarEstoque(){
   } catch(e){ toast(e.message || "Não foi possível gerar a planilha.", true); }
 }
 $("#i-exportar").addEventListener("click", exportarEstoque);
+// Administração: apaga toda a lista do estoque da Limpeza (com cópia de segurança no Drive)
+$("#i-apagar").addEventListener("click", () => {
+  if (S.perfil !== "Administração" || S.setor !== "Limpeza") return;
+  const n = itensArr().length;
+  if (!n) { toast("A lista da Limpeza já está vazia.", true); return; }
+  $("#modal-box").innerHTML = `<h3>Excluir toda a lista do estoque da Limpeza</h3>
+    <p>Isto apaga os <b>${n} ite${n === 1 ? "m" : "ns"}</b> da Limpeza. Use para recomeçar a lista (por exemplo, importar a planilha nova).</p>
+    <ul class="hint" style="margin:6px 0 10px 18px"><li>Antes de apagar, o sistema guarda uma cópia da lista no Drive (pasta <b>Cópias do estoque - Pier Gestão</b>).</li><li>O histórico de entradas e saídas continua guardado.</li><li>Contagens pendentes desses itens são canceladas.</li><li>Não dá para desfazer pelo sistema.</li></ul>
+    <p><button class="btn" type="button" id="ap-exp">Baixar a planilha antes (recomendado)</button></p>
+    <div class="field"><label for="ap-conf">Para confirmar, digite <b>EXCLUIR</b></label><input class="input" id="ap-conf" autocomplete="off" maxlength="10"></div>
+    <div class="actions"><button class="btn danger" type="button" id="ap-ok" disabled>Excluir ${n} ite${n === 1 ? "m" : "ns"}</button><button class="btn" type="button" id="ap-x">Cancelar</button><span class="hint" id="ap-msg"></span></div>`;
+  $("#modal").hidden = false; $("#ap-x").onclick = fecharModal; $("#ap-exp").onclick = exportarEstoque; $("#ap-conf").focus();
+  $("#ap-conf").oninput = () => { $("#ap-ok").disabled = $("#ap-conf").value.trim().toUpperCase() !== "EXCLUIR"; };
+  $("#ap-ok").onclick = () => enviar($("#ap-ok"), $("#ap-msg"), "apagarListaSetor", {setor:"Limpeza", confirma:$("#ap-conf").value.trim()}, r => { $("#ap-msg").className = "hint"; $("#ap-msg").textContent = r.msg || ""; $("#ap-ok").hidden = true; $("#ap-x").textContent = "Fechar"; });
+});
 
 // ---------- histórico de acessos (menu Administração) ----------
 const AC_TIPO = {login:"Entrou com senha", retorno:"Voltou ao sistema", falha:"Senha errada", bloqueado:"Login bloqueado"};

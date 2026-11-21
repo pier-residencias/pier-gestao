@@ -443,7 +443,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-21 Pier Gestão 2.0 — Gourmet: termo com a condição (proprietário ou inquilino)';
+const VERSAO = '2026-11-21 Pier Gestão 2.0 — Limpeza: apagar toda a lista do estoque (Administração)';
 
 function doGet() {
   TABS = {};
@@ -589,6 +589,7 @@ function doPost(e) {
         case 'devolver': pode('devolver'); msg = devolver(req, nome, conta); break;
         case 'salvarItem': pode((req.item || {}).id ? 'itens_editar' : 'itens_cadastrar'); msg = salvarItem(req, nome, conta); break;
         case 'excluirItem': pode('itens_editar'); msg = excluirItem(req.id, conta); break;
+        case 'apagarListaSetor': msg = apagarListaSetor(req, conta); break;
         case 'estornar': pode('historico_estornar'); msg = estornar(req, nome, conta); break;
         case 'salvarUsuario': pode('usuarios'); msg = salvarUsuario(req, conta); extra.equipe = equipe(); break;
         case 'acessoUsuario': pode('usuarios'); msg = acessoUsuario(req, conta); extra.equipe = equipe(); break;
@@ -832,6 +833,34 @@ function salvarItem(r, nome, conta) {
 }
 
 
+// Administração: apaga TODOS os itens do estoque da Limpeza (para recomeçar a lista). Antes, guarda uma cópia (CSV)
+// no Drive; contagens pendentes desses itens são canceladas. O histórico de movimentações continua guardado.
+function apagarListaSetor(r, conta) {
+  if (conta.perfil !== PERFIL_TOTAL) { const e = falha('Só a Administração pode apagar a lista do estoque.'); e.negado = true; throw e; }
+  const setor = setorDe({ setor: texto(r.setor, 40) });
+  if (setor !== 'Limpeza') throw falha('Só a lista da Limpeza pode ser apagada por aqui.');
+  if (String(r.confirma || '').trim().toUpperCase() !== 'EXCLUIR') throw falha('Digite EXCLUIR para confirmar.');
+  const ti = tabela('itens'), its = linhas(ti).filter(x => setorDe(x) === setor);
+  if (!its.length) throw falha('A lista da ' + setor + ' já está vazia.');
+  const ids = {}; its.forEach(x => { ids[x.id] = true; });
+  const tc = tabela('cont'), conts = linhas(tc).filter(c => ids[c.itemId]);
+  if (conts.some(c => c.etapa === 'aplicando')) throw falha('Há um ajuste de contagem sendo aplicado agora. Tente de novo em alguns minutos.');
+  // cópia de segurança
+  const cols = ti.def.cols, q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  const csv = '\ufeff' + [cols.map(c => q(c[1])).join(';')].concat(its.map(x => cols.map(c => q(x[c[0]])).join(';'))).join('\r\n');
+  const quando = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH-mm');
+  const nomeArq = 'Estoque ' + setor + ' - cópia antes de apagar - ' + quando + '.csv';
+  pastaDrive('PASTA_COPIAS_ESTOQUE', 'Cópias do estoque - Pier Gestão').createFile(Utilities.newBlob(csv, 'text/csv', nomeArq));
+  // contagens pendentes desses itens: canceladas
+  let canc = 0;
+  conts.filter(c => c.status === CONT_STATUS.pendente || c.status === CONT_STATUS.reconferir).forEach(c => {
+    gravar(tc, { status: CONT_STATUS.cancelada, decididoPor: conta.usuario, decididoPorId: conta.id || '', decididoPorNome: conta.nome, decididoEm: agoraSeg(), motivoDecisao: 'Lista da ' + setor + ' apagada pela Administração', versao: Number(c.versao || 0) + 1 }, c._row); canc++;
+  });
+  its.map(x => x._row).sort((a, b) => b - a).forEach(rw => ti.sh.deleteRow(rw));
+  its.forEach(x => { SALDO_OK[x.id] = true; });
+  AUDIT_DET = 'Apagou a lista do estoque da ' + setor + ': ' + its.length + ' item(ns)' + (canc ? ', ' + canc + ' contagem(ns) pendente(s) cancelada(s)' : '') + '. Cópia: ' + nomeArq;
+  return its.length + ' ite' + (its.length === 1 ? 'm excluído' : 'ns excluídos') + ' da lista da ' + setor + '. Cópia de segurança no Drive: "' + nomeArq + '" (pasta Cópias do estoque - Pier Gestão).' + (canc ? ' ' + canc + ' contagem(ns) pendente(s) cancelada(s).' : '');
+}
 function excluirItem(id, conta) {
   const ti = tabela('itens');
   const it = linhas(ti).find(x => x.id === id);
@@ -5958,7 +5987,7 @@ const ACOES_AUDIT = {
   compraSalvar: 'Controle de compras', compraImportar: 'Importou planilha do controle de compras',
   fornSalvar: 'Fornecedor', fornImportar: 'Importou planilha de fornecedores', fornDasCotacoes: 'Trouxe fornecedores das cotações',
   grAuto: 'Termo automático das reservas', grAutoAgora: 'Conferiu as reservas da administradora',
-  grReservar: 'Nova reserva do Espaço Gourmet', grAcao: 'Reserva do Espaço Gourmet', grAvisarTermo: 'Avisou quem falta assinar o termo',
+  grReservar: 'Nova reserva do Espaço Gourmet', grAcao: 'Reserva do Espaço Gourmet', grAvisarTermo: 'Avisou quem falta assinar o termo', apagarListaSetor: 'Apagou a lista do estoque',
   espReserva: 'Reserva de espaço', espEspaco: 'Espaço', espVistoria: 'Vistoria de espaço', espColar: 'Reserva colada do e-mail', espImportar: 'Importou PDF de reservas', espEmails: 'Leu e-mails de reserva',
   medMedidor: 'Medidor', medLeituras: 'Leitura de medidor', medContas: 'Conta de consumo', medImportar: 'Importou planilha de medições',
   miImportar: 'Importou medição individual (Exista)', miBlocos: 'Nomes dos blocos (medição individual)', miExcluir: 'Excluiu período da medição individual',
