@@ -6,7 +6,7 @@
   const fData = d => String(d || "").split("-").reverse().join("/");
   function texto(d, nome){
     const r = d.reserva, rep = s => s.replace(/\{NOME\}/g, `<u>${esc(nome || r.solicitante)}</u>`).replace(/\{BLOCO\}/g, `<u>${esc(r.bloco || "—")}</u>`).replace(/\{UNIDADE\}/g, `<u>${esc(r.unidade || "—")}</u>`)
-      .replace(/\{DATA\}/g, `<u>${esc(fData(r.data))}</u>`).replace(/\{VALOR\}/g, esc(r.valorTxt)).replace(/\{VALOR_EXT\}/g, esc(r.valorExt));
+      .replace(/\{CONDICAO\}/g, `<u>${esc(String(r.condicao || "Morador(a)").toUpperCase())}</u>`).replace(/\{DATA\}/g, `<u>${esc(fData(r.data))}</u>`).replace(/\{VALOR\}/g, esc(r.valorTxt)).replace(/\{VALOR_EXT\}/g, esc(r.valorExt));
     return d.termo.map(l => l === "@mapa" ? `<figure class="tg-mapa"><img src="data:image/jpeg;base64,${d.mapa}" alt="Mapa: áreas disponíveis para os participantes do evento, marcadas em azul"><figcaption>Áreas disponíveis marcadas em azul</figcaption></figure>`
       : /^# /.test(l) ? `<h4>${esc(l.slice(2))}</h4>` : /^! /.test(l) ? `<p class="tg-dec">${rep(esc(l.slice(2)))}</p>`
       : /^[a-h]\. /.test(l) ? `<p class="tg-sub">${rep(esc(l))}</p>` : /^\d+\. /.test(l) ? `<p class="tg-item">${rep(esc(l))}</p>` : `<p>${rep(esc(l))}</p>`).join("");
@@ -15,7 +15,7 @@
     const r = d.reserva;
     el.innerHTML = `<div class="tg">
       <div class="tg-cab"><h3>Termo de responsabilidade para reserva e uso do Espaço Gourmet</h3>
-        <div class="tg-res"><span><b>Data</b>${esc(fData(r.data))}</span><span><b>Espaço</b>${esc(r.espaco)}</span><span><b>Solicitante</b>${esc(r.solicitante)}</span><span><b>Bloco / unidade</b>${esc((r.bloco || "—") + " / " + (r.unidade || "—"))}</span><span><b>Valor</b>${esc(r.valorTxt)}</span></div></div>
+        <div class="tg-res"><span><b>Data</b>${esc(fData(r.data))}</span><span><b>Espaço</b>${esc(r.espaco)}</span><span><b>Solicitante</b>${esc(r.solicitante)}</span><span><b>Condição</b>${esc(r.condicao || "Morador(a)")}${r.alugado ? ` · unidade alugada${r.proprietario ? ` (proprietário(a): ${esc(r.proprietario)})` : ""}` : ""}</span><span><b>Bloco / unidade</b>${esc((r.bloco || "—") + " / " + (r.unidade || "—"))}</span><span><b>Valor</b>${esc(r.valorTxt)}</span></div></div>
       <ol class="tg-passos"><li class="on" data-p="1">Ler as regras</li><li data-p="2">Assinar</li><li data-p="3">Confirmar</li></ol>
       <div class="tg-ler"><div class="tg-barra"><span></span></div><div class="tg-texto" tabindex="0" aria-label="Texto do termo. Role até o fim para continuar.">${texto(d, r.solicitante)}<p class="tg-rod">${esc(d.rodape)}</p></div>
         <p class="tg-aviso" role="status">Role o texto até o fim para continuar.</p></div>
