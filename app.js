@@ -4123,7 +4123,13 @@ $("#i-exportar").addEventListener("click", exportarEstoque);
 $("#i-apagar").addEventListener("click", () => {
   if (S.perfil !== "Administração" || S.setor !== "Limpeza") return;
   const n = itensArr().length;
-  if (!n) { toast("A lista da Limpeza já está vazia.", true); return; }
+  if (!n) {
+    $("#modal-box").innerHTML = `<h3>Lista da Limpeza vazia</h3><p>A lista já está vazia. Se a planilha que você quer importar aparece como <b>"Arquivo já importado"</b>, libere aqui para importar de novo sem o aviso.</p>
+      <div class="actions"><button class="btn primary" type="button" id="ap-lib">Liberar planilhas já importadas</button><button class="btn" type="button" id="ap-x">Fechar</button><span class="hint" id="ap-msg"></span></div>`;
+    $("#modal").hidden = false; $("#ap-x").onclick = fecharModal;
+    $("#ap-lib").onclick = () => enviar($("#ap-lib"), $("#ap-msg"), "apagarListaSetor", {setor:"Limpeza", confirma:"EXCLUIR"}, r => { $("#ap-msg").className = "hint"; $("#ap-msg").textContent = r.msg || ""; $("#ap-lib").hidden = true; });
+    return;
+  }
   $("#modal-box").innerHTML = `<h3>Excluir toda a lista do estoque da Limpeza</h3>
     <p>Isto apaga os <b>${n} ite${n === 1 ? "m" : "ns"}</b> da Limpeza. Use para recomeçar a lista (por exemplo, importar a planilha nova).</p>
     <ul class="hint" style="margin:6px 0 10px 18px"><li>Antes de apagar, o sistema guarda uma cópia da lista no Drive (pasta <b>Cópias do estoque - Pier Gestão</b>).</li><li>O histórico de entradas e saídas continua guardado.</li><li>Contagens pendentes desses itens são canceladas.</li><li>Não dá para desfazer pelo sistema.</li></ul>
