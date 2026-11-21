@@ -9292,8 +9292,9 @@ function esLerBCF(linhas){
   });
   return out;
 }
-async function esImportarPDF(file){
-  if (!file || !ES.d) return;
+async function esImportarPDF(file, gr){
+  const base = gr ? GR.d : ES.d;
+  if (!file || !base) return;
   if (!/\.pdf$/i.test(file.name)) { toast("Escolha o PDF de solicitações do site da administradora.", true); return; }
   let lista;
   try {
@@ -9302,8 +9303,8 @@ async function esImportarPDF(file){
     lista = esLerBCF(LeitorNF.montarLinhas(pags));
   } catch(e){ toast("Não consegui ler este PDF.", true); return; }
   if (!lista.length) { toast("Não encontrei reservas neste PDF (datas e linhas com Bloco, Unidade e Status).", true); return; }
-  const porChave = new Map(ES.d.reservas.map(r => [esChave(r), r]));
-  const est = lista.map(x => { const r = porChave.get(esChave(x)); return {x, r, acao:!r ? "nova" : r.status === x.status || r.status === "Realizada" ? "igual" : "muda"}; });
+  const porChave = new Map(base.reservas.map(r => [esChave(r), r]));
+  const est = lista.map(x => { const r = porChave.get(esChave(x)); return {x, r, acao:!r ? "nova" : r.status === x.status || r.status === "Realizada" || (["Aguardando assinatura", "Termo assinado", "Confirmada"].includes(r.status) && ["Solicitada", "Pré-reserva"].includes(x.status)) ? "igual" : "muda"}; });
   const n = k => est.filter(e => e.acao === k).length;
   $("#modal-box").classList.add("largo");
   $("#modal-box").innerHTML = `<h3>Importar reservas do PDF</h3>
@@ -9313,7 +9314,7 @@ async function esImportarPDF(file){
     <p class="hint">O PDF não traz o número da solicitação: a reserva é reconhecida pela data, espaço, bloco e unidade.</p>
     <div class="actions" style="margin-top:12px"><button class="btn primary" type="button" id="ep-ok" ${n("nova") + n("muda") ? "" : "disabled"}>Importar</button><button class="btn" type="button" id="ep-x">Cancelar</button><span class="hint" id="ep-msg"></span></div>`;
   $("#modal").hidden = false; $("#ep-x").onclick = fecharModal;
-  $("#ep-ok").onclick = () => enviar($("#ep-ok"), $("#ep-msg"), "espImportar", {lista}, x => { if (esAplicar(x)) { fecharModal(); renderEspTudo(); } });
+  $("#ep-ok").onclick = () => enviar($("#ep-ok"), $("#ep-msg"), "espImportar", {lista}, x => { if (gr ? grAplicar(x) : esAplicar(x)) { fecharModal(); if (gr) carregarGourmet(true); else renderEspTudo(); } });
 }
 if ($("#t-esreservas")) {
   $("#er-pdf").addEventListener("click", () => $("#er-arq").click());
@@ -9459,9 +9460,10 @@ if ($("#t-compras")) {
 // Lista com resumo e filtros; "+ Nova reserva" abre o formulário com calendário (vagas por dia, prazo de antecedência)
 // e, ao guardar, o servidor envia o e-mail de confirmação ao solicitante.
 const GR = { d:null, carregando:false, erro:"", q:"", esp:"", estado:"aberto", origem:"", de:"", ate:"" };
-const GR_ABERTAS = ["Solicitada", "Aguardando assinatura", "Pré-reserva", "Confirmada"];
-const grStatusRot = s => s === "Aguardando assinatura" ? "Aguardando assinatura do termo" : s === "Pré-reserva" || s === "Solicitada" ? "Aguardando pagamento" : s === "Confirmada" ? "Reserva confirmada" : s === "Realizada" ? "Finalizada" : s || "—";
-const grStatusCls = s => s === "Confirmada" || s === "Realizada" ? "ok" : s === "Pré-reserva" || s === "Solicitada" || s === "Aguardando assinatura" ? "ag" : "dev";
+const GR_ABERTAS = ["Solicitada", "Aguardando assinatura", "Termo assinado", "Pré-reserva", "Confirmada"];
+const GR_DA_ADM = x => ["e-mail", "PDF", "colado"].includes(x.origem);
+const grStatusRot = s => s === "Aguardando assinatura" ? "Aguardando assinatura do termo" : s === "Termo assinado" ? "Termo assinado · confirmar na administradora" : s === "Pré-reserva" || s === "Solicitada" ? "Aguardando pagamento" : s === "Confirmada" ? "Reserva confirmada" : s === "Realizada" ? "Finalizada" : s || "—";
+const grStatusCls = s => s === "Confirmada" || s === "Realizada" ? "ok" : s === "Pré-reserva" || s === "Solicitada" || s === "Aguardando assinatura" || s === "Termo assinado" ? "ag" : "dev";
 const grBRL = v => fBRL(Number(v) || 0);
 const grDataLonga = d => { const x = new Date(d + "T12:00:00"); const t = x.toLocaleDateString("pt-BR", {weekday:"long", day:"numeric", month:"long", year:"numeric"}); return t.charAt(0).toUpperCase() + t.slice(1); };
 const grRotUn = (bloco, andar, numero) => [bloco ? "Bloco " + unBlocoCurto(String(bloco)).replace(/^bloco\s*/i, "") : "", andar, numero].filter(Boolean).join(" - ");
@@ -9469,7 +9471,7 @@ async function carregarGourmet(forcar){
   if (!S.token || GR.carregando || !podeAba("gourmet")) return;
   if (!forcar && GR.d && Date.now() - GR.em < 60000) { renderGourmet(); return; }
   GR.carregando = true;
-  try { const r = await api("gourmet"); GR.d = {espacos:r.espacos || [], reservas:r.reservas || [], unidades:r.unidadesRes || []}; GR.em = Date.now(); GR.erro = ""; }
+  try { const r = await api("gourmet"); GR.d = {espacos:r.espacos || [], reservas:r.reservas || [], unidades:r.unidadesRes || [], auto:r.grAuto || {}}; GR.em = Date.now(); GR.erro = ""; }
   catch(e){ GR.erro = /desconhecida/i.test(e.message) ? "A Reserva do Espaço Gourmet precisa do Apps Script novo (colar o código e implantar uma nova versão)." : e.message; }
   finally { GR.carregando = false; renderGourmet(); }
 }
@@ -9490,12 +9492,33 @@ function grFiltradas(){
     && (!q || norm([x.espaco, x.solicitante, x.email, x.cpf, x.bloco, x.unidade, x.solicitacao, x.obs].join(" ")).includes(q)))
     .sort((a, b) => String(a.data).localeCompare(String(b.data)));
 }
+function grAutoFaixa(){
+  const el = $("#gr-auto-faixa"); if (!el || !GR.d) return; const c = GR.d.auto || {};
+  el.innerHTML = `<div class="gr-auto ${c.ativo ? "on" : ""}"><b>Termo automático ${c.ativo ? "ligado" : "desligado"}</b><span>${c.ativo ? `Reservas que chegam por e-mail da administradora recebem o termo com prazo de ${c.prazoH} h (lembrete ${c.lembreteH} h antes).` : "Ligue para pedir o termo sozinho a cada reserva feita no sistema da administradora."}${c.ultima ? ` Última conferência: ${esc(fDataHora(c.ultima))} — ${esc(c.resumo || "")}` : ""}</span></div>`;
+}
+function grAutoTela(){
+  if (!GR.d) return; const c = GR.d.auto || {prazoH:48, lembreteH:24};
+  $("#modal-box").innerHTML = `<h3>Termo automático · reservas da administradora</h3>
+    <p class="muted">Quando chega uma reserva nova do Espaço Gourmet da administradora (status <b>Iniciada</b>, pelo e-mail ou pelo PDF da BCF), o Pier Gestão acha a unidade no cadastro e envia ao morador um e-mail pedindo para <b>comparecer à Administração e assinar o termo</b>, com prazo. Antes do fim do prazo vai um lembrete; se vencer sem assinatura, a Administração recebe um aviso para decidir o cancelamento. Assinado, a reserva fica <b>Termo assinado</b> e a Administração é avisada para confirmar no sistema da administradora.</p>
+    <form class="form" id="ga-f" novalidate>
+      <label class="md-chk full"><input type="checkbox" id="ga-on" ${c.ativo ? "checked" : ""}> Ligar o envio automático (confere os e-mails a cada 15 minutos)</label>
+      <div class="field"><label for="ga-prazo">Prazo para assinar (horas)</label><input class="input num" type="number" id="ga-prazo" min="6" max="240" value="${c.prazoH || 48}"></div>
+      <div class="field"><label for="ga-lemb">Lembrete antes do fim do prazo (horas)</label><input class="input num" type="number" id="ga-lemb" min="1" max="120" value="${c.lembreteH || 24}"></div>
+    </form>
+    <p class="hint">O e-mail vai para o morador da unidade que tiver e-mail no cadastro (Unidades). Sem e-mail, a Administração recebe um aviso para assinar na tela.</p>
+    <div class="actions"><button class="btn primary" type="button" id="ga-ok">Salvar</button><button class="btn" type="button" id="ga-agora">Conferir agora</button><button class="btn" type="button" id="ga-x">Fechar</button><span class="hint" id="ga-msg"></span></div>`;
+  $("#modal").hidden = false; $("#ga-x").onclick = fecharModal;
+  const fim = r => { if (r.grAuto) GR.d.auto = r.grAuto; grAplicar(r); renderGourmet(); $("#ga-msg").className = "hint"; $("#ga-msg").textContent = r.msg || "Salvo."; };
+  $("#ga-ok").onclick = () => enviar($("#ga-ok"), $("#ga-msg"), "grAuto", {ativo:$("#ga-on").checked, prazoH:$("#ga-prazo").value, lembreteH:$("#ga-lemb").value}, fim);
+  $("#ga-agora").onclick = () => enviar($("#ga-agora"), $("#ga-msg"), "grAutoAgora", {}, fim);
+}
 function renderGourmet(){
   const sec = $("#t-gourmet"); if (!sec || sec.hidden) return;
   const box = $("#gr-lista");
   if (GR.erro && !GR.d) { box.innerHTML = `<div class="notice crit">${esc(GR.erro)}</div>`; return; }
   if (!GR.d) { box.innerHTML = `<div class="empty"><span class="spin" aria-hidden="true"></span> Carregando as reservas…</div>`; return; }
   if (!GR.de && GR.estado === "aberto") GR.de = hoje();
+  grAutoFaixa(); $("#gr-auto").hidden = S.perfil !== "Administração";
   $("#gr-esp").innerHTML = `<option value="">Todos os espaços</option>` + (GR.d.espacos || []).map(e => `<option ${e.nome === GR.esp ? "selected" : ""}>${esc(e.nome)}</option>`).join("");
   $("#gr-estado").value = GR.estado; $("#gr-origem").value = GR.origem; $("#gr-de").value = GR.de; $("#gr-ate").value = GR.ate; if ($("#gr-q").value !== GR.q) $("#gr-q").value = GR.q;
   const l = grFiltradas();
@@ -9509,7 +9532,7 @@ function renderGourmet(){
         <p><b>Solicitante:</b> ${esc(x.solicitante || "—")}${x.email ? ` <span class="muted">· ${esc(x.email)}</span>` : ""}</p>
         <p><b>Unidade:</b> ${esc(un(x))} · <b>Período:</b> ${esc(x.periodo || "Dia inteiro")}</p>
         <p><b>Valor:</b> ${x.valor === "" ? "—" : grBRL(x.valor)}</p>
-        <div class="gr-tags"><span class="cc-st ${grStatusCls(x.status)}">${esc(grStatusRot(x.status))}</span>${x.termoAssinadoEm ? `<span class="gr-tag">✍ termo assinado</span>` : x.status === "Aguardando assinatura" ? `<span class="gr-tag">${x.termoLinkEm ? "✉ link do termo enviado" : "termo não assinado"}</span>` : ""}${x.avisoEm ? `<span class="gr-tag">✉ confirmação enviada</span>` : ""}${x.origem && x.origem !== "Pier Gestão" ? `<span class="gr-tag">${esc(x.origem)}</span>` : ""}</div></div>
+        <div class="gr-tags"><span class="cc-st ${grStatusCls(x.status)}">${esc(grStatusRot(x.status))}</span>${GR_DA_ADM(x) ? `<span class="gr-tag">Sistema da administradora${x.solicitacao ? " · nº " + esc(x.solicitacao) : ""}</span>` : ""}${x.termoAssinadoEm ? `<span class="gr-tag">✍ termo assinado</span>` : x.status === "Aguardando assinatura" ? `<span class="gr-tag">${x.termoLinkEm ? "✉ link do termo enviado" : "termo não assinado"}</span>${x.termoPrazo ? (x.termoVencidoEm ? `<span class="cc-al crit">Prazo vencido em ${esc(fDataHora(x.termoPrazo))}</span>` : `<span class="gr-tag gr-prazo">Assinar até ${esc(fDataHora(x.termoPrazo))}</span>`) : ""}` : ""}${x.termoObs ? `<span class="cc-al warn">${esc(x.termoObs)}</span>` : ""}${x.avisoEm ? `<span class="gr-tag">✉ confirmação enviada</span>` : ""}${x.origem && x.origem !== "Pier Gestão" ? `<span class="gr-tag">${esc(x.origem)}</span>` : ""}</div></div>
       <div class="gr-acoes"><button type="button" class="btn" data-gr-det="${esc(x.id)}">Detalhe</button><button type="button" class="btn gr-pdf" data-gr-pdf="${esc(x.id)}">PDF</button></div></article>`).join("")
     : `<div class="empty">Nenhuma reserva com esses filtros. Use <b>+ Nova reserva</b>.</div>`;
 }
@@ -9626,8 +9649,8 @@ function grDetalhe(id){
   $("#modal-box").innerHTML = `<h3>${esc(x.espaco)} · ${fData(x.data)}</h3><span class="cc-st ${grStatusCls(x.status)}">${esc(grStatusRot(x.status))}</span>
     <dl class="gr-dl">${li("Data", esc(grDataLonga(x.data)))}${li("Horário", esc(x.horario || ""))}${li("Período", esc(x.periodo || "Dia inteiro"))}${li("Solicitante", esc(x.solicitante || ""))}
       ${li("Unidade", x.unidade ? esc(grRotUn(x.bloco, "", x.unidade)) : "Externo")}${li("E-mail", x.email ? esc(x.email) : `<span class="muted">sem e-mail</span>`)}${li("Telefone", esc(x.telefone || ""))}${li("CPF", esc(x.cpf || ""))}
-      ${li("Valor", x.valor === "" ? "" : grBRL(x.valor))}${li("Observações", esc(x.obs || ""))}${li("Registrada", esc(fDataHora(x.registradoEm) + (x.registradoPor ? " por " + x.registradoPor : "")))}${li("Termo", x.termoAssinadoEm ? esc("Assinado por " + (x.termoNome || "") + " em " + fDataHora(x.termoAssinadoEm) + (x.termoVia ? " · " + x.termoVia : "")) : x.status === "Aguardando assinatura" ? (x.termoLinkEm ? "Link enviado em " + esc(fDataHora(x.termoLinkEm)) + ", ainda não assinado" : "Ainda não assinado") : "")}${li("E-mail de confirmação", x.avisoEm ? esc(fDataHora(x.avisoEm)) : "")}</dl>
-    <div class="actions" id="gr-det-ac">${x.status === "Aguardando assinatura" ? `<button class="btn primary" type="button" data-gr-ass="${esc(x.id)}">Assinar termo agora</button>${x.email ? `<button class="btn" type="button" data-gr-op="enviarTermo">${x.termoLinkEm ? "Reenviar" : "Enviar"} link do termo</button>` : ""}` : ""}${x.termoArquivo ? `<button class="btn" type="button" data-gr-termo="${esc(x.id)}">Ver termo assinado</button>` : ""}${aguard ? `<button class="btn primary" type="button" data-gr-op="confirmar">Confirmar pagamento</button>` : ""}${x.email ? `<button class="btn" type="button" data-gr-op="reenviar">Reenviar e-mail</button>` : ""}
+      ${li("Valor", x.valor === "" ? "" : grBRL(x.valor))}${li("Observações", esc(x.obs || ""))}${li("Registrada", esc(fDataHora(x.registradoEm) + (x.registradoPor ? " por " + x.registradoPor : "")))}${li("Prazo do termo", x.termoPrazo && !x.termoAssinadoEm ? esc(fDataHora(x.termoPrazo)) + (x.termoVencidoEm ? " · vencido" : x.termoLembreteEm ? " · lembrete enviado" : "") : "")}${li("Solicitação na administradora", esc(x.solicitacao || ""))}${li("Termo", x.termoAssinadoEm ? esc("Assinado por " + (x.termoNome || "") + " em " + fDataHora(x.termoAssinadoEm) + (x.termoVia ? " · " + x.termoVia : "")) : x.status === "Aguardando assinatura" ? (x.termoLinkEm ? "Link enviado em " + esc(fDataHora(x.termoLinkEm)) + ", ainda não assinado" : "Ainda não assinado") : "")}${li("E-mail de confirmação", x.avisoEm ? esc(fDataHora(x.avisoEm)) : "")}</dl>
+    <div class="actions" id="gr-det-ac">${GR_DA_ADM(x) && !x.termoAssinadoEm && ["Solicitada", "Pré-reserva"].includes(x.status) ? `<button class="btn primary" type="button" data-gr-op="pedirTermo">Pedir termo (e-mail para assinar na Administração)</button>` : ""}${x.status === "Termo assinado" ? `<button class="btn primary" type="button" data-gr-op="confirmar">Confirmar reserva (já confirmei na administradora)</button>` : ""}${x.status === "Aguardando assinatura" ? `<button class="btn primary" type="button" data-gr-ass="${esc(x.id)}">Assinar termo agora</button>${x.email ? `<button class="btn" type="button" data-gr-op="enviarTermo">${x.termoLinkEm ? "Reenviar" : "Enviar"} link do termo</button>` : ""}` : ""}${x.termoArquivo ? `<button class="btn" type="button" data-gr-termo="${esc(x.id)}">Ver termo assinado</button>` : ""}${aguard && !(GR_DA_ADM(x) && !x.termoAssinadoEm) ? `<button class="btn primary" type="button" data-gr-op="confirmar">Confirmar pagamento</button>` : ""}${x.email ? `<button class="btn" type="button" data-gr-op="reenviar">Reenviar e-mail</button>` : ""}
       <button class="btn" type="button" data-gr-pdf="${esc(x.id)}">Comprovante (PDF)</button>${aberta ? `<button class="btn danger" type="button" data-gr-op="cancelar">Cancelar reserva</button>` : ""}${aberta ? `<button class="btn" type="button" id="gr-cont">${x.email ? "Corrigir e-mail" : "Adicionar e-mail"}</button>` : ""}${S.perfil === "Administração" ? `<button class="btn danger" type="button" id="gr-del">Excluir reserva</button>` : ""}<button class="btn" type="button" id="gr-dx">Fechar</button><span class="hint" id="gr-dmsg"></span></div>
     <div id="gr-delbox" class="gr-contbox gr-delbox" hidden><p><b>Excluir de vez a reserva de ${esc(x.solicitante || "—")} em ${fData(x.data)}?</b> A data fica livre e a reserva some da lista. Isso não dá para desfazer${x.termoArquivo ? "; o termo assinado continua guardado no Drive" : ""}. Para manter o histórico, prefira <b>Cancelar reserva</b>.</p>
       <div class="field"><label for="gr-delmot">Motivo (opcional)</label><input class="input" id="gr-delmot" maxlength="200"></div><div class="actions"><button class="btn danger" type="button" id="gr-delok">Excluir de vez</button><button class="btn" type="button" id="gr-delno">Voltar</button></div></div>
@@ -9728,6 +9751,9 @@ function grConfig(){
 if ($("#t-gourmet")) {
   $("#gr-novo").addEventListener("click", grNova);
   $("#gr-config").addEventListener("click", () => GR.d && grConfig());
+  $("#gr-auto").addEventListener("click", grAutoTela);
+  $("#gr-pdf").addEventListener("click", () => GR.d && $("#gr-arq").click());
+  $("#gr-arq").addEventListener("change", async ev => { const f = ev.target.files[0]; ev.target.value = ""; if (f && !(await arqConferir("espImportar", [f]))) return; esImportarPDF(f, true); });
   $("#gr-pdf").addEventListener("click", () => GR.d && grPDF(""));
   $("#gr-xlsx").addEventListener("click", () => GR.d && grXLSX());
   $("#gr-q").addEventListener("input", ev => { GR.q = ev.target.value; renderGourmet(); });
