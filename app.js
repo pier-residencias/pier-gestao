@@ -9462,6 +9462,25 @@ if ($("#t-compras")) {
 const GR = { d:null, carregando:false, erro:"", q:"", esp:"", estado:"aberto", origem:"", de:"", ate:"" };
 const GR_ABERTAS = ["Solicitada", "Aguardando assinatura", "Termo assinado", "Pré-reserva", "Confirmada"];
 const GR_DA_ADM = x => ["e-mail", "PDF", "colado"].includes(x.origem);
+// unidade da reserva no cadastro (pelo ID ou por bloco/unidade) e quem recebe o aviso — igual ao servidor
+const grNum = v => String(v || "").replace(/\D/g, "").replace(/^0+/, "");
+function grUnDe(x){
+  const l = (GR.d && GR.d.unidades) || []; if (x.unidadeId) { const u = l.find(z => z.id === x.unidadeId); if (u) return u; }
+  const nu = grNum(x.unidade); if (!nu) return null; const nb = (/BL(?:OCO)?\s*0*(\d+)/i.exec(String(x.bloco || "")) || /(\d+)/.exec(String(x.bloco || "")) || [])[1] || "";
+  return l.find(u => grNum(u.numero) === nu && (!nb || grNum((/(\d+)/.exec(String(u.bloco)) || [])[1]) === grNum(nb))) || null;
+}
+function grPessoaRes(x){
+  const u = grUnDe(x); if (!u) return {u, p:null, motivo:x.email ? "" : "unidade não encontrada"};
+  const nome = p => x.solicitante && norm(p.nome) === norm(x.solicitante), ehProp = p => p.rel === "Proprietário";
+  if (u.alugado) {
+    const inq = u.pessoas.filter(p => !ehProp(p)), doProp = u.pessoas.some(z => ehProp(z) && (nome(z) || (z.email && z.email === String(x.email || "").toLowerCase())));
+    if (x.email && !doProp) return {u, p:{nome:x.solicitante, email:x.email}};
+    if (!inq.length) return {u, p:null, motivo:"alugada sem inquilino no cadastro"};
+    const p = (!doProp && inq.find(nome)) || inq.find(z => z.email) || inq[0]; return {u, p, motivo:p.email ? "" : "falta o e-mail do inquilino"};
+  }
+  if (x.email) return {u, p:{nome:x.solicitante, email:x.email}};
+  const p = u.pessoas.find(nome) || u.pessoas.find(z => z.email) || u.pessoas[0]; return {u, p:p || null, motivo:!p ? "sem morador no cadastro" : p.email ? "" : "sem e-mail no cadastro"};
+}
 const grStatusRot = s => s === "Aguardando assinatura" ? "Aguardando assinatura do termo" : s === "Termo assinado" ? "Termo assinado · confirmar na administradora" : s === "Pré-reserva" || s === "Solicitada" ? "Aguardando pagamento" : s === "Confirmada" ? "Reserva confirmada" : s === "Realizada" ? "Finalizada" : s || "—";
 const grStatusCls = s => s === "Confirmada" || s === "Realizada" ? "ok" : s === "Pré-reserva" || s === "Solicitada" || s === "Aguardando assinatura" || s === "Termo assinado" ? "ag" : "dev";
 const grBRL = v => fBRL(Number(v) || 0);
@@ -9497,15 +9516,17 @@ function grAutoFaixa(){
   el.innerHTML = `<div class="gr-auto ${c.ativo ? "on" : ""}"><b>Termo automático ${c.ativo ? "ligado" : "desligado"}</b><span>${c.ativo ? `Reservas da administradora (e-mail ou PDF da BCF) recebem o e-mail para assinar o termo na Administração em até ${c.prazoH} h (lembrete ${c.lembreteH} h antes).` : "Ligue para pedir o termo sozinho a cada reserva feita no sistema da administradora."}${c.ultima ? ` Última conferência: ${esc(fDataHora(c.ultima))} — ${esc(c.resumo || "")}` : ""}</span></div>`;
 }
 function grAvisarTela(lista){
-  const futuras = lista.filter(x => x.data > hoje()), em = x => x.email || ((GR.d.unidades || []).find(u => u.id === x.unidadeId) || {pessoas:[]}).pessoas.map(p => p.email).find(Boolean) || "";
+  const futuras = lista.filter(x => x.data > hoje());
+  const nEm = futuras.filter(x => { const r = grPessoaRes(x); return r.p && r.p.email; }).length;
   $("#modal-box").classList.add("largo");
   $("#modal-box").innerHTML = `<h3>Avisar quem falta assinar o termo</h3>
+    <p class="hint">Unidade <b>alugada</b>: o aviso vai para o <b>inquilino</b>, não para o proprietário.</p>
     <p class="muted">Cada morador recebe um e-mail pedindo para <b>comparecer à Administração e assinar o termo</b> até o prazo (${(GR.d.auto || {}).prazoH || 48} h; quem ainda está dentro do prazo mantém o mesmo). O e-mail avisa que, sem a assinatura, a reserva poderá ser cancelada.</p>
-    <div class="tablebox flat"><table><thead><tr><th>Data</th><th>Unidade</th><th>Solicitante</th><th>E-mail</th></tr></thead><tbody>
-      ${futuras.map(x => `<tr><td class="md-nw">${fData(x.data)}</td><td>${esc(x.unidade ? grRotUn(x.bloco, "", x.unidade) : "Externo")}</td><td>${esc(x.solicitante || "—")}</td><td>${em(x) ? esc(em(x)) : `<span class="md-st warn">busca no cadastro</span>`}</td></tr>`).join("")}
+    <div class="tablebox flat"><table><thead><tr><th>Data</th><th>Unidade</th><th>Situação</th><th>Vai receber</th><th>E-mail</th></tr></thead><tbody>
+      ${futuras.map(x => { const r = grPessoaRes(x); return `<tr><td class="md-nw">${fData(x.data)}</td><td>${esc(x.unidade ? grRotUn(x.bloco, "", x.unidade) : "Externo")}</td><td>${r.u ? (r.u.alugado ? `<span class="md-st warn">Alugado</span>` : esc(r.u.situacao || "—")) : "—"}</td><td>${r.p ? esc(r.p.nome || "—") + (r.p.rel ? ` <span class="muted">(${esc(r.p.rel)})</span>` : "") : "—"}</td><td>${r.p && r.p.email ? esc(r.p.email) : `<span class="md-st crit">${esc(r.motivo || "sem e-mail")}</span>`}</td></tr>`; }).join("")}
     </tbody></table></div>
     ${lista.length > futuras.length ? `<p class="hint">${lista.length - futuras.length} reserva(s) com data de hoje ou já passada ficam de fora.</p>` : ""}
-    <div class="actions" style="margin-top:12px"><button class="btn primary" type="button" id="gv-ok" ${futuras.length ? "" : "disabled"}>Enviar ${futuras.length} e-mail${futuras.length === 1 ? "" : "s"}</button><button class="btn" type="button" id="gv-x">Cancelar</button><span class="hint" id="gv-msg"></span></div>`;
+    <div class="actions" style="margin-top:12px"><button class="btn primary" type="button" id="gv-ok" ${futuras.length ? "" : "disabled"}>Enviar ${nEm} e-mail${nEm === 1 ? "" : "s"}</button><button class="btn" type="button" id="gv-x">Cancelar</button><span class="hint" id="gv-msg"></span></div>`;
   $("#modal").hidden = false; $("#gv-x").onclick = fecharModal;
   $("#gv-ok").onclick = () => enviar($("#gv-ok"), $("#gv-msg"), "grAvisarTermo", {ids:futuras.map(x => x.id)}, x => { grAplicar(x); renderGourmet(); $("#gv-msg").className = "hint"; $("#gv-msg").textContent = x.msg || ""; $("#gv-ok").hidden = true; $("#gv-x").textContent = "Fechar"; });
 }
@@ -9551,7 +9572,7 @@ function renderGourmet(){
         <p><b>Solicitante:</b> ${esc(x.solicitante || "—")}${x.email ? ` <span class="muted">· ${esc(x.email)}</span>` : ""}</p>
         <p><b>Unidade:</b> ${esc(un(x))} · <b>Período:</b> ${esc(x.periodo || "Dia inteiro")}</p>
         <p><b>Valor:</b> ${x.valor === "" ? "—" : grBRL(x.valor)}</p>
-        <div class="gr-tags"><span class="cc-st ${grStatusCls(x.status)}">${esc(grStatusRot(x.status))}</span>${GR_DA_ADM(x) ? `<span class="gr-tag">Sistema da administradora${x.solicitacao ? " · nº " + esc(x.solicitacao) : ""}</span>` : ""}${x.termoAssinadoEm ? `<span class="gr-tag">✍ termo assinado</span>` : x.status === "Aguardando assinatura" ? `<span class="gr-tag">${x.termoLinkEm ? "✉ link do termo enviado" : "termo não assinado"}</span>${x.termoPrazo ? (x.termoVencidoEm ? `<span class="cc-al crit">Prazo vencido em ${esc(fDataHora(x.termoPrazo))}</span>` : `<span class="gr-tag gr-prazo">Assinar até ${esc(fDataHora(x.termoPrazo))}</span>`) : ""}` : ""}${x.termoObs ? `<span class="cc-al warn">${esc(x.termoObs)}</span>` : ""}${x.avisoEm ? `<span class="gr-tag">✉ confirmação enviada</span>` : ""}${x.origem && x.origem !== "Pier Gestão" ? `<span class="gr-tag">${esc(x.origem)}</span>` : ""}</div></div>
+        <div class="gr-tags"><span class="cc-st ${grStatusCls(x.status)}">${esc(grStatusRot(x.status))}</span>${x.unidade && (grUnDe(x) || {}).alugado ? `<span class="gr-tag gr-alug">Unidade alugada · inquilino</span>` : ""}${GR_DA_ADM(x) ? `<span class="gr-tag">Sistema da administradora${x.solicitacao ? " · nº " + esc(x.solicitacao) : ""}</span>` : ""}${x.termoAssinadoEm ? `<span class="gr-tag">✍ termo assinado</span>` : x.status === "Aguardando assinatura" ? `<span class="gr-tag">${x.termoLinkEm ? "✉ link do termo enviado" : "termo não assinado"}</span>${x.termoPrazo ? (x.termoVencidoEm ? `<span class="cc-al crit">Prazo vencido em ${esc(fDataHora(x.termoPrazo))}</span>` : `<span class="gr-tag gr-prazo">Assinar até ${esc(fDataHora(x.termoPrazo))}</span>`) : ""}` : ""}${x.termoObs ? `<span class="cc-al warn">${esc(x.termoObs)}</span>` : ""}${x.avisoEm ? `<span class="gr-tag">✉ confirmação enviada</span>` : ""}${x.origem && x.origem !== "Pier Gestão" ? `<span class="gr-tag">${esc(x.origem)}</span>` : ""}</div></div>
       <div class="gr-acoes"><button type="button" class="btn" data-gr-det="${esc(x.id)}">Detalhe</button><button type="button" class="btn gr-pdf" data-gr-pdf="${esc(x.id)}">PDF</button></div></article>`).join("")
     : `<div class="empty">Nenhuma reserva com esses filtros. Use <b>+ Nova reserva</b>.</div>`;
 }
@@ -9600,7 +9621,7 @@ function grNova(pre){
     $("#gr-pessoa").innerHTML = ps.length ? ps.map((p, i) => `<option value="${i}">${esc(p.nome)}${p.rel ? " (" + esc(p.rel) + ")" : ""}</option>`).join("") : "<option>Nenhum morador cadastrado nesta unidade</option>";
     const dica = () => { const p = ps[+$("#gr-pessoa").value];
       $("#gr-email").disabled = $("#gr-tel").disabled = !p; $("#gr-email").value = p ? p.email || "" : ""; $("#gr-tel").value = p ? p.telefone || "" : "";
-      $("#gr-pessoa-h").textContent = p ? (p.email ? "E-mail do cadastro. Corrija abaixo se precisar." : "Sem e-mail no cadastro: digite abaixo para mandar o link do termo e a confirmação.") : "";
+      $("#gr-pessoa-h").textContent = (st.un.alugado ? (p && p.rel === "Proprietário" ? "Atenção: unidade ALUGADA — a reserva normalmente é do inquilino, não do proprietário. " : "Unidade alugada: inquilino. ") : "") + (p ? (p.email ? "E-mail do cadastro. Corrija abaixo se precisar." : "Sem e-mail no cadastro: digite abaixo para mandar o link do termo e a confirmação.") : "");
       mudou(); };
     const mudou = () => { const p = ps[+$("#gr-pessoa").value]; const dif = !!p && (($("#gr-email").value.trim().toLowerCase() !== (p.email || "")) || ($("#gr-tel").value.trim() && $("#gr-tel").value.trim() !== (p.telefone || ""))); $("#modal-box .gr-salvar").hidden = !dif; };
     $("#gr-email").oninput = mudou; $("#gr-tel").oninput = mudou;
