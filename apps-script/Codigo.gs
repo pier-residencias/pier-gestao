@@ -443,7 +443,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-21 Pier Gestão 2.0 — Gourmet: texto do aviso para assinar o termo';
+const VERSAO = '2026-11-21 Pier Gestão 2.0 — Gourmet: unidade alugada — aviso vai para o inquilino';
 
 function doGet() {
   TABS = {};
@@ -3202,14 +3202,32 @@ let GR_ULTIMA = '';
 const GR_ATIVAS = ['Solicitada', 'Aguardando assinatura', 'Termo assinado', 'Pré-reserva', 'Confirmada'];
 const grFoneDe = s => { const m = String(s || '').match(/\(?\d{2}\)?\s*9?\d{4}[-\s]?\d{4}/); return m ? m[0].trim() : ''; };
 const grEmailDe = s => (String(s || '').toLowerCase().match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/g) || []).filter(emailValido);
+const grPesoAlug = p => p.rel === 'Proprietário' ? 3 : p.inq ? 0 : p.morador ? 1 : 2;
+// quem recebe o aviso do termo de uma reserva da unidade. Unidade ALUGADA: o inquilino (nunca o proprietário,
+// a não ser que o próprio nome do proprietário venha na reserva e a unidade não tenha inquilino no cadastro).
+function grPessoaReserva(u, solicitante) {
+  if (!u) return { p: null, motivo: 'Unidade não encontrada no cadastro' };
+  const nome = p => solicitante && chaveNome(p.nome) === chaveNome(solicitante);
+  if (u.alugado) {
+    const inq = u.pessoas.filter(p => p.rel !== 'Proprietário');
+    if (!inq.length) return { p: null, motivo: 'Unidade alugada sem inquilino no cadastro' };
+    const p = inq.find(nome) || inq.find(z => z.email) || inq[0];
+    return { p, motivo: p.email ? '' : 'Unidade alugada: falta o e-mail do inquilino no cadastro' };
+  }
+  const p = u.pessoas.find(nome) || u.pessoas.find(z => z.email) || u.pessoas[0] || null;
+  return { p, motivo: !p ? 'A unidade não tem morador cadastrado' : p.email ? '' : 'Sem e-mail no cadastro da unidade' };
+}
 function grUnidades() {
   const pes = linhas(tabela('unp'));
   return linhas(tabela('un')).map(u => {
     const pessoas = [];
     if (u.proprietario) pessoas.push({ nome: texto(u.proprietario, 80), rel: 'Proprietário', email: grEmailDe(u.contatos)[0] || '', telefone: grFoneDe(u.contatos), fonte: 'un', pid: u.id });
     pes.filter(p => p.unidade === u.id && p.nome).sort((a, b) => (Number(a.ordem) || 0) - (Number(b.ordem) || 0))
-      .forEach(p => { if (!pessoas.some(x => chaveNome(x.nome) === chaveNome(p.nome))) pessoas.push({ nome: texto(p.nome, 80), rel: texto(p.parentesco, 40), email: grEmailDe(p.contatos)[0] || '', telefone: grFoneDe(p.contatos), fonte: 'unp', pid: p.id }); });
-    return { id: u.id, bloco: u.bloco, andar: u.andar, numero: u.numero, pessoas };
+      .forEach(p => { if (!pessoas.some(x => chaveNome(x.nome) === chaveNome(p.nome))) pessoas.push({ nome: texto(p.nome, 80), rel: texto(p.parentesco, 40), email: grEmailDe(p.contatos)[0] || '', telefone: grFoneDe(p.contatos), fonte: 'unp', pid: p.id, morador: p.morador === 'Sim', inq: /inquil|locat/i.test(String(p.parentesco || '')) }); });
+    const alugado = u.situacao === 'Alugado';
+    // alugada: quem reserva é o inquilino (ou quem mora); o proprietário vai para o fim da lista
+    if (alugado) pessoas.sort((a, b) => grPesoAlug(a) - grPesoAlug(b));
+    return { id: u.id, bloco: u.bloco, andar: u.andar, numero: u.numero, situacao: u.situacao || '', alugado, pessoas };
   }).filter(u => u.numero);
 }
 // grava e-mail/telefone no campo Contatos do cadastro (proprietário: aba Unidades; morador: aba Moradores)
@@ -3289,13 +3307,11 @@ function grAutoProcessar() {
     const daAdm = GR_ORIGENS_ADM.indexOf(x.origem) >= 0;
     // 1) reserva nova da administradora: manda o termo
     if (daAdm && (x.status === 'Solicitada' || x.status === 'Pré-reserva') && !x.termoAvisoEm && !x.termoAssinadoEm) {
-      const u = grAcharUnidade(x.bloco, x.unidade);
-      const ps = u ? u.pessoas : [];
-      const p = (x.solicitante && ps.find(z => chaveNome(z.nome) === chaveNome(x.solicitante) && z.email)) || ps.find(z => z.email);
-      if (!p) { gravar(t, { termoAvisoEm: agora(), termoObs: u ? 'Sem e-mail no cadastro da unidade' : 'Unidade não encontrada no cadastro' }, x._row); semEmail++;
-        avisoAdm.push('• ' + String(x.data).split('-').reverse().join('/') + ' · ' + (x.bloco || '') + ' ' + (x.unidade || '') + ': ' + (u ? 'sem e-mail no cadastro' : 'unidade não encontrada') + ' — o termo precisa ser assinado na Administração.'); return; }
+      const u = grAcharUnidade(x.bloco, x.unidade), esc = grPessoaReserva(u, x.solicitante), p = esc.p && esc.p.email ? esc.p : null;
+      if (!p) { gravar(t, Object.assign({ termoAvisoEm: agora(), termoObs: esc.motivo || 'Sem e-mail no cadastro da unidade' }, esc.p ? { unidadeId: u.id, solicitante: x.solicitante || esc.p.nome } : {}), x._row); semEmail++;
+        avisoAdm.push('• ' + String(x.data).split('-').reverse().join('/') + ' · ' + (x.bloco || '') + ' ' + (x.unidade || '') + ': ' + (esc.motivo || 'sem e-mail no cadastro').toLowerCase() + ' — avise o morador para assinar o termo na Administração.'); return; }
       const prazoMs = Math.min(agoraMs + cfg.prazoH * 3600000, grMs(x.data) - 3600000);
-      const o = { tipoSol: 'Unidade', unidadeId: u.id, solicitante: x.solicitante || p.nome, email: p.email, telefone: p.telefone || '', status: 'Aguardando assinatura', termoPrazo: grQuando(prazoMs), termoAvisoEm: agora(), termoObs: '' };
+      const o = { tipoSol: 'Unidade', unidadeId: u.id, solicitante: x.solicitante && !u.alugado ? x.solicitante : p.nome, email: p.email, telefone: p.telefone || '', status: 'Aguardando assinatura', termoPrazo: grQuando(prazoMs), termoAvisoEm: agora(), termoObs: '' };
       if (!x.horario) o.horario = (grEspacoSeguro(x.espaco) || {}).horario || '';
       gravar(t, o, x._row); Object.assign(x, o);
       try { grTermoLink(x, null, { prazo: o.termoPrazo, presencial: true }); enviados++; } catch (e) { gravar(t, { termoObs: 'Falha ao enviar: ' + texto(e.message, 120) }, x._row); }
@@ -3453,18 +3469,22 @@ function grPedirTermo(x, t, conta) {
   const prazo = manter ? x.termoPrazo : grQuando(Math.min(Date.now() + cfgA.prazoH * 3600000, grMs(x.data) - 3600000));
   const o = { status: 'Aguardando assinatura', termoPrazo: prazo, termoAvisoEm: agora(), termoObs: '' };
   if (!manter) { o.termoVencidoEm = ''; o.termoLembreteEm = ''; }
-  if (!x.email || !emailValido(x.email)) {
-    const u = x.unidadeId ? grUnidades().find(z => z.id === x.unidadeId) : grAcharUnidade(x.bloco, x.unidade);
+  const u = x.unidade || x.unidadeId ? (x.unidadeId ? grUnidades().find(z => z.id === x.unidadeId) : null) || grAcharUnidade(x.bloco, x.unidade) : null;
+  const doProp = u && u.alugado && u.pessoas.some(z => z.rel === 'Proprietário' && (chaveNome(z.nome) === chaveNome(x.solicitante) || (z.email && z.email === String(x.email || '').toLowerCase())));
+  let semMotivo = '';
+  if (!x.email || !emailValido(x.email) || doProp) {
     if (!u && x.status !== 'Aguardando assinatura') throw falha('Não achei a unidade ' + (x.bloco || '') + ' ' + (x.unidade || '') + ' no cadastro.');
     if (u) {
-      const p = (x.solicitante && u.pessoas.find(z => chaveNome(z.nome) === chaveNome(x.solicitante))) || u.pessoas.find(z => z.email) || u.pessoas[0];
-      if (!p && x.status !== 'Aguardando assinatura') throw falha('A unidade não tem morador cadastrado.');
-      if (p) Object.assign(o, { tipoSol: 'Unidade', unidadeId: u.id, solicitante: x.solicitante || p.nome, email: p.email || '', telefone: x.telefone || p.telefone || '' });
+      const esc = grPessoaReserva(u, doProp ? '' : x.solicitante);
+      if (!esc.p && x.status !== 'Aguardando assinatura' && !u.alugado) throw falha(esc.motivo);
+      if (esc.p) Object.assign(o, { tipoSol: 'Unidade', unidadeId: u.id, solicitante: esc.p.nome, email: esc.p.email || '', telefone: esc.p.telefone || '' });
+      else if (u.alugado) Object.assign(o, { unidadeId: u.id, email: '' });
+      semMotivo = esc.motivo; o.termoObs = esc.motivo || '';
     }
   }
   gravar(t, o, x._row); Object.assign(x, o);
   const pz = prazo.slice(8, 10) + '/' + prazo.slice(5, 7) + ' ' + prazo.slice(11, 16);
-  if (!x.email || !emailValido(x.email)) return 'Reserva aguardando assinatura (prazo ' + pz + '). Sem e-mail no cadastro: avise o morador por telefone ou adicione o e-mail.';
+  if (!x.email || !emailValido(x.email)) return 'Reserva aguardando assinatura (prazo ' + pz + '). ' + (semMotivo || 'Sem e-mail no cadastro') + ': avise o morador por telefone ou adicione o e-mail.';
   grTermoLink(x, conta, { prazo, presencial: true });
   return 'E-mail enviado para ' + x.email + ' pedindo para assinar o termo na Administração até ' + pz + '.';
 }
@@ -3476,7 +3496,7 @@ function grAvisarTermo(r, conta) {
   const t = tabela('esr'), rs = linhas(t); let env = 0; const sem = [], erro = [];
   ids.forEach(id => {
     const x = rs.find(z => z.id === id); if (!x) return;
-    const quem = () => (x.solicitante ? x.solicitante + ' · ' : '') + ((x.bloco || '') + ' ' + (x.unidade || '')).trim() + ' (' + String(x.data).split('-').reverse().join('/') + ')';
+    const quem = () => (x.solicitante && x.email ? x.solicitante + ' · ' : '') + ((x.bloco || '') + ' ' + (x.unidade || '')).trim() + ' (' + String(x.data).split('-').reverse().join('/') + ')';
     try { const m = grPedirTermo(x, t, conta); if (/^E-mail enviado/.test(m)) env++; else sem.push(quem()); }
     catch (e) { erro.push(quem() + ': ' + texto(e.message, 100)); }
   });

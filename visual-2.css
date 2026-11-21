@@ -311,6 +311,7 @@
 .md-pdf-nome{max-width:200px;overflow-wrap:anywhere;font-size:13px}
 
 /* Reserva do Espaço Gourmet */
+.gr-tag.gr-alug{background:#fff4dc;color:#8a5a00;border-color:#f0d49a}
 .gr-gmail{margin:10px 0 4px;padding:10px 12px;border:1px solid var(--line,#d9e1e8);border-radius:10px;font-size:13px;line-height:1.5}
 .gr-resumo{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;align-items:start;margin:6px 0 16px;padding:22px 24px;border-radius:16px;background:linear-gradient(120deg,#17324d,#397d9d);color:#fff}
 .gr-resumo b{display:block;font-size:24px;font-family:var(--f-display,inherit)}.gr-resumo span{display:block;font-size:13px;opacity:.9}.gr-resumo small{display:block;margin-top:4px;font-size:11.5px;opacity:.75}.gr-resumo>div+div{border-left:1px solid rgba(255,255,255,.22);padding-left:18px}.gr-resumo .gr-alerta b{color:#ffd27a}.gr-resumo .gr-avisar{margin-top:10px;background:#fff;color:#17324d;border-color:#fff;font-weight:700}
