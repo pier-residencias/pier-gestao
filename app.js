@@ -9494,7 +9494,7 @@ function grFiltradas(){
 }
 function grAutoFaixa(){
   const el = $("#gr-auto-faixa"); if (!el || !GR.d) return; const c = GR.d.auto || {};
-  el.innerHTML = `<div class="gr-auto ${c.ativo ? "on" : ""}"><b>Termo automático ${c.ativo ? "ligado" : "desligado"}</b><span>${c.ativo ? `Reservas que chegam por e-mail da administradora recebem o termo com prazo de ${c.prazoH} h (lembrete ${c.lembreteH} h antes).` : "Ligue para pedir o termo sozinho a cada reserva feita no sistema da administradora."}${c.ultima ? ` Última conferência: ${esc(fDataHora(c.ultima))} — ${esc(c.resumo || "")}` : ""}</span></div>`;
+  el.innerHTML = `<div class="gr-auto ${c.ativo ? "on" : ""}"><b>Termo automático ${c.ativo ? "ligado" : "desligado"}</b><span>${c.ativo ? `Reservas da administradora (e-mail ou PDF da BCF) recebem o e-mail para assinar o termo na Administração em até ${c.prazoH} h (lembrete ${c.lembreteH} h antes).` : "Ligue para pedir o termo sozinho a cada reserva feita no sistema da administradora."}${c.ultima ? ` Última conferência: ${esc(fDataHora(c.ultima))} — ${esc(c.resumo || "")}` : ""}</span></div>`;
 }
 function grAutoTela(){
   if (!GR.d) return; const c = GR.d.auto || {prazoH:48, lembreteH:24};
@@ -9505,6 +9505,7 @@ function grAutoTela(){
       <div class="field"><label for="ga-prazo">Prazo para assinar (horas)</label><input class="input num" type="number" id="ga-prazo" min="6" max="240" value="${c.prazoH || 48}"></div>
       <div class="field"><label for="ga-lemb">Lembrete antes do fim do prazo (horas)</label><input class="input num" type="number" id="ga-lemb" min="1" max="120" value="${c.lembreteH || 24}"></div>
     </form>
+    <div class="gr-gmail">${c.gmail ? `📬 O Pier lê os e-mails de reserva da caixa <b>${esc(c.gmail)}</b>. Os e-mails da administradora precisam chegar nessa caixa (direto ou por encaminhamento).` : `📬 Conta do Gmail lida: aparece depois de instalar o Apps Script novo.`}${c.ultima ? `<br>Última conferência: ${esc(fDataHora(c.ultima))} — ${esc(c.resumo || "")}` : ""}</div>
     <p class="hint">O e-mail vai para o morador da unidade que tiver e-mail no cadastro (Unidades). Sem e-mail, a Administração recebe um aviso para assinar na tela.</p>
     <div class="actions"><button class="btn primary" type="button" id="ga-ok">Salvar</button><button class="btn" type="button" id="ga-agora">Conferir agora</button><button class="btn" type="button" id="ga-x">Fechar</button><span class="hint" id="ga-msg"></span></div>`;
   $("#modal").hidden = false; $("#ga-x").onclick = fecharModal;
@@ -9524,7 +9525,11 @@ function renderGourmet(){
   const l = grFiltradas();
   const conf = l.filter(x => x.status === "Confirmada" || x.status === "Realizada").reduce((a, x) => a + (Number(x.valor) || 0), 0);
   const ag = l.filter(x => x.status === "Pré-reserva" || x.status === "Solicitada").reduce((a, x) => a + (Number(x.valor) || 0), 0);
-  $("#gr-resumo").innerHTML = `<div><b>${grBRL(conf)}</b><span>Confirmadas e finalizadas</span></div><div><b>${grBRL(ag)}</b><span>Aguardando pagamento</span></div><div class="gr-n"><b>${l.length}</b><span>reserva${l.length === 1 ? "" : "s"} com os filtros atuais</span></div>`;
+  const ativas = l.filter(x => x.status !== "Cancelada" && x.status !== "Recusada");
+  const assin = ativas.filter(x => x.termoAssinadoEm || x.status === "Termo assinado").length;
+  const falta = ativas.filter(x => !x.termoAssinadoEm && (x.status === "Aguardando assinatura" || x.status === "Solicitada" || x.status === "Pré-reserva")).length;
+  $("#gr-resumo").innerHTML = `<div><b>${l.length}</b><span>Reserva${l.length === 1 ? "" : "s"} (filtros atuais)</span><small>${grBRL(conf)} confirmadas · ${grBRL(ag)} aguardando pagamento</small></div>
+    <div><b>${assin}</b><span>Termo assinado</span></div><div class="${falta ? "gr-alerta" : ""}"><b>${falta}</b><span>Falta assinar ou iniciada</span></div>`;
   const un = x => x.unidade ? grRotUn(x.bloco, "", x.unidade) : "Externo";
   box.innerHTML = l.length ? l.map(x => `<article class="gr-card">
       <div class="gr-info"><h3>${esc(x.espaco)}</h3>
@@ -9752,7 +9757,7 @@ if ($("#t-gourmet")) {
   $("#gr-novo").addEventListener("click", grNova);
   $("#gr-config").addEventListener("click", () => GR.d && grConfig());
   $("#gr-auto").addEventListener("click", grAutoTela);
-  $("#gr-pdf").addEventListener("click", () => GR.d && $("#gr-arq").click());
+  $("#gr-bcf").addEventListener("click", () => GR.d && $("#gr-arq").click());
   $("#gr-arq").addEventListener("change", async ev => { const f = ev.target.files[0]; ev.target.value = ""; if (f && !(await arqConferir("espImportar", [f]))) return; esImportarPDF(f, true); });
   $("#gr-pdf").addEventListener("click", () => GR.d && grPDF(""));
   $("#gr-xlsx").addEventListener("click", () => GR.d && grXLSX());

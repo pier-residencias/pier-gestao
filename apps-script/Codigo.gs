@@ -443,7 +443,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-21 Pier Gestão 2.0 — Termo automático das reservas da administradora + PDF da BCF no Gourmet';
+const VERSAO = '2026-11-21 Pier Gestão 2.0 — Gourmet: painel do termo e conta do Gmail lida';
 
 function doGet() {
   TABS = {};
@@ -535,7 +535,7 @@ function doPost(e) {
     if (req.acao === 'cotVerArquivo') { pode('pendencias'); const f = cotVerArquivo(req); auditar(conta, 'Abriu arquivo de cotação', f.nome); delete f.nome; return json(Object.assign(base, { arquivo: f })); }
     if (req.acao === 'unidades') { unExigir(conta, false); return json(Object.assign(base, unLista())); }
     if (req.acao === 'espacos') { espExigir(conta); return json(Object.assign(base, espLista())); }
-    if (req.acao === 'gourmet') { espExigir(conta); return json(Object.assign(base, espLista(), { unidadesRes: grUnidades(), grAuto: grAutoCfg() })); }
+    if (req.acao === 'gourmet') { espExigir(conta); return json(Object.assign(base, espLista(), { unidadesRes: grUnidades(), grAuto: grAutoVer(conta) })); }
     if (req.acao === 'grTermo') { espExigir(conta); const x = linhas(tabela('esr')).find(z => z.id === String(req.id || '')); if (!x) throw falha('Reserva não encontrada.'); return json(Object.assign(base, { termo: grTermoDados(x) })); }
     if (req.acao === 'grTermoPdf') { espExigir(conta); return json(Object.assign(base, { pdf: grTermoPdf(req) })); }
     if (req.acao === 'pendLembretes') {
@@ -658,7 +658,7 @@ function doPost(e) {
     }
     if (extra.pendencias) return json(Object.assign(base, { msg, pendencias: pendLista(), pendVersao: PEND_VERSAO }));
     if (extra.equipe) return json(Object.assign(base, { msg }, extra));
-    if (extra.semDados) return json(Object.assign(base, { msg }, extra.avisos ? { avisos: extra.avisos } : {}, extra.cot ? { cot: extra.cot } : {}, extra.ronda ? { ronda: extra.ronda } : {}, extra.med ? medLista() : {}, extra.esp ? espLista() : {}, extra.forn ? fornLista() : {}, extra.compras ? comprasLista() : {}, extra.gr ? { gr: extra.gr } : {}, extra.grAuto ? { grAuto: grAutoCfg() } : {}, extra.mi ? miLista() : {}, extra.lida ? { lida: extra.lida } : {}, extra.com ? { com: comPainel(conta) } : {}));
+    if (extra.semDados) return json(Object.assign(base, { msg }, extra.avisos ? { avisos: extra.avisos } : {}, extra.cot ? { cot: extra.cot } : {}, extra.ronda ? { ronda: extra.ronda } : {}, extra.med ? medLista() : {}, extra.esp ? espLista() : {}, extra.forn ? fornLista() : {}, extra.compras ? comprasLista() : {}, extra.gr ? { gr: extra.gr } : {}, extra.grAuto ? { grAuto: grAutoVer(conta) } : {}, extra.mi ? miLista() : {}, extra.lida ? { lida: extra.lida } : {}, extra.com ? { com: comPainel(conta) } : {}));
     return json(Object.assign(base, { msg, dados: dados(req.meses, conta) }, extra));
   } catch (err) {
     // Falhas dos serviços de auditoria não podem impedir uma resposta segura.
@@ -3231,6 +3231,12 @@ function grSalvarContato(p, email, telefone, conta) {
 const GR_AUTO_FUNCAO = 'reservasAutomatico';
 const GR_ORIGENS_ADM = ['e-mail', 'PDF', 'colado'];
 function grAutoCfg() { const c = comJson('GR_AUTO', {}); return { ativo: !!c.ativo, prazoH: Math.max(6, Math.min(240, Number(c.prazoH) || 48)), lembreteH: Math.max(1, Math.min(120, Number(c.lembreteH) || 24)), ultima: c.ultima || '', resumo: c.resumo || '' }; }
+// para a tela: a configuração e, só para a Administração, a conta do Gmail que o Pier lê (a dona do Apps Script)
+function grAutoVer(conta) {
+  const c = grAutoCfg();
+  if (conta && conta.perfil === PERFIL_TOTAL) { try { c.gmail = Session.getEffectiveUser().getEmail() || ''; } catch (e) { c.gmail = ''; } }
+  return c;
+}
 function grAutoSalvar(r, conta) {
   grSoAdm(conta);
   const c = grAutoCfg(), novo = { ativo: !!r.ativo, prazoH: Math.max(6, Math.min(240, parseInt(r.prazoH, 10) || 48)), lembreteH: Math.max(1, Math.min(120, parseInt(r.lembreteH, 10) || 24)), ultima: c.ultima, resumo: c.resumo };
