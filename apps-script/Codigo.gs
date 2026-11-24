@@ -443,7 +443,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-21 Pier Gestão 2.0 — Limpeza: lista vazia importa a planilha sem pedir confirmação';
+const VERSAO = '2026-11-21 Pier Gestão 2.0 — Gourmet: baixa no termo no papel + e-mails pelo auxiliar';
 
 function doGet() {
   TABS = {};
@@ -3291,7 +3291,7 @@ function grAutoCfg() { const c = comJson('GR_AUTO', {}); return { ativo: !!c.ati
 // para a tela: a configuração e, só para a Administração, a conta do Gmail que o Pier lê (a dona do Apps Script)
 function grAutoVer(conta) {
   const c = grAutoCfg();
-  if (conta && conta.perfil === PERFIL_TOTAL) { try { c.gmail = Session.getEffectiveUser().getEmail() || ''; } catch (e) { c.gmail = ''; } }
+  if (conta && conta.perfil === PERFIL_TOTAL) { try { c.gmail = Session.getEffectiveUser().getEmail() || ''; } catch (e) { c.gmail = ''; } c.envio = grComoEnvia(); c.remetente = GR_REMETENTE; }
   return c;
 }
 function grAutoSalvar(r, conta) {
@@ -3330,6 +3330,25 @@ function grAdmEmails() {
   const l = []; try { lerUsuarios().lista.forEach(u => { if (u.ativo && u.perfil === PERFIL_TOTAL && emailValido(u.email) && l.indexOf(u.email) < 0) l.push(u.email); }); } catch (e) {}
   if (!l.length) emailsDoSetor('Auxiliar').forEach(e => { if (l.indexOf(e) < 0) l.push(e); });
   return l;
+}
+// e-mails para os moradores (termo, lembrete, confirmação): saem do e-mail oficial do condomínio.
+// 1) se a conta do Apps Script for o próprio auxiliar, sai direto; 2) se o auxiliar estiver em "Enviar e-mail como" no Gmail
+// dessa conta, sai como ele; 3) senão sai da conta atual com "responder para" o auxiliar.
+const GR_REMETENTE = 'auxiliar@condominiopier.com.br';
+let GR_COMO = '';
+function grComoEnvia() {
+  if (GR_COMO) return GR_COMO;
+  try { if (String(Session.getEffectiveUser().getEmail() || '').toLowerCase() === GR_REMETENTE) return (GR_COMO = 'conta'); } catch (e) {}
+  try { if (GmailApp.getAliases().map(a => String(a).toLowerCase()).indexOf(GR_REMETENTE) >= 0) return (GR_COMO = 'alias'); } catch (e) {}
+  return (GR_COMO = 'responder');
+}
+function grMandar(o) {
+  const m = grComoEnvia();
+  if (m === 'alias') {
+    GmailApp.sendEmail(o.to, o.subject, o.body || '', { htmlBody: o.htmlBody, inlineImages: o.inlineImages, attachments: o.attachments || [], name: o.name || 'Pier Residências', from: GR_REMETENTE, replyTo: GR_REMETENTE });
+    return;
+  }
+  MailApp.sendEmail(Object.assign({}, o, m === 'responder' ? { replyTo: GR_REMETENTE } : {}));
 }
 function grAvisarAdm(assunto, linhasTxt) {
   const para = grAdmEmails(); if (!para.length) return false;
@@ -3451,6 +3470,36 @@ function grAcao(r, conta) {
     if (x.status !== 'Aguardando assinatura') throw falha('Esta reserva não está aguardando assinatura.');
     const m = grAssinarAplicar(x, r, 'Tela da Administração', conta); AUDIT_DET = 'Termo do ' + x.espaco + ' assinado na Administração por ' + x.solicitante + ' (' + x.data + ')'; return m;
   }
+  // Administração dá baixa no termo assinado no PAPEL, na Administração (opcional: anexar o termo digitalizado)
+  if (r.op === 'baixaTermo') {
+    grSoAdm(conta);
+    if (x.termoAssinadoEm) throw falha('O termo desta reserva já está assinado.');
+    if (['Aguardando assinatura', 'Solicitada', 'Pré-reserva', 'Confirmada'].indexOf(x.status) < 0) throw falha('Só dá para dar baixa no termo de uma reserva em aberto.');
+    const nome = texto(r.nome, 80) || x.solicitante;
+    if (!nome) throw falha('Informe o nome de quem assinou o termo.');
+    const dia = /^\d{4}-\d{2}-\d{2}$/.test(String(r.data || '')) && r.data <= hoje() ? r.data : hoje();
+    const quando = dia === hoje() ? agora() : dia + ' 12:00';
+    let arqId = '';
+    if (r.arq && r.arq.b64) {
+      const mime = String(r.arq.mime || ''), b64 = String(r.arq.b64);
+      if (['application/pdf', 'image/jpeg', 'image/png'].indexOf(mime) < 0) throw falha('Anexe o termo em PDF, JPG ou PNG.');
+      if (b64.length > 14000000) throw falha('O arquivo do termo é grande demais (máx. 10 MB).');
+      if (!conteudoConfere(b64, mime)) throw falha('O arquivo anexado não é um PDF ou imagem válido.');
+      const pasta = pastaDrive('PASTA_TERMOS_GOURMET', 'Termos do Espaço Gourmet - Pier Gestão');
+      const ext = mime === 'application/pdf' ? '.pdf' : mime === 'image/png' ? '.png' : '.jpg';
+      const nomeArq = ('Termo ' + x.espaco + ' ' + x.data + ' - ' + nome + ' (papel)').replace(/[\\/:*?"<>|]/g, '_') + ext;
+      arqId = pasta.createFile(Utilities.newBlob(Utilities.base64Decode(b64), mime, nomeArq)).getId();
+    }
+    const daAdm = GR_ORIGENS_ADM.indexOf(x.origem) >= 0;
+    const novo = x.status === 'Confirmada' ? 'Confirmada' : daAdm ? (r.confirmar ? 'Confirmada' : 'Termo assinado') : x.tipoSol === 'Externo' ? 'Pré-reserva' : 'Confirmada';
+    const o = { status: novo, termoAssinadoEm: quando, termoNome: nome, termoVia: 'Papel na Administração (' + conta.nome + ')', termoHash: '', termoVencidoEm: '', termoObs: '', atualizadoEm: agora(), atualizadoPor: conta.nome };
+    if (arqId) o.termoArquivo = arqId;
+    gravar(t, o, x._row); const antes = x.status; Object.assign(x, o);
+    let env = false;
+    if (novo === 'Confirmada' && antes !== 'Confirmada') { env = grAvisar(x, andar, cfg); if (env) gravar(t, { avisoEm: agora(), confAvisoEm: agora() }, x._row); }
+    AUDIT_DET = 'Deu baixa no termo (assinado no papel) da reserva de ' + nome + ' em ' + String(x.data).split('-').reverse().join('/') + (arqId ? ', com o termo digitalizado' : '') + ' → ' + novo;
+    return 'Baixa no termo registrada' + (arqId ? ' (termo digitalizado guardado)' : '') + '. ' + (novo === 'Confirmada' ? 'Reserva confirmada.' + (env ? ' E-mail de confirmação enviado para ' + x.email + '.' : '') : novo === 'Termo assinado' ? 'Agora confirme a reserva no sistema da administradora e clique em “Confirmar reserva”.' : 'A reserva continua aguardando a confirmação.');
+  }
   if (r.op === 'confirmar') {
     if (x.status === 'Confirmada') throw falha('Esta reserva já está confirmada.');
     if (x.status === 'Aguardando assinatura') throw falha('Falta o solicitante assinar o termo.');
@@ -3568,7 +3617,7 @@ function grTermoLink(x, conta, op) {
     + (op.presencial ? '<tr><td style="padding:6px 30px 22px;' + F + 'font-size:13px;color:#163047;line-height:1.5"><b>CANCELAMENTO:</b> Conforme consta do item 9.12 do Regulamento Interno, o cancelamento ou alteração da data do evento, garantido o crédito correspondente ao desconto realizado, somente será considerado se avisado por escrito a Administração com Antecedência Mínima de 07 (Sete Dias) corridos, caso contrário, o evento ter-se-á como havido.<div style="margin-top:12px;font-size:12.5px;color:#5b6b7a"><b>Obs.:</b> Caso já tenha assinado o termo na administração, favor desconsiderar este e-mail.</div></td></tr>' : '<tr><td align="center" style="padding:14px 30px 22px"><a href="' + link + '" style="display:inline-block;background:#17324d;color:#fff;' + F + 'font-size:16px;font-weight:bold;text-decoration:none;padding:14px 28px;border-radius:8px">Ler e assinar o termo</a></td></tr>'
     + '<tr><td style="padding:0 30px 22px;' + F + 'font-size:12.5px;color:#5b6b7a;line-height:1.5">O link é pessoal e vale até a véspera da reserva. Se não for assinado, a reserva não é confirmada.</td></tr>')
     + '<tr><td style="padding:14px 30px 22px;border-top:1px solid #d9e1e8;' + F + 'font-size:12px;color:#5b6b7a;text-align:center">Administração · Pier Residências · enviado pelo Pier Gestão</td></tr></table></div>';
-  MailApp.sendEmail({ to: x.email, subject: (op.lembrete ? 'Lembrete: ' : '') + (op.presencial ? 'Compareça à Administração para assinar o termo da sua reserva – ' : 'Assine o termo para confirmar sua reserva – ') + x.espaco + ' – ' + String(x.data).split('-').reverse().join('/') + (prazoTxt ? ' (prazo: ' + prazoTxt + ')' : ''), htmlBody: html,
+  grMandar({ to: x.email, subject: (op.lembrete ? 'Lembrete: ' : '') + (op.presencial ? 'Compareça à Administração para assinar o termo da sua reserva – ' : 'Assine o termo para confirmar sua reserva – ') + x.espaco + ' – ' + String(x.data).split('-').reverse().join('/') + (prazoTxt ? ' (prazo: ' + prazoTxt + ')' : ''), htmlBody: html,
     body: op.presencial ? 'Para confirmar sua reserva do ' + x.espaco + ' (' + String(x.data).split('-').reverse().join('/') + '), compareça à Administração do condomínio para assinar o termo' + (prazoTxt ? ' até ' + prazoTxt : '') + '.\n\nCANCELAMENTO: Conforme consta do item 9.12 do Regulamento Interno, o cancelamento ou alteração da data do evento, garantido o crédito correspondente ao desconto realizado, somente será considerado se avisado por escrito a Administração com Antecedência Mínima de 07 (Sete Dias) corridos, caso contrário, o evento ter-se-á como havido.\n\nObs.: Caso já tenha assinado o termo na administração, favor desconsiderar este e-mail.'
       : 'Para confirmar sua reserva, leia e assine o termo' + (prazoTxt ? ' até ' + prazoTxt + ' (senão a reserva poderá ser cancelada)' : '') + ': ' + link, inlineImages: { logo: lembLogoBlob() }, name: 'Pier Residências' });
   return (op.presencial ? 'Aviso para assinar na Administração enviado para ' : 'Link do termo enviado para ') + x.email + '.';
@@ -3680,7 +3729,7 @@ function grAvisar(x, andar, cfg, termoArq) {
   try {
     const assunto = (x.status === 'Cancelada' ? 'Reserva cancelada' : x.status === 'Confirmada' ? 'Reserva confirmada' : x.status === 'Termo assinado' ? 'Termo assinado recebido' : 'Pré-reserva registrada') + ' – ' + x.espaco + ' – ' + String(x.data).split('-').reverse().join('/');
     let anexos = []; try { const id = termoArq ? termoArq.getId() : x.termoArquivo; if (id && x.status !== 'Cancelada') anexos = [DriveApp.getFileById(String(id)).getBlob()]; } catch (e) {}
-    MailApp.sendEmail({ to: x.email, subject: assunto, htmlBody: grEmailHtml(x, andar, cfg, false), inlineImages: { logo: lembLogoBlob() }, attachments: anexos, name: 'Pier Residências',
+    grMandar({ to: x.email, subject: assunto, htmlBody: grEmailHtml(x, andar, cfg, false), inlineImages: { logo: lembLogoBlob() }, attachments: anexos, name: 'Pier Residências',
       body: assunto + '\nSolicitante: ' + x.solicitante + '\nHorário: ' + (x.horario || '') + '\nValor: R$ ' + Number(x.valor || 0).toFixed(2).replace('.', ',') });
     return true;
   } catch (e) { return false; }
