@@ -443,7 +443,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-21 Pier Gestão 2.0 — Gourmet: cópia oculta dos avisos para o auxiliar';
+const VERSAO = '2026-11-21 Pier Gestão 2.0 — Gourmet: rodapé novo e Cco para auxiliar e supervisor';
 
 function doGet() {
   TABS = {};
@@ -3335,6 +3335,8 @@ function grAdmEmails() {
 // 1) se a conta do Apps Script for o próprio auxiliar, sai direto; 2) se o auxiliar estiver em "Enviar e-mail como" no Gmail
 // dessa conta, sai como ele; 3) senão sai da conta atual com "responder para" o auxiliar.
 const GR_REMETENTE = 'auxiliar@condominiopier.com.br';
+// cópia oculta fixa de todos os avisos aos moradores (além do auxiliar)
+const GR_CCO = ['supervisor@condominiopier.com.br'];
 let GR_COMO = '';
 function grComoEnvia() {
   if (GR_COMO) return GR_COMO;
@@ -3345,7 +3347,9 @@ function grComoEnvia() {
 // cópia oculta (Cco) para o auxiliar, para a Administração ter cada aviso na caixa dela
 // (não precisa quando a conta do Apps Script já é o auxiliar: fica nos Enviados dele)
 function grMandar(o) {
-  const m = grComoEnvia(), cco = m !== 'conta' && String(o.to || '').toLowerCase().indexOf(GR_REMETENTE) < 0 ? { bcc: GR_REMETENTE } : {};
+  const m = grComoEnvia(), para = String(o.to || '').toLowerCase();
+  const lista = (m !== 'conta' ? [GR_REMETENTE] : []).concat(GR_CCO).filter(e => para.indexOf(e) < 0);
+  const cco = lista.length ? { bcc: lista.join(',') } : {};
   if (m === 'alias') {
     GmailApp.sendEmail(o.to, o.subject, o.body || '', Object.assign({ htmlBody: o.htmlBody, inlineImages: o.inlineImages, attachments: o.attachments || [], name: o.name || 'Pier Residências', from: GR_REMETENTE, replyTo: GR_REMETENTE }, cco));
     return;
@@ -3618,7 +3622,7 @@ function grTermoLink(x, conta, op) {
     + (prazoTxt ? '<div style="margin-top:12px;border-left:4px solid #c0392b;background:#fdf3f2;border-radius:8px;padding:10px 12px"><b>' + (op.presencial ? 'Compareça até ' : 'Assine até ') + prazoTxt + '.</b> Se o termo não for assinado até lá, a reserva poderá ser cancelada pela Administração.</div>' : '') + '</td></tr>'
     + (op.presencial ? '<tr><td style="padding:6px 30px 22px;' + F + 'font-size:13px;color:#163047;line-height:1.5"><b>CANCELAMENTO:</b> Conforme consta do item 9.12 do Regulamento Interno, o cancelamento ou alteração da data do evento, garantido o crédito correspondente ao desconto realizado, somente será considerado se avisado por escrito a Administração com Antecedência Mínima de 07 (Sete Dias) corridos, caso contrário, o evento ter-se-á como havido.<div style="margin-top:12px;font-size:12.5px;color:#5b6b7a"><b>Obs.:</b> Caso já tenha assinado o termo na administração, favor desconsiderar este e-mail.</div></td></tr>' : '<tr><td align="center" style="padding:14px 30px 22px"><a href="' + link + '" style="display:inline-block;background:#17324d;color:#fff;' + F + 'font-size:16px;font-weight:bold;text-decoration:none;padding:14px 28px;border-radius:8px">Ler e assinar o termo</a></td></tr>'
     + '<tr><td style="padding:0 30px 22px;' + F + 'font-size:12.5px;color:#5b6b7a;line-height:1.5">O link é pessoal e vale até a véspera da reserva. Se não for assinado, a reserva não é confirmada.</td></tr>')
-    + '<tr><td style="padding:14px 30px 22px;border-top:1px solid #d9e1e8;' + F + 'font-size:12px;color:#5b6b7a;text-align:center">Administração · Pier Residências · enviado pelo Pier Gestão</td></tr></table></div>';
+    + '<tr><td style="padding:14px 30px 22px;border-top:1px solid #d9e1e8;' + F + 'font-size:12px;color:#5b6b7a;text-align:center">Administração · Pier Residências · enviado pelo Pier Gestão<br>Este é um e-mail automático. Em caso de dúvidas, fale com a Administração do condomínio.<br>(21) 9 6869-3707 - Auxiliar Administrativo ou adm@condominiopier.com.br</td></tr></table></div>';
   grMandar({ to: x.email, subject: (op.lembrete ? 'Lembrete: ' : '') + (op.presencial ? 'Compareça à Administração para assinar o termo da sua reserva – ' : 'Assine o termo para confirmar sua reserva – ') + x.espaco + ' – ' + String(x.data).split('-').reverse().join('/') + (prazoTxt ? ' (prazo: ' + prazoTxt + ')' : ''), htmlBody: html,
     body: op.presencial ? 'Para confirmar sua reserva do ' + x.espaco + ' (' + String(x.data).split('-').reverse().join('/') + '), compareça à Administração do condomínio para assinar o termo' + (prazoTxt ? ' até ' + prazoTxt : '') + '.\n\nCANCELAMENTO: Conforme consta do item 9.12 do Regulamento Interno, o cancelamento ou alteração da data do evento, garantido o crédito correspondente ao desconto realizado, somente será considerado se avisado por escrito a Administração com Antecedência Mínima de 07 (Sete Dias) corridos, caso contrário, o evento ter-se-á como havido.\n\nObs.: Caso já tenha assinado o termo na administração, favor desconsiderar este e-mail.'
       : 'Para confirmar sua reserva, leia e assine o termo' + (prazoTxt ? ' até ' + prazoTxt + ' (senão a reserva poderá ser cancelada)' : '') + ': ' + link, inlineImages: { logo: lembLogoBlob() }, name: 'Pier Residências' });
@@ -3723,7 +3727,7 @@ function grEmailHtml(x, andar, cfg, previa) {
     + linha('Unidade / solicitante', unid + h(x.solicitante)) + linha('Valor', valor, true) + linha('Situação', h(x.status === 'Pré-reserva' ? 'Aguardando pagamento' : x.status === 'Confirmada' ? 'Reserva confirmada' : x.status === 'Termo assinado' ? 'Termo assinado, aguardando confirmação' : x.status))
     + '</table></td></tr>'
     + '<tr><td style="padding:10px 30px 22px"><div style="border-left:4px solid ' + st[1] + ';background:#f7fafc;border-radius:8px;padding:12px 14px;' + F + 'font-size:14px;color:#163047;line-height:1.55">' + pg + '</div></td></tr>'
-    + '<tr><td style="padding:14px 30px 22px;border-top:1px solid #d9e1e8;' + F + 'font-size:12px;color:#5b6b7a;text-align:center">Administração · Pier Residências · enviado pelo Pier Gestão<br>Não responda esta mensagem. Em caso de dúvidas, fale com a Administração do condomínio.</td></tr>'
+    + '<tr><td style="padding:14px 30px 22px;border-top:1px solid #d9e1e8;' + F + 'font-size:12px;color:#5b6b7a;text-align:center">Administração · Pier Residências · enviado pelo Pier Gestão<br>Este é um e-mail automático. Em caso de dúvidas, fale com a Administração do condomínio.<br>(21) 9 6869-3707 - Auxiliar Administrativo ou adm@condominiopier.com.br</td></tr>'
     + '</table></div>';
 }
 function grAvisar(x, andar, cfg, termoArq) {
