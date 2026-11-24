@@ -443,7 +443,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-21 Pier Gestão 2.0 — Gourmet: baixa no termo no papel + e-mails pelo auxiliar';
+const VERSAO = '2026-11-21 Pier Gestão 2.0 — Gourmet: cópia oculta dos avisos para o auxiliar';
 
 function doGet() {
   TABS = {};
@@ -3342,13 +3342,15 @@ function grComoEnvia() {
   try { if (GmailApp.getAliases().map(a => String(a).toLowerCase()).indexOf(GR_REMETENTE) >= 0) return (GR_COMO = 'alias'); } catch (e) {}
   return (GR_COMO = 'responder');
 }
+// cópia oculta (Cco) para o auxiliar, para a Administração ter cada aviso na caixa dela
+// (não precisa quando a conta do Apps Script já é o auxiliar: fica nos Enviados dele)
 function grMandar(o) {
-  const m = grComoEnvia();
+  const m = grComoEnvia(), cco = m !== 'conta' && String(o.to || '').toLowerCase().indexOf(GR_REMETENTE) < 0 ? { bcc: GR_REMETENTE } : {};
   if (m === 'alias') {
-    GmailApp.sendEmail(o.to, o.subject, o.body || '', { htmlBody: o.htmlBody, inlineImages: o.inlineImages, attachments: o.attachments || [], name: o.name || 'Pier Residências', from: GR_REMETENTE, replyTo: GR_REMETENTE });
+    GmailApp.sendEmail(o.to, o.subject, o.body || '', Object.assign({ htmlBody: o.htmlBody, inlineImages: o.inlineImages, attachments: o.attachments || [], name: o.name || 'Pier Residências', from: GR_REMETENTE, replyTo: GR_REMETENTE }, cco));
     return;
   }
-  MailApp.sendEmail(Object.assign({}, o, m === 'responder' ? { replyTo: GR_REMETENTE } : {}));
+  MailApp.sendEmail(Object.assign({}, o, m === 'responder' ? { replyTo: GR_REMETENTE } : {}, cco));
 }
 function grAvisarAdm(assunto, linhasTxt) {
   const para = grAdmEmails(); if (!para.length) return false;
