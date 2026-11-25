@@ -2350,17 +2350,23 @@ const OS_TIPOS_F = [["Corretiva","Corretivas","verm",'<path d="M14.7 6.3a4 4 0 0
 const osPassaTipo = (o, t) => !t ? true : t === "equip" ? !!String(o.equipamento || "").trim() : t === "agendada" ? !!o.agendadaPara && !osEncerrada(o) : osTipo(o) === t;
 function renderOS(){
   const q = norm($("#o-busca").value), cat = $("#o-cat").value, prio = $("#o-prio").value, resp = $("#o-resp").value, f = S.oFiltro, tp = S.oTipo || "";
+  const loc = $("#o-local").value, sol = $("#o-sol").value, dc = $("#o-dcampo").value, di = $("#o-dini").value, dfm = $("#o-dfim").value;
+  const opts = (sel, campo, atual) => { const v = [...new Set(S.os.map(o => String(o[campo] || "").trim()).filter(Boolean))].sort((x,y)=>x.localeCompare(y,"pt-BR")); $(sel).innerHTML = `<option value="">Todos</option>` + v.map(c => `<option ${c===atual?"selected":""}>${esc(c)}</option>`).join(""); };
+  opts("#o-local", "local", loc); opts("#o-sol", "solicitante", sol);
   const cats = [...new Set(S.os.map(o => o.categoria).filter(Boolean))].sort((x,y)=>x.localeCompare(y,"pt-BR"));
   $("#o-cat").innerHTML = `<option value="">Todos</option>` + cats.map(c => `<option ${c===cat?"selected":""}>${esc(c)}</option>`).join("");
   const resps = [...new Set(S.os.map(o => o.responsavel).filter(Boolean))].sort((x,y)=>x.localeCompare(y,"pt-BR"));
   $("#o-resp").innerHTML = `<option value="">Todos</option><option value="-" ${resp==="-"?"selected":""}>Sem responsável</option>` + resps.map(c => `<option ${c===resp?"selected":""}>${esc(c)}</option>`).join("");
-  const nf = [cat, prio, resp].filter(Boolean).length; $("#o-fn").textContent = nf; $("#o-fn").hidden = !nf;
+  const nf = [cat, prio, resp, loc, sol].filter(Boolean).length; $("#o-fn").textContent = nf; $("#o-fn").hidden = !nf;
+  const dataOS = o => String(o[dc] || "").slice(0, 10);
+  const passaD = o => !(di || dfm) || (dataOS(o) && (!di || dataOS(o) >= di) && (!dfm || dataOS(o) <= dfm));
   if ($("#dl-equip")) $("#dl-equip").innerHTML = [...new Set(S.os.map(o => String(o.equipamento||"").trim()).filter(Boolean))].sort((x,y)=>x.localeCompare(y,"pt-BR")).map(v=>`<option value="${esc(v)}">`).join("");
   $("#dl-local").innerHTML = [...new Set(S.os.map(o=>o.local).concat(S.movs.map(m=>m.destino)).filter(Boolean).map(s=>String(s).trim()))].sort().slice(0,300).map(v=>`<option value="${esc(v)}">`).join("");
   $$("#o-filtros .chip").forEach(c => { if (c.dataset.f==="minhas") c.hidden = !can("os_atender") && !can("os_gerenciar"); });
   const passaSt = o => !(f==="aberto" && osEncerrada(o)) && !(f==="minhas" && (osEncerrada(o) || o.responsavelUsuario !== S.usuario)) && !(f==="atrasadas" && !osAtrasada(o))
     && !(f==="validacao" && o.status!=="Aguardando validação") && !(f==="gerente" && o.status!=="Aguardando gerente") && !(f==="concluidas" && o.status!=="Concluída") && !(f==="canceladas" && o.status!=="Cancelada");
   const passaF = o => (!cat || o.categoria===cat) && (!prio || o.prioridade===prio) && (!resp || (resp==="-" ? !o.responsavel : o.responsavel===resp))
+    && (!loc || String(o.local || "").trim()===loc) && (!sol || String(o.solicitante || "").trim()===sol) && passaD(o)
     && (!q || norm([o.numero,o.titulo,o.local,o.categoria,o.atividade,o.responsavel,o.solicitante,o.abertaPor,o.descricao,o.equipamento,o.unidadeSolic].join(" ")).includes(q));
   const base = S.os.filter(o => passaSt(o) && passaF(o));
   $("#o-tipos").innerHTML = OS_TIPOS_F.map(([k, rot, cor, ico]) => `<button type="button" class="os-tp ${cor} ${tp===k?"on":""}" data-tp="${k}" aria-pressed="${tp===k}"><svg viewBox="0 0 24 24" aria-hidden="true">${ico}</svg>${rot} <span class="os-tp-n">${base.filter(o => osPassaTipo(o, k)).length}</span></button>`).join("");
@@ -2377,12 +2383,20 @@ function renderOS(){
       </div>
       <div class="os-card-r"><span class="${osAtrasada(o)?"atras":""}">${osEncerrada(o) ? `${o.status === "Cancelada" ? "Cancelada" : "Concluída"} ${fData(o.concluidaEm)}` : `Prazo ${fData(o.prazo)}${osAtrasada(o) ? " · atrasada" : ""}`}</span><span class="muted">${esc(o.responsavel || "Sem responsável")}</span></div>
     </article>`).join("")
-    : `<div class="os-vazio"><span class="os-vazio-i" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 13h4l2 3h4l2-3h4M5 13l2-7h10l2 7v6H5z"/></svg></span><b>Nenhuma OS encontrada</b><span class="muted">${q || cat || prio || resp || tp ? "Nenhuma OS com esses filtros." : vazio}</span>${f==="aberto" && can("os_abrir") ? `<button class="btn primary" type="button" id="p-os-nova">+ Abrir OS</button>` : ""}</div>`;
+    : `<div class="os-vazio"><span class="os-vazio-i" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 13h4l2 3h4l2-3h4M5 13l2-7h10l2 7v6H5z"/></svg></span><b>Nenhuma OS encontrada</b><span class="muted">${q || cat || prio || resp || loc || sol || di || dfm || tp ? "Nenhuma OS com esses filtros." : vazio}</span>${f==="aberto" && can("os_abrir") ? `<button class="btn primary" type="button" id="p-os-nova">+ Abrir OS</button>` : ""}</div>`;
 }
 $("#o-busca").addEventListener("input", renderOS);
-["#o-cat","#o-prio","#o-resp"].forEach(id => $(id).addEventListener("change", renderOS));
+["#o-cat","#o-prio","#o-resp","#o-local","#o-sol","#o-dcampo","#o-dini","#o-dfim"].forEach(id => $(id).addEventListener("change", () => { if (id === "#o-dini" || id === "#o-dfim") syncChips(".os-datas-r", "per", ""); renderOS(); }));
+// atalhos de período
+$$(".os-datas-r .chip").forEach(c => c.addEventListener("click", () => {
+  const d = new Date(), iso = x => new Date(x.getTime() - x.getTimezoneOffset() * 60000).toISOString().slice(0, 10); let ini = hoje(), fim = hoje();
+  if (c.dataset.per === "7") { const a = new Date(d); a.setDate(a.getDate() - 6); ini = iso(a); }
+  if (c.dataset.per === "mes") { ini = iso(new Date(d.getFullYear(), d.getMonth(), 1)); fim = iso(new Date(d.getFullYear(), d.getMonth() + 1, 0)); }
+  if (c.dataset.per === "mesant") { ini = iso(new Date(d.getFullYear(), d.getMonth() - 1, 1)); fim = iso(new Date(d.getFullYear(), d.getMonth(), 0)); }
+  $("#o-dini").value = ini; $("#o-dfim").value = fim; syncChips(".os-datas-r", "per", c.dataset.per); renderOS();
+}));
 $("#o-filtrar").addEventListener("click", () => { const p = $("#o-fpainel"); p.hidden = !p.hidden; $("#o-filtrar").setAttribute("aria-expanded", String(!p.hidden)); });
-$("#o-limpar").addEventListener("click", () => { $("#o-cat").value = ""; $("#o-prio").value = ""; $("#o-resp").value = ""; S.oTipo = ""; renderOS(); });
+$("#o-limpar").addEventListener("click", () => { ["#o-cat","#o-prio","#o-resp","#o-local","#o-sol","#o-dini","#o-dfim"].forEach(id => { $(id).value = ""; }); $("#o-dcampo").value = "abertaEm"; syncChips(".os-datas-r", "per", ""); S.oTipo = ""; renderOS(); });
 $("#o-tipos").addEventListener("click", e => { const b = e.target.closest("[data-tp]"); if (b) { S.oTipo = S.oTipo === b.dataset.tp ? "" : b.dataset.tp; renderOS(); } });
 $$("#o-filtros .chip").forEach(c => c.addEventListener("click", () => { S.oFiltro = c.dataset.f; syncChips("#o-filtros","f",S.oFiltro); renderOS(); }));
 $("#o-nova").addEventListener("click", () => novaOS());

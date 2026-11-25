@@ -14,9 +14,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="estilo.css?v=20261102lote">
-<link rel="stylesheet" href="termo.css?v=20261123wp">
-<link rel="stylesheet" href="visual-2.css?v=20261123wp">
+<link rel="stylesheet" href="estilo.css?v=20261124of">
+<link rel="stylesheet" href="termo.css?v=20261124of">
+<link rel="stylesheet" href="visual-2.css?v=20261124of">
 <style>
 html.pier-iniciando body>main,html.pier-iniciando body>header,html.pier-iniciando body>aside,html.pier-iniciando #side-fundo {visibility:hidden;}
 #pier-inicio{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;background:#0c1117;color:#e9f0f5;padding:24px;font:14px system-ui,sans-serif;text-align:center;}
@@ -237,12 +237,20 @@ html.pier-iniciando body>main,html.pier-iniciando body>header,html.pier-iniciand
     <div class="panel os-busca">
       <div class="os-busca-l"><input class="input" id="o-busca" placeholder="Número, serviço, equipamento ou local…" type="search" aria-label="Pesquisar OS">
         <button class="btn" type="button" id="o-filtrar" aria-expanded="false" aria-controls="o-fpainel">Filtros <span class="badge" id="o-fn" hidden></span></button></div>
+      <div class="os-datas" role="group" aria-label="Filtrar por data">
+        <label class="md-lbl">Data de <select class="input" id="o-dcampo"><option value="abertaEm">Abertura</option><option value="prazo">Prazo</option><option value="concluidaEm">Conclusão</option><option value="agendadaPara">Agendamento</option></select></label>
+        <label class="md-lbl">De <input class="input" type="date" id="o-dini"></label>
+        <label class="md-lbl">Até <input class="input" type="date" id="o-dfim"></label>
+        <div class="os-datas-r"><button class="chip" type="button" data-per="hoje" aria-pressed="false">Hoje</button><button class="chip" type="button" data-per="7" aria-pressed="false">Últimos 7 dias</button><button class="chip" type="button" data-per="mes" aria-pressed="false">Este mês</button><button class="chip" type="button" data-per="mesant" aria-pressed="false">Mês passado</button></div>
+        <button class="link" type="button" id="o-limpar">Limpar filtros</button>
+      </div>
       <div class="os-tipos" id="o-tipos" role="group" aria-label="Tipo de OS"></div>
       <div class="os-fpainel" id="o-fpainel" hidden>
         <label class="md-lbl">Grupo de atividades <select class="input" id="o-cat"><option value="">Todos</option></select></label>
         <label class="md-lbl">Prioridade <select class="input" id="o-prio"><option value="">Todas</option><option>Urgente</option><option>Alta</option><option>Normal</option><option>Baixa</option></select></label>
         <label class="md-lbl">Responsável <select class="input" id="o-resp"><option value="">Todos</option></select></label>
-        <button class="link" type="button" id="o-limpar">Limpar filtros</button>
+        <label class="md-lbl">Local <select class="input" id="o-local"><option value="">Todos</option></select></label>
+        <label class="md-lbl">Solicitante <select class="input" id="o-sol"><option value="">Todos</option></select></label>
       </div>
     </div>
     <div class="chips os-st" id="o-filtros">
@@ -256,7 +264,7 @@ html.pier-iniciando body>main,html.pier-iniciando body>header,html.pier-iniciand
       <button class="chip" data-f="todas" aria-pressed="false">Todas</button>
     </div>
     <div id="o-body" class="os-lista"></div>
-    <p class="hint" style="margin-top:10px">A lista mostra as OS em aberto e as encerradas nos últimos 90 dias. As mais antigas ficam na aba OS da planilha e entram no dashboard pelo período.</p>
+    <p class="hint" style="margin-top:10px">A lista mostra as OS em aberto e as encerradas nos últimos 90 dias (os filtros de data valem dentro disso). As mais antigas ficam na aba OS da planilha e entram no dashboard pelo período.</p>
     <datalist id="dl-local"></datalist>
     <datalist id="dl-equip"></datalist>
   </section>
@@ -849,8 +857,8 @@ html.pier-iniciando body>main,html.pier-iniciando body>header,html.pier-iniciand
 <script src="config.js"></script>
 <script src="nfe.js?v=20261101os5"></script>
 <script src="vendor/qrcode.js?v=2.0.4"></script>
-<script src="termo.js?v=20261123wp"></script>
-<script src="app.js?v=20261123wp"></script>
+<script src="termo.js?v=20261124of"></script>
+<script src="app.js?v=20261124of"></script>
 
 </body>
 </html>
