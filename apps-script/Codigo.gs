@@ -445,7 +445,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-25 Pier Gestão 2.0 — Gourmet: Termo de Responsabilidade eletrônico (revisão 04) com código de confirmação e autenticidade';
+const VERSAO = '2026-11-25 Pier Gestão 2.0 — Gourmet: respostas dos moradores vão para auxiliar e supervisor';
 
 function doGet() {
   TABS = {};
@@ -3354,11 +3354,13 @@ function grMandar(o) {
   const m = grComoEnvia(), para = String(o.to || '').toLowerCase();
   const lista = (m !== 'conta' ? [GR_REMETENTE] : []).concat(GR_CCO).filter(e => para.indexOf(e) < 0);
   const cco = lista.length ? { bcc: lista.join(',') } : {};
+  // "responder para": auxiliar e supervisor juntos (a resposta do morador chega nos dois)
+  const responder = [GR_REMETENTE].concat(GR_CCO).join(',');
   if (m === 'alias') {
-    GmailApp.sendEmail(o.to, o.subject, o.body || '', Object.assign({ htmlBody: o.htmlBody, inlineImages: o.inlineImages, attachments: o.attachments || [], name: o.name || 'Pier Residências', from: GR_REMETENTE, replyTo: GR_REMETENTE }, cco));
+    GmailApp.sendEmail(o.to, o.subject, o.body || '', Object.assign({ htmlBody: o.htmlBody, inlineImages: o.inlineImages, attachments: o.attachments || [], name: o.name || 'Pier Residências', from: GR_REMETENTE, replyTo: responder }, cco));
     return;
   }
-  MailApp.sendEmail(Object.assign({}, o, m === 'responder' ? { replyTo: GR_REMETENTE } : {}, cco));
+  MailApp.sendEmail(Object.assign({}, o, { replyTo: responder }, cco));
 }
 function grAvisarAdm(assunto, linhasTxt) {
   const para = grAdmEmails(); if (!para.length) return false;
