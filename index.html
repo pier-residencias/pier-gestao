@@ -16,7 +16,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="estilo.css?v=20261124of">
 <link rel="stylesheet" href="termo.css?v=20261124of">
-<link rel="stylesheet" href="visual-2.css?v=20261124of">
+<link rel="stylesheet" href="visual-2.css?v=20261126pf">
 <style>
 html.pier-iniciando body>main,html.pier-iniciando body>header,html.pier-iniciando body>aside,html.pier-iniciando #side-fundo {visibility:hidden;}
 #pier-inicio{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;background:#0c1117;color:#e9f0f5;padding:24px;font:14px system-ui,sans-serif;text-align:center;}
@@ -818,21 +818,23 @@ html.pier-iniciando body>main,html.pier-iniciando body>header,html.pier-iniciand
 
   <!-- PENDÊNCIAS (menu Administração) -->
   <section id="t-pendencias" hidden>
-    <div class="sec-head"><h2 class="sec">Controle de pendências</h2><span class="muted">Lista do síndico. Cada alteração vai direto para a aba Pendencias da planilha.</span><button class="btn primary" type="button" id="pd-nova">+ Incluir pendência</button></div>
-    <div class="pd-stats" id="pd-stats"></div>
-    <div class="pd-prog"><span class="track"><i id="pd-bar"></i></span><span id="pd-prog">Carregando…</span></div>
     <div class="notice warn" id="pd-aviso" hidden>Para usar criticidade, tarefas constantes, subitens, prazo bloqueado e data de conclusão, a planilha precisa do código novo do Apps Script (colar, executar <b>autorizar</b> e implantar uma nova versão).</div>
     <div class="notice" id="pd-aviso2" hidden>Aprovação do gerente e do síndico, atualização de prazo, prazo inicial alterável pelo síndico e aviso por e-mail entram quando o Apps Script novo for instalado (colar o código, executar <b>autorizar</b> e implantar uma nova versão).</div>
-    <div class="toolbar">
-      <input class="input" id="pd-q" type="search" placeholder="Buscar pendência, observação ou responsável">
-      <select class="input" id="pd-fs" aria-label="Filtrar por situação"></select>
-      <select class="input" id="pd-fc" aria-label="Filtrar por criticidade"></select>
-      <select class="input" id="pd-fr" aria-label="Filtrar por responsável"></select>
-      <select class="input" id="pd-ord" aria-label="Ordenar a lista"></select>
-      <label class="pd-chk"><input type="checkbox" id="pd-hide"> Ocultar concluídas e canceladas</label>
-      <button class="btn" type="button" id="pd-recolher" aria-pressed="false">Recolher todas</button>
-      <button class="btn primary" type="button" id="pd-mail">Gerar texto para e-mail</button>
-      <button class="btn" type="button" id="pd-lemb" hidden>Lembretes por e-mail</button>
+    <div class="pd-topo" id="pd-topo">
+      <div class="sec-head"><h2 class="sec">Controle de pendências</h2><span class="muted">Lista do síndico. Cada alteração vai direto para a aba Pendencias da planilha.</span><button class="btn primary" type="button" id="pd-nova">+ Incluir pendência</button></div>
+      <div class="pd-stats" id="pd-stats"></div>
+      <div class="pd-prog"><span class="track"><i id="pd-bar"></i></span><span id="pd-prog">Carregando…</span></div>
+      <div class="toolbar">
+        <input class="input" id="pd-q" type="search" placeholder="Buscar pendência, observação ou responsável">
+        <select class="input" id="pd-fs" aria-label="Filtrar por situação"></select>
+        <select class="input" id="pd-fc" aria-label="Filtrar por criticidade"></select>
+        <select class="input" id="pd-fr" aria-label="Filtrar por responsável"></select>
+        <select class="input" id="pd-ord" aria-label="Ordenar a lista"></select>
+        <label class="pd-chk"><input type="checkbox" id="pd-hide"> Ocultar concluídas e canceladas</label>
+        <button class="btn" type="button" id="pd-recolher" aria-pressed="false">Recolher todas</button>
+        <button class="btn primary" type="button" id="pd-mail">Gerar texto para e-mail</button>
+        <button class="btn" type="button" id="pd-lemb" hidden>Lembretes por e-mail</button>
+      </div>
     </div>
     <div id="pd-body"><div class="empty">Carregando pendências…</div></div>
     <datalist id="pd-resps"><option value="Auxiliar"></option><option value="Fornecedor"></option><option value="Gerência"></option><option value="Jardinagem"></option><option value="Limpeza"></option><option value="Manutenção"></option><option value="Piscina"></option><option value="Síndico"></option><option value="Supervisor"></option></datalist>
@@ -858,7 +860,7 @@ html.pier-iniciando body>main,html.pier-iniciando body>header,html.pier-iniciand
 <script src="nfe.js?v=20261101os5"></script>
 <script src="vendor/qrcode.js?v=2.0.4"></script>
 <script src="termo.js?v=20261124of"></script>
-<script src="app.js?v=20261124of"></script>
+<script src="app.js?v=20261126pf"></script>
 
 </body>
 </html>
