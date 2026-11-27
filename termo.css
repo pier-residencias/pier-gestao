@@ -21,3 +21,37 @@
 .tg-limpar{justify-self:start;font:inherit;font-size:13px;background:none;border:0;color:var(--tg-acc2,#397d9d);text-decoration:underline;cursor:pointer;padding:0}
 .tg-ok{font:inherit;font-weight:700;font-size:16px;padding:14px 20px;border-radius:12px;border:0;background:#2e7d4f;color:#fff;cursor:pointer}.tg-ok[disabled]{opacity:.45;cursor:not-allowed}
 .tg-msg{margin:0;font-size:14px}.tg-msg.err{color:#c0392b;font-weight:600}
+/* Termo eletrônico (etapas) */
+.tge{gap:12px}
+.tge-eb{font-size:11.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--tg-acc2,#397d9d)}
+.tge-cab h3{margin:4px 0 4px;font-size:22px;line-height:1.2}
+.tge-mut{margin:0;opacity:.75;font-size:14px}.tge-peq{font-size:12.5px;margin-top:8px}
+.tge-imp{margin-top:10px;padding:10px 14px;border-left:4px solid var(--tg-acc2,#397d9d);border-radius:8px;background:var(--tg-suave,#eef3f7);font-size:13.5px;line-height:1.5}
+.tge-st{border:1px solid var(--tg-linha,#d9e1e8);border-radius:12px;padding:10px 14px}
+.tge-st-l{display:flex;justify-content:space-between;gap:10px;font-size:13px}.tge-cont{font-weight:700}
+.tge-bar{height:6px;border-radius:3px;background:var(--tg-suave,#eef3f7);margin:8px 0 6px;overflow:hidden}.tge-bar span{display:block;height:100%;width:0;background:var(--tg-acc2,#397d9d);transition:width .2s}
+.tge-gmsg{margin:0;font-size:13px;opacity:.85}.tge-gmsg.ok{color:#2e7d4f;opacity:1;font-weight:600}.tge-gmsg.err{color:#c0392b;opacity:1;font-weight:600}
+.tge-passo{border:1px solid var(--tg-linha,#d9e1e8);border-radius:14px;padding:16px 18px}
+.tge-passo h4{margin:4px 0 4px;font-size:18px}
+.tge-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;margin-top:12px}.tge-full{grid-column:1/-1}
+.tge-f{display:grid;gap:5px;font-size:13px;font-weight:700}.tge-f .tg-in{font-weight:500}.tge-f .tg-in[readonly]{opacity:.75;background:var(--tg-suave,#eef3f7)}
+.tge-q{border:0;border-top:1px solid var(--tg-linha,#d9e1e8);margin:12px 0 0;padding:12px 0 0}
+.tge-q legend{font-weight:700;font-size:15px;padding:0;float:left;width:100%}.tge-q p{clear:both;margin:4px 0 10px;font-size:14.5px;line-height:1.55}
+.tge-n{color:var(--tg-acc2,#397d9d);font-size:12.5px;margin-right:4px}
+.tge-op{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tge-ch{display:flex;align-items:center;gap:10px;padding:11px 14px;border:1.5px solid var(--tg-linha,#d9e1e8);border-radius:10px;cursor:pointer;font-weight:600;font-size:14.5px}
+.tge-ch input{width:19px;height:19px;margin:0;accent-color:#2e7d4f}.tge-ch.nao input{accent-color:#c0392b}
+.tge-ch:has(input:checked){border-color:#2e7d4f;background:rgba(46,125,79,.08)}.tge-ch.nao:has(input:checked){border-color:#c0392b;background:rgba(192,57,43,.08)}
+.tge-q.nao p{color:#c0392b}
+.tge-passo .tg-aceite{margin-top:12px}.tge-passo .tge-imp{margin-top:12px}
+.tge-nav{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.tge-lmsg{flex:1;font-size:13px;color:#c0392b;font-weight:600;min-width:120px}
+.tge-bt{font:inherit;font-weight:700;font-size:15px;padding:12px 20px;border-radius:12px;border:1.5px solid var(--tg-acc2,#397d9d);background:transparent;color:inherit;cursor:pointer}
+.tge-bt.pri{background:var(--tg-acc,#17324d);border-color:var(--tg-acc,#17324d);color:#fff}.tge-bt[disabled]{opacity:.4;cursor:not-allowed}
+.tge-nav .tg-ok{margin-left:auto}
+@media (max-width:560px){.tge-grid,.tge-op{grid-template-columns:1fr}.tge-passo{padding:14px 12px}.tge-cab h3{font-size:19px}.tge-bt{padding:11px 14px}}
+.tge-passo h4,.tge-cab h3{text-transform:none;letter-spacing:0;color:inherit}
+.tge-f .tg-in[readonly]{color:inherit;opacity:.85}
+.tge-int{font-weight:600;opacity:.8}.tge-lista{margin:0 0 12px;padding-left:20px;font-size:14.5px;line-height:1.55}.tge-lista li{margin:0 0 6px}.tge-q.nao .tge-lista{color:#c0392b}
+.tge-dest .tge-lista,.tge-dest>p{font-weight:700}
+.tge-otp{margin-top:12px;padding:12px 14px;border:1.5px dashed var(--tg-acc2,#397d9d);border-radius:12px}.tge-otp p{margin:4px 0 10px}
+.tge-otp-l{display:flex;flex-wrap:wrap;gap:10px;align-items:center}.tge-otp-l .tg-in{width:9.5em;font-size:20px;letter-spacing:.3em;text-align:center}.tge-peq.err{color:#c0392b;opacity:1;font-weight:600}

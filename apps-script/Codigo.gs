@@ -197,7 +197,9 @@ const ABAS = {
       ['tipoSol', 'Solicitante é'], ['unidadeId', 'ID da unidade'], ['solicitante', 'Solicitante'], ['email', 'E-mail do solicitante'], ['telefone', 'Telefone'], ['cpf', 'CPF'],
       ['periodo', 'Período'], ['horario', 'Horário'], ['avisoEm', 'E-mail de confirmação enviado em'],
       ['termoHash', 'Código do link do termo'], ['termoLinkEm', 'Link do termo enviado em'], ['termoAssinadoEm', 'Termo assinado em'], ['termoNome', 'Termo assinado por'], ['termoVia', 'Termo assinado via'], ['termoArquivo', 'Termo assinado (arquivo)'],
-      ['termoAvisoEm', 'Termo pedido automaticamente em'], ['termoPrazo', 'Prazo para assinar'], ['termoLembreteEm', 'Lembrete do termo em'], ['termoVencidoEm', 'Prazo do termo vencido em'], ['termoObs', 'Observação do termo'], ['confAvisoEm', 'Confirmação ao morador em']],
+      ['termoAvisoEm', 'Termo pedido automaticamente em'], ['termoPrazo', 'Prazo para assinar'], ['termoLembreteEm', 'Lembrete do termo em'], ['termoVencidoEm', 'Prazo do termo vencido em'], ['termoObs', 'Observação do termo'], ['confAvisoEm', 'Confirmação ao morador em'],
+      ['termoAut', 'Código de autenticidade do termo'], ['termoShaPdf', 'SHA-256 do PDF do termo'], ['termoShaReg', 'SHA-256 do registro do termo'], ['termoOtp', 'Código de confirmação do termo'],
+      ['termoAssArq', 'Assinatura desenhada (arquivo)'], ['termoRepNome', 'Termo validado por'], ['termoRepCargo', 'Cargo de quem validou'], ['termoRepEm', 'Termo validado em'], ['termoRepUsuario', 'Usuário que validou'], ['termoShaPdfMorador', 'SHA-256 do PDF assinado pelo morador']],
     num: ['valor']
   },
   esc: {
@@ -443,7 +445,7 @@ const TIPO_POR_NOME = Object.keys(TIPOS).reduce((m, k) => { m[TIPOS[k]] = k; ret
 
 // ---------- entrada da web ----------
 
-const VERSAO = '2026-11-21 Pier Gestão 2.0 — Gourmet: rodapé novo e Cco para auxiliar e supervisor';
+const VERSAO = '2026-11-25 Pier Gestão 2.0 — Gourmet: Termo de Responsabilidade eletrônico (revisão 04) com código de confirmação e autenticidade';
 
 function doGet() {
   TABS = {};
@@ -472,6 +474,8 @@ function doPost(e) {
     // termo do Espaço Gourmet pelo link do e-mail (sem login; vale só o código do link)
     if (req.acao === 'termoVer') return json({ ok: true, termo: termoVer(req) });
     if (req.acao === 'termoAssinar') return json({ ok: true, msg: termoAssinar(req) });
+    if (req.acao === 'termoCodigo') return json({ ok: true, msg: termoCodigo(req) });
+    if (req.acao === 'termoVerificar') return json({ ok: true, termo: termoVerificar(req) });
     if (req.acao === 'redefinirSenha') return json({ ok: true, msg: redefinirComCodigo(req) });
     if (req.acao === 'entrar' && req.senha !== undefined) {
       // entrada com usuário e senha: confere bloqueio por tentativas, a senha (com hash) e abre uma sessão
@@ -3476,6 +3480,29 @@ function grAcao(r, conta) {
     if (x.status !== 'Aguardando assinatura') throw falha('Esta reserva não está aguardando assinatura.');
     const m = grAssinarAplicar(x, r, 'Tela da Administração', conta); AUDIT_DET = 'Termo do ' + x.espaco + ' assinado na Administração por ' + x.solicitante + ' (' + x.data + ')'; return m;
   }
+  // representante do condomínio assina eletronicamente o termo eletrônico já assinado pelo morador (novo PDF, mesmo código)
+  if (r.op === 'assinarRep') {
+    grSoAdm(conta);
+    if (!x.termoAut) throw falha('Só dá para validar assim um Termo Eletrônico assinado pelo morador.');
+    if (x.termoRepEm) throw falha('Este termo já foi validado por ' + x.termoRepNome + '.');
+    const cargo = texto(r.cargo, 60);
+    if (!cargo) throw falha('Informe o seu cargo.');
+    if (!r.declaro) throw falha('Marque a declaração de validação.');
+    const quando = agora(), d = grTermoDados(x), itens = [].concat.apply([], d.eletronico.map(s => s.itens));
+    const otp = /^Enviado para (\S+) e confirmado em (.+)$/.exec(String(x.termoOtp || ''));
+    const via = String(x.termoVia || '').replace(/^Termo eletrônico · /, '');
+    const html = grTermoEletHtml(d, { nome: x.termoNome, email: x.email, telefone: x.telefone || '', quando: x.termoAssinadoEm, via: via.replace(/\s*\(.*\)\s*$/, ''), ua: '', total: itens.length, itens: itens.reduce((n, i) => n + i.textos.length, 0),
+      rep: (/\((.*)\)\s*$/.exec(via) || [])[1] || '', aut: x.termoAut, shaReg: x.termoShaReg, otp: otp ? { email: otp[1], em: otp[2] } : null,
+      rep2: { nome: conta.nome, cargo, em: quando, usuario: conta.usuario }, png: (() => { try { return x.termoAssArq ? Utilities.base64Encode(DriveApp.getFileById(x.termoAssArq).getBlob().getBytes()) : ''; } catch (e) { return ''; } })() });
+    const pasta = pastaDrive('PASTA_TERMOS_GOURMET', 'Termos do Espaço Gourmet - Pier Gestão');
+    const nomeArq = ('Termo ' + x.espaco + ' ' + x.data + ' - ' + x.termoNome + ' (validado)').replace(/[\\/:*?"<>|]/g, '_');
+    let arq, blob;
+    try { blob = Utilities.newBlob(html, 'text/html', nomeArq + '.html').getAs('application/pdf').setName(nomeArq + '.pdf'); arq = pasta.createFile(blob); }
+    catch (e) { blob = Utilities.newBlob(html, 'text/html', nomeArq + '.html'); arq = pasta.createFile(blob); }
+    gravar(t, { termoRepNome: conta.nome, termoRepCargo: cargo, termoRepEm: quando, termoRepUsuario: conta.usuario, termoShaPdfMorador: x.termoShaPdf || '', termoShaPdf: grSha256Hex(blob.getBytes()), termoArquivo: arq.getId(), atualizadoEm: quando, atualizadoPor: conta.nome }, x._row);
+    AUDIT_DET = 'Assinou como representante do condomínio o termo ' + x.termoAut + ' (' + x.termoNome + ', ' + x.data + ')';
+    return 'Termo assinado por você como representante do condomínio. O PDF validado (mesmo código ' + x.termoAut + ') já está em "Ver termo assinado".';
+  }
   // Administração dá baixa no termo assinado no PAPEL, na Administração (opcional: anexar o termo digitalizado)
   if (r.op === 'baixaTermo') {
     grSoAdm(conta);
@@ -3553,13 +3580,31 @@ function grCondicao(x) {
   const condicao = p && p.rel === 'Proprietário' ? 'Proprietário(a)' : U.alugado ? 'Inquilino(a)' : 'Morador(a)';
   return { condicao, proprietario: dono ? dono.nome : '', alugado: U.alugado };
 }
+// Termo de Responsabilidade para Reserva e Uso do Espaço Gourmet (revisão 04, nov/2026), versão eletrônica:
+// 6 blocos (etapas 2 a 7), 14 perguntas numeradas 2.a), 2.b)… (algumas juntam vários itens
+// do termo em uma resposta só); cada pergunta precisa de "Sim, concordo". Cada item: [refs, título, [textos], destaque em negrito?].
+// Texto baseado no termo de reserva em papel (vigência da taxa 2025–2026). {VALOR} = valor da reserva.
+const TERMO_REVISAO = 'Revisão 04 · Novembro/2026';
+const TERMO_ELETRONICO = [["Condições da reserva", [["2.a", "Taxa, cancelamento e vistoria", ["Tenho ciência da taxa de utilização de {VALOR} (vigência 2025–2026), que será cobrada junto com a taxa de condomínio.", "Tenho ciência de que, conforme o item 9.12 do Regulamento Interno, o cancelamento ou a alteração da data, com garantia do crédito correspondente ao desconto realizado, deverá ser comunicado por escrito à Administração com antecedência mínima de 7 dias corridos. Caso contrário, o evento será considerado realizado.", "Concordo que a entrega das chaves somente ocorrerá após a vistoria dos ambientes."]], ["2.b", "Lista de convidados", ["Concordo em fornecer a lista de convidados antes da entrega das chaves, para que permaneça nas Guaritas durante o evento.", "Comprometo-me a entregar a lista de convidados à Administração com antecedência mínima de 48 horas, sob pena de cancelamento automático da reserva em caso de não entrega da lista."]], ["2.c", "Uso exclusivo e finalidades proibidas", ["Declaro que a reserva é para evento relacionado a morador do Condomínio Residencial Pier e que não reservarei nem utilizarei o espaço para evento de não morador.", "Concordo que não utilizarei o espaço para atividades político-partidárias, religiosas, mercantis ou jogos considerados de azar pela legislação."]]]], ["Organização e funcionamento", [["3.a", "Organização, silêncio e horário", ["Comprometo-me a zelar pela organização e pelo silêncio no início, durante e ao término do evento, juntamente com os responsáveis pelo buffet e pela animação/som.", "Tenho ciência de que a cessão do Espaço Gourmet ocorre das 8h às 24h do dia do evento.", "Comprometo-me a planejar a desmobilização da copa/cozinha e a saída dos convidados antes das 24h."]], ["3.b", "Aparelhos sonoros", ["Concordo que aparelhos sonoros serão utilizados somente dentro do Espaço Gourmet, voltados para o canal, não podendo ser voltados para as laterais.", "Comprometo-me a utilizar aparelhos sonoros com moderação durante todo o período e a encerrar seu uso até as 22h."]], ["3.c", "Capacidade máxima", ["Tenho ciência de que o espaço é restrito a eventos com até 60 pessoas e de que é recomendada uma visita de reconhecimento."]], ["3.d", "Móveis e Equipamentos", ["Concordo que qualquer mudança, retirada ou acréscimo de móveis, no interior ou na área externa do Espaço Gourmet, somente ocorrerá na presença do funcionário do condomínio responsável pelo checklist.", "Tenho ciência de que a máquina de gelo não poderá ser utilizada para abastecimento ou consumo do evento."]]]], ["Copa, conservação e segurança", [["4.a", "Gás e preparo de alimentos", ["Comprometo-me a não utilizar botijão de gás na copa/cozinha ou em qualquer outro ambiente.", "Concordo que o preparo de alimentos será realizado exclusivamente na copa/cozinha do Espaço Gourmet, sendo proibido na área externa."]], ["4.b", "Materiais da festa e porta da copa", ["Comprometo-me a não depositar materiais da festa no hall social do BL-6 nem em qualquer dependência fora do interior do Espaço Gourmet.", "Comprometo-me a manter fechada a porta de acesso à copa/cozinha."]], ["4.c", "Decoração e equipamentos de incêndio", ["Comprometo-me a não utilizar colas, fitas adesivas, grampos ou pregos nos tetos, paredes ou móveis do Espaço Gourmet e áreas externas.", "Comprometo-me a não pendurar objetos de decoração, incluindo balões, nos extintores ou sprinklers (chuveirinhos de incêndio).", "Concordo em utilizar os ganchos instalados pela Administração no teto do Espaço Gourmet para essa finalidade."]], ["4.d", "Limpeza e imprevistos", ["Comprometo-me a comunicar qualquer necessidade de limpeza (escadas, hall social do Bloco 06, elevador de serviço, garagem ou corredores) ou imprevisto à Guarita Norte (ramais 9 e 5112) ou à Guarita Sul (ramais 10 e 1111)."]]]], ["Brinquedos e equipamentos similares", [["5.a", "Regras para brinquedos e equipamentos similares", ["Concordo que brinquedos e equipamentos similares não podem ultrapassar o teto do pavimento térreo, respeitando a altura máxima de 2,5m.", "Comprometo-me a não utilizar equipamentos que causem incômodos, perturbação do sossego ou desconforto aos demais moradores.", "Comprometo-me a não utilizar equipamentos que produzam ruídos ou barulho que perturbem o sossego dos demais moradores.", "Concordo que os equipamentos não poderão prejudicar a circulação de pessoas nas partes comuns da edificação.", "Assumo a responsabilidade pela utilização dos equipamentos e por danos sofridos por terceiros ou convidados decorrentes desse uso, nos termos do termo original, sem relação com o condomínio, observada a legislação aplicável.", "Concordo que a instalação dos equipamentos respeitará a projeção da fachada da edificação e ficará dentro da área permitida no mapa.", "Comprometo-me a não instalar ou utilizar esses equipamentos nos jardins, gramados ou demais áreas comuns não autorizadas.", "Concordo que não utilizarei equipamentos que gerem descarte de resíduos ou escoe líquidos de qualquer natureza, inclusive água e sabão.", "Tenho ciência de que o descumprimento dessas regras, bem como eventuais reclamações de moradores por uso inadequado, implicará o desligamento imediato do equipamento e sua remoção do espaço condominial.", "Comprometo a ressarcir qualquer dano às áreas comuns decorrente da utilização de brinquedos ou equipamentos similares."]]]], ["Mapa das áreas autorizadas", [["6.a", "Limites de utilização e áreas não permitidas", ["Limites de utilização: Declaro que visualizei e compreendi o mapa original e que os participantes do evento utilizarão apenas as áreas destinadas ao evento, identificadas em azul no entorno do salão: área interna, área externa frontal demarcada, copa e WC, sendo proibida a utilização de áreas externas ao perímetro azul do mapa para instalação de acessórios, brinquedos, mesas e qualquer outra estrutura externa dedicada ao evento.", "Áreas não permitidas: Concordo que a festa, seus materiais, móveis e equipamentos não ocuparão as áreas não autorizadas, incluindo piscina, academia e sua área externa, jardins, salão de jogos adulto, prisma do Bloco 6 e área de convivência (totó, pingue-pongue e sinuca), nem as demais áreas externas à demarcação do salão."]]]], ["Responsabilidades e penalidades", [["7.a", "Compromisso, notificação e penalidade", ["Declaro ter ciência do compromisso assumido com o condomínio e os demais moradores e comprometo-me a cumprir as obrigações deste termo na data informada.", "Reconheço e autorizo a notificação e/ou penalização pela Administração em caso de descumprimento das regras, com fundamento no Regulamento Interno e na Convenção do condomínio.", "Tenho ciência de que a penalidade pecuniária prevista no termo é de R$ 1.500,00 por descumprimento das regras, caso, após comunicação pelo colaborador do condomínio, a irregularidade não seja cessada.", "Reconheço que este termo constitui documento hábil para eventual cobrança da penalidade, caso seja aplicada."]]]]];
+function grTermoEletronico(valorTxt) {
+  return TERMO_ELETRONICO.map(sec => ({ titulo: sec[0], itens: sec[1].map(i => ({ ref: i[0], titulo: i[1], textos: i[2].map(t => t.replace(/\{VALOR\}/g, valorTxt)), destaque: !!i[3] })) }));
+}
+// telefone de quem reservou, tirado do cadastro da unidade (para já vir preenchido no termo)
+function grFoneCadastro(x) {
+  try {
+    const U = (x.unidadeId && grUnidades().find(z => z.id === x.unidadeId)) || (x.unidade ? grAcharUnidade(x.bloco, x.unidade) : null);
+    if (!U) return '';
+    const p = U.pessoas.find(z => x.solicitante && chaveNome(z.nome) === chaveNome(x.solicitante)) || U.pessoas.find(z => x.email && z.email === String(x.email).toLowerCase());
+    return p ? p.telefone || '' : '';
+  } catch (e) { return ''; }
+}
 function grTermoDados(x) {
   const un = linhas(tabela('un')).find(u => u.id === x.unidadeId) || {}, cd = grCondicao(x);
   const valor = Number(x.valor) || 0;
   return { reserva: { id: x.id, espaco: x.espaco, data: x.data, horario: x.horario, solicitante: x.solicitante, bloco: x.bloco ? String(x.bloco).replace(/^bloco\s*/i, '') : (x.tipoSol === 'Externo' ? '—' : ''),
       andar: un.andar || '', unidade: x.unidade || (x.tipoSol === 'Externo' ? 'Externo' : ''), valor, valorTxt: 'R$ ' + valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), valorExt: grValorExtenso(valor),
       status: x.status, assinadoEm: x.termoAssinadoEm || '', condicao: cd.condicao, proprietario: cd.proprietario, alugado: cd.alugado },
-    termo: TERMO_GOURMET, rodape: TERMO_RODAPE, mapa: TERMO_MAPA_B64 };
+    termo: TERMO_GOURMET, rodape: TERMO_RODAPE, mapa: TERMO_MAPA_B64, telefone: x.telefone || grFoneCadastro(x), eletronico: grTermoEletronico('R$ ' + valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })), email: x.email || '' };
 }
 // novo link (o anterior deixa de valer) e e-mail com o botão "Ler e assinar o termo"
 // pede ao morador que compareça à Administração para assinar o termo (reserva iniciada ou aguardando assinatura).
@@ -3618,9 +3663,9 @@ function grTermoLink(x, conta, op) {
     + '<tr><td align="center" style="padding:6px 24px 18px;' + F + 'font-size:13px;font-weight:bold;letter-spacing:.14em;color:' + (op.lembrete ? '#c0392b' : '#c98a0b') + '">' + (op.lembrete ? 'LEMBRETE: FALTA ASSINAR O TERMO' : 'FALTA ASSINAR O TERMO') + '</td></tr>'
     + '<tr><td style="padding:0 30px 10px;' + F + 'font-size:15px;color:#163047;line-height:1.6">Olá, <b>' + h(String(x.solicitante).split(/\s+/)[0]) + '</b>,<br>Sua reserva do <b>' + h(x.espaco) + '</b> para <b>' + h(String(x.data).split('-').reverse().join('/')) + '</b> está guardada. '
     + (op.presencial ? 'Para <b>confirmar</b>, compareça à <b>Administração do condomínio</b> para ler as regras e assinar o Termo de Responsabilidade da reserva.'
-      : 'Para <b>confirmar</b>, leia as regras e assine o Termo de Responsabilidade pelo botão abaixo (dá para assinar com o dedo, no celular).')
+      : 'Para <b>confirmar</b>, preencha o <b>Termo de Responsabilidade</b> (versão eletrônica) pelo botão abaixo: são 8 etapas rápidas, com um "Sim, concordo" para cada regra e a sua assinatura eletrônica (dá para fazer pelo celular).')
     + (prazoTxt ? '<div style="margin-top:12px;border-left:4px solid #c0392b;background:#fdf3f2;border-radius:8px;padding:10px 12px"><b>' + (op.presencial ? 'Compareça até ' : 'Assine até ') + prazoTxt + '.</b> Se o termo não for assinado até lá, a reserva poderá ser cancelada pela Administração.</div>' : '') + '</td></tr>'
-    + (op.presencial ? '<tr><td style="padding:6px 30px 22px;' + F + 'font-size:13px;color:#163047;line-height:1.5"><b>CANCELAMENTO:</b> Conforme consta do item 9.12 do Regulamento Interno, o cancelamento ou alteração da data do evento, garantido o crédito correspondente ao desconto realizado, somente será considerado se avisado por escrito a Administração com Antecedência Mínima de 07 (Sete Dias) corridos, caso contrário, o evento ter-se-á como havido.<div style="margin-top:12px;font-size:12.5px;color:#5b6b7a"><b>Obs.:</b> Caso já tenha assinado o termo na administração, favor desconsiderar este e-mail.</div></td></tr>' : '<tr><td align="center" style="padding:14px 30px 22px"><a href="' + link + '" style="display:inline-block;background:#17324d;color:#fff;' + F + 'font-size:16px;font-weight:bold;text-decoration:none;padding:14px 28px;border-radius:8px">Ler e assinar o termo</a></td></tr>'
+    + (op.presencial ? '<tr><td style="padding:6px 30px 22px;' + F + 'font-size:13px;color:#163047;line-height:1.5"><b>CANCELAMENTO:</b> Conforme consta do item 9.12 do Regulamento Interno, o cancelamento ou alteração da data do evento, garantido o crédito correspondente ao desconto realizado, somente será considerado se avisado por escrito a Administração com Antecedência Mínima de 07 (Sete Dias) corridos, caso contrário, o evento ter-se-á como havido.<div style="margin-top:12px;font-size:12.5px;color:#5b6b7a"><b>Obs.:</b> Caso já tenha assinado o termo na administração, favor desconsiderar este e-mail.</div></td></tr>' : '<tr><td align="center" style="padding:14px 30px 22px"><a href="' + link + '" style="display:inline-block;background:#17324d;color:#fff;' + F + 'font-size:16px;font-weight:bold;text-decoration:none;padding:14px 28px;border-radius:8px">Preencher e assinar o termo</a></td></tr>'
     + '<tr><td style="padding:0 30px 22px;' + F + 'font-size:12.5px;color:#5b6b7a;line-height:1.5">O link é pessoal e vale até a véspera da reserva. Se não for assinado, a reserva não é confirmada.</td></tr>')
     + '<tr><td style="padding:14px 30px 22px;border-top:1px solid #d9e1e8;' + F + 'font-size:12px;color:#5b6b7a;text-align:center">Administração · Pier Residências · enviado pelo Pier Gestão<br>Este é um e-mail automático. Em caso de dúvidas, fale com a Administração do condomínio.<br>(21) 9 6869-3707 - Auxiliar Administrativo ou adm@condominiopier.com.br</td></tr></table></div>';
   grMandar({ to: x.email, subject: (op.lembrete ? 'Lembrete: ' : '') + (op.presencial ? 'Compareça à Administração para assinar o termo da sua reserva – ' : 'Assine o termo para confirmar sua reserva – ') + x.espaco + ' – ' + String(x.data).split('-').reverse().join('/') + (prazoTxt ? ' (prazo: ' + prazoTxt + ')' : ''), htmlBody: html,
@@ -3642,6 +3687,56 @@ function termoVer(r) {
   if (x.data <= hoje()) throw falha('O prazo para assinar este termo terminou. Fale com a Administração.');
   return grTermoDados(x);
 }
+// código de confirmação (6 dígitos) para assinar pelo link: vai para o e-mail cadastrado na reserva (o mesmo que recebeu o link)
+const TERMO_OTP = { validadeMin: 10, intervaloSeg: 60, porDia: 6, tentativas: 5 };
+const grOtpChave = x => 'TOTP_' + x.id;
+function grMascEmail(e) { const m = /^([^@]+)@(.+)$/.exec(String(e || '')); if (!m) return ''; return m[1].slice(0, 2) + '***@' + m[2]; }
+function termoCodigo(r) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw falha('O sistema está ocupado. Tente de novo em alguns segundos.');
+  try {
+    const x = grPorToken(r.t);
+    if (x.status !== 'Aguardando assinatura') throw falha('Esta reserva não está aguardando assinatura.');
+    if (!emailValido(x.email)) throw falha('A reserva não tem e-mail cadastrado. Fale com a Administração.');
+    const props = PropertiesService.getScriptProperties(), tAgora = Date.now();
+    let reg = {}; try { reg = JSON.parse(props.getProperty(grOtpChave(x)) || '{}'); } catch (e) {}
+    const envios = (reg.envios || []).filter(z => tAgora - z < 864e5);
+    if (envios.length && tAgora - envios[envios.length - 1] < TERMO_OTP.intervaloSeg * 1000) throw falha('Aguarde 1 minuto antes de pedir outro código.');
+    if (envios.length >= TERMO_OTP.porDia) throw falha('Muitos pedidos de código hoje. Fale com a Administração.');
+    const codigo = String(100000 + parseInt(Utilities.getUuid().replace(/-/g, '').slice(0, 12), 16) % 900000);
+    envios.push(tAgora);
+    props.setProperty(grOtpChave(x), JSON.stringify({ h: hashSenha(codigo), ate: tAgora + TERMO_OTP.validadeMin * 60e3, n: 0, envios }));
+    MailApp.sendEmail({ to: x.email, name: 'Pier Residências', subject: 'Código para assinar o termo da reserva – ' + x.espaco + ' – ' + String(x.data).split('-').reverse().join('/'),
+      body: ['Olá' + (x.solicitante ? ', ' + x.solicitante : '') + '.', '', 'Seu código para assinar o Termo de Responsabilidade para Reserva e Uso do ' + x.espaco + ' (' + String(x.data).split('-').reverse().join('/') + '):', '', 'Código: ' + codigo, '',
+        'Digite este código na última etapa do termo. Ele vale por ' + TERMO_OTP.validadeMin + ' minutos.', '', 'Se não foi você que pediu, ignore este e-mail e avise a Administração.', '',
+        'Administração · Pier Residências · (21) 9 6869-3707 · adm@condominiopier.com.br'].join('\n') });
+    return 'Enviamos um código de 6 dígitos para ' + grMascEmail(x.email) + '. Ele vale por ' + TERMO_OTP.validadeMin + ' minutos (confira também o spam).';
+  } finally { lock.releaseLock(); }
+}
+function grConferirOtp(x, codigo) {
+  const props = PropertiesService.getScriptProperties();
+  let reg = null; try { reg = JSON.parse(props.getProperty(grOtpChave(x)) || 'null'); } catch (e) {}
+  if (!reg || !reg.h) throw falha('Peça o código de confirmação antes de assinar.');
+  if (Date.now() > reg.ate) throw falha('O código venceu. Peça um novo código.');
+  if (reg.n >= TERMO_OTP.tentativas) throw falha('Muitas tentativas com código errado. Peça um novo código.');
+  if (!/^\d{6}$/.test(String(codigo || '').trim()) || !conferirSenha(String(codigo).trim(), reg.h)) {
+    reg.n = (reg.n || 0) + 1; props.setProperty(grOtpChave(x), JSON.stringify(reg));
+    throw falha('Código de confirmação errado' + (reg.n < TERMO_OTP.tentativas ? '. Confira e tente de novo.' : '. Peça um novo código.'));
+  }
+  props.deleteProperty(grOtpChave(x));
+  return { email: grMascEmail(x.email), em: agora() };
+}
+// verificação pública do termo pelo código de autenticidade (mostra só o mínimo)
+function termoVerificar(r) {
+  const c = String(r.c || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!/^PIER[A-Z0-9]{8}$/.test(c)) throw falha('Código inválido. Ele tem o formato PIER-XXXX-XXXX.');
+  const cod = 'PIER-' + c.slice(4, 8) + '-' + c.slice(8, 12);
+  const x = linhas(tabela('esr')).find(z => z.termoAut === cod);
+  if (!x) throw falha('Nenhum termo encontrado com este código.');
+  const partes = String(x.termoNome || '').trim().split(/\s+/), nome = partes[0] ? partes[0] + (partes.length > 1 ? ' ' + partes.slice(1).map(p => p.charAt(0).toUpperCase() + '.').join(' ') : '') : '';
+  return { codigo: cod, espaco: x.espaco, data: x.data, unidade: [x.bloco, x.unidade].filter(Boolean).join(' · '), nome, assinadoEm: x.termoAssinadoEm, via: String(x.termoVia || '').replace(/\s*\(.*\)\s*$/, ''), shaPdf: x.termoShaPdf || '', status: x.status,
+    shaPdfMorador: x.termoShaPdfMorador || '', validadoPor: x.termoRepEm ? x.termoRepNome + ' · ' + x.termoRepCargo : '', validadoEm: x.termoRepEm || '' };
+}
 function termoAssinar(r) {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(20000)) throw falha('O sistema está ocupado. Tente de novo em alguns segundos.');
@@ -3649,6 +3744,8 @@ function termoAssinar(r) {
     const x = grPorToken(r.t);
     if (x.status !== 'Aguardando assinatura') throw falha('Esta reserva não está aguardando assinatura.');
     if (x.data <= hoje()) throw falha('O prazo para assinar este termo terminou. Fale com a Administração.');
+    // pelo link, o termo eletrônico exige o código de confirmação enviado ao e-mail da reserva
+    if (r.modo === 'eletronico') r.otp = grConferirOtp(x, r.codigo); else delete r.otp;
     const msg = grAssinarAplicar(x, r, 'Link enviado por e-mail', null);
     AUDIT_DET = 'Termo do ' + x.espaco + ' assinado pelo link (' + x.solicitante + ', ' + x.data + ')';
     try { auditar({ usuario: 'link-termo', nome: texto(x.solicitante, 60), perfil: 'Morador' }, 'termoAssinar', AUDIT_DET); } catch (e) {}
@@ -3656,27 +3753,96 @@ function termoAssinar(r) {
   } finally { lock.releaseLock(); }
 }
 function grAssinarAplicar(x, r, via, conta) {
-  const png = String(r.assinatura || '').replace(/^data:image\/png;base64,/, '');
-  if (!r.aceite || !r.lido) throw falha('É preciso ler o termo até o fim e marcar que concorda.');
-  if (png.length < 800 || png.length > 600000 || !conteudoConfere(png, 'image/png')) throw falha('Faça a assinatura no quadro antes de confirmar.');
-  const nome = texto(r.nome, 80) || x.solicitante;
   const quando = agora(), t = tabela('esr'), d = grTermoDados(x);
+  const eletr = r.modo === 'eletronico';
+  let nome, html, extra = {};
+  if (eletr) {
+    // termo eletrônico: todos os itens com "Sim, concordo", nome digitado igual ao da etapa 1 e declaração marcada
+    nome = texto(r.nome, 80);
+    if (!nome || nome.split(/\s+/).length < 2) throw falha('Informe o nome completo na etapa 1.');
+    const resp = r.respostas && typeof r.respostas === 'object' ? r.respostas : {}, itens = [].concat.apply([], d.eletronico.map(s => s.itens));
+    const sem = itens.filter(i => resp[i.ref] !== 'sim');
+    if (sem.length) throw falha('Todos os itens precisam de "Sim, concordo" (' + sem.length + ' sem aceite). Qualquer discordância impede a reserva.');
+    if (chaveNome(texto(r.assinaturaNome, 80)) !== chaveNome(nome)) throw falha('A assinatura deve ser o mesmo nome completo informado na etapa 1.');
+    if (!r.consentimento) throw falha('Marque a declaração de assinatura eletrônica.');
+    const png = String(r.assinatura || '').replace(/^data:image\/png;base64,/, '');
+    if (png.length < 800 || png.length > 600000 || !conteudoConfere(png, 'image/png')) throw falha('Faça a sua assinatura no quadro antes de assinar.');
+    const email = String(r.email || '').trim().toLowerCase();
+    if (!emailValido(email)) throw falha('Informe um e-mail válido na etapa 1.');
+    if (email !== String(x.email || '').toLowerCase()) extra.email = email;
+    const fone = texto(r.telefone, 30);
+    if (String(fone).replace(/\D/g, '').length < 10) throw falha('Informe o telefone com DDD na etapa 1.');
+    if (fone !== String(x.telefone || '')) extra.telefone = fone;
+    // autenticidade: código único (PIER-XXXX-XXXX) + SHA-256 do registro (dados + respostas) e, depois, do PDF gerado
+    const alf = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', rnd = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, Utilities.getUuid() + Utilities.getUuid() + quando);
+    let aut = ''; for (let i = 0; i < 8; i++) aut += alf.charAt((rnd[i] + 256) % alf.length);
+    aut = 'PIER-' + aut.slice(0, 4) + '-' + aut.slice(4);
+    const respOrd = {}; itens.forEach(i => { respOrd[i.ref] = 'sim'; });
+    const shaReg = grSha256Hex(JSON.stringify({ codigo: aut, reserva: x.id, espaco: x.espaco, data: x.data, bloco: x.bloco, unidade: x.unidade, nome, email, respostas: respOrd, quando, via }));
+    const otp = r.otp && r.otp.email ? r.otp : null;
+    extra.termoAut = aut; extra.termoShaReg = shaReg; extra.termoOtp = otp ? 'Enviado para ' + otp.email + ' e confirmado em ' + otp.em : '';
+    // a assinatura desenhada fica num arquivo próprio (para refazer o PDF quando o representante assinar)
+    try { extra.termoAssArq = pastaDrive('PASTA_TERMOS_GOURMET', 'Termos do Espaço Gourmet - Pier Gestão').createFile(Utilities.newBlob(Utilities.base64Decode(png), 'image/png', 'Assinatura ' + aut + '.png')).getId(); } catch (e) {}
+    html = grTermoEletHtml(d, { nome, email, telefone: fone, quando, via, ua: texto(r.ua, 200), total: itens.length, itens: itens.reduce((t, i) => t + i.textos.length, 0), rep: conta ? conta.nome : '', aut, shaReg, otp, png });
+  } else {
+    const png = String(r.assinatura || '').replace(/^data:image\/png;base64,/, '');
+    if (!r.aceite || !r.lido) throw falha('É preciso ler o termo até o fim e marcar que concorda.');
+    if (png.length < 800 || png.length > 600000 || !conteudoConfere(png, 'image/png')) throw falha('Faça a assinatura no quadro antes de confirmar.');
+    nome = texto(r.nome, 80) || x.solicitante;
+    html = grTermoHtml(d, { png, nome, quando, via, ua: texto(r.ua, 200), rep: conta ? conta.nome : 'Administração (registro eletrônico)' });
+  }
   // termo assinado: HTML → PDF no Drive (pasta própria, sem compartilhar)
-  const html = grTermoHtml(d, { png, nome, quando, via, ua: texto(r.ua, 200), rep: conta ? conta.nome : 'Administração (registro eletrônico)' });
   const pasta = pastaDrive('PASTA_TERMOS_GOURMET', 'Termos do Espaço Gourmet - Pier Gestão');
   const nomeArq = ('Termo ' + x.espaco + ' ' + x.data + ' - ' + nome).replace(/[\\/:*?"<>|]/g, '_');
-  let arq;
-  try { arq = pasta.createFile(Utilities.newBlob(html, 'text/html', nomeArq + '.html').getAs('application/pdf').setName(nomeArq + '.pdf')); }
-  catch (e) { arq = pasta.createFile(Utilities.newBlob(html, 'text/html', nomeArq + '.html')); }
+  let arq, blob;
+  try { blob = Utilities.newBlob(html, 'text/html', nomeArq + '.html').getAs('application/pdf').setName(nomeArq + '.pdf'); arq = pasta.createFile(blob); }
+  catch (e) { blob = Utilities.newBlob(html, 'text/html', nomeArq + '.html'); arq = pasta.createFile(blob); }
+  // impressão digital do arquivo guardado: a página de verificação compara com o PDF que a pessoa tiver em mãos
+  if (extra.termoAut) { try { extra.termoShaPdf = grSha256Hex(blob.getBytes()); } catch (e) {} }
   const daAdm = GR_ORIGENS_ADM.indexOf(x.origem) >= 0;
   const novo = daAdm ? 'Termo assinado' : x.tipoSol === 'Externo' ? 'Pré-reserva' : 'Confirmada';
-  gravar(t, { status: novo, termoAssinadoEm: quando, termoNome: nome, termoVia: via + (conta ? ' (' + conta.nome + ')' : ''), termoArquivo: arq.getId(), termoHash: '', atualizadoEm: quando, atualizadoPor: conta ? conta.nome : 'Assinatura pelo link' }, x._row);
-  x.status = novo;
+  gravar(t, Object.assign({ status: novo, termoAssinadoEm: quando, termoNome: nome, termoVia: (eletr ? 'Termo eletrônico · ' : '') + via + (conta ? ' (' + conta.nome + ')' : ''), termoArquivo: arq.getId(), termoHash: '', termoVencidoEm: '', termoObs: '', atualizadoEm: quando, atualizadoPor: conta ? conta.nome : 'Assinatura pelo link' }, extra), x._row);
+  x.status = novo; if (extra.email) x.email = extra.email;
   let cfg = null; try { cfg = grEspaco(x.espaco); } catch (e) { cfg = { horario: x.horario, cobranca: 'boleto condominial' }; }
   const env = grAvisar(x, d.reserva.andar, cfg, arq);
   if (env) gravar(t, { avisoEm: agora() }, x._row);
   if (daAdm) grAvisarAdm('Termo assinado: confirme a reserva na administradora', ['O termo da reserva do ' + x.espaco + ' de ' + String(x.data).split('-').reverse().join('/') + ' foi assinado por ' + nome + ' (' + (x.bloco || '') + ' ' + (x.unidade || '') + ')' + (x.solicitacao ? ', solicitação ' + x.solicitacao : '') + '.', 'Falta confirmar a reserva no sistema da administradora. Quando chegar o e-mail de confirmação (ou ao clicar em Confirmar no Pier Gestão), o morador recebe a confirmação.']);
   return (novo === 'Confirmada' ? 'Termo assinado e reserva confirmada.' : novo === 'Termo assinado' ? 'Termo assinado! A Administração vai confirmar a sua reserva e você receberá a confirmação por e-mail.' : 'Termo assinado. A reserva fica aguardando o pagamento.') + (env ? ' Enviamos uma cópia do termo para ' + x.email + '.' : '');
+}
+function grSha256Hex(v) {
+  const A = Utilities.DigestAlgorithm.SHA_256, b = typeof v === 'string' ? Utilities.computeDigest(A, v, Utilities.Charset.UTF_8) : Utilities.computeDigest(A, v);
+  return b.map(x => ('0' + ((x + 256) % 256).toString(16)).slice(-2)).join('');
+}
+// registro do termo eletrônico (vira PDF no Drive): identificação, os itens com a resposta, o mapa e a assinatura
+function grTermoEletHtml(d, a) {
+  const r = d.reserva, h = comH, dBR = s => String(s || '').split('-').reverse().join('/');
+  const quandoBR = a.quando.slice(8, 10) + '/' + a.quando.slice(5, 7) + '/' + a.quando.slice(0, 4) + ' ' + a.quando.slice(11, 16);
+  const rot = t => { const m = /^([^:]{3,30}):\s(.*)$/.exec(t); return m ? '<b>' + h(m[1]) + ':</b> ' + h(m[2]) : h(t); };
+  const corpo = d.eletronico.map((s, i) => '<h2>' + (i + 2) + '. ' + h(s.titulo) + '</h2>'
+    + (/mapa/i.test(s.titulo) ? '<p style="text-align:center;margin:4px 0 2px"><img src="data:image/jpeg;base64,' + d.mapa + '" style="width:100%;max-width:560px"></p><p class="cap">Somente as áreas demarcadas em azul no entorno do salão podem ser utilizadas.</p>' : '')
+    + s.itens.map((it, k) => '<div class="it"><div class="qt">' + (i + 2) + '.' + String.fromCharCode(97 + k) + ') ' + h(it.titulo) + '</div>'
+      + '<ul>' + it.textos.map(t => '<li>' + rot(t) + '</li>').join('') + '</ul>'
+      + '<span class="sim">☑ Sim, concordo com todos</span></div>').join('')).join('');
+  const dt = s => s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4) + ' ' + s.slice(11, 16);
+  return '<html><head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;font-size:9.5pt;color:#111;line-height:1.38}h1{font-size:13pt;text-align:center;margin:0 0 3px}h2{font-size:11pt;margin:12px 0 5px;color:#17324d;border-bottom:1px solid #c9d3dc;padding-bottom:2px}'
+    + '.sub{text-align:center;color:#444;margin:0 0 2px;font-size:9pt}.imp{text-align:center;color:#c0392b;font-weight:bold;margin:0 0 8px;font-size:9pt}.box{border:1px solid #c9d3dc;border-radius:6px;padding:7px 10px;margin:6px 0;background:#f6f9fb}'
+    + '.it{margin:0 0 7px;page-break-inside:avoid}.qt{font-weight:bold;color:#2a6f93}.it ul{margin:2px 0 2px 16px;padding:0}.it li{margin:1px 0}.sim{color:#1f6f43;font-weight:bold}.cap{text-align:center;color:#2a6f93;font-style:italic;font-weight:bold;font-size:8.5pt;margin:0 0 6px}'
+    + '.ass{margin-top:18px;width:100%;page-break-inside:avoid}.ass td{vertical-align:bottom;width:50%;padding:6px}.lin{border-top:1px solid #111;padding-top:4px;font-size:9pt}.rod{margin-top:14px;font-size:8pt;color:#555;border-top:1px solid #c9d3dc;padding-top:5px}</style></head><body>'
+    + '<h1>TERMO DE RESPONSABILIDADE PARA RESERVA E USO DO ESPAÇO GOURMET</h1><p class="sub">Leia atentamente cada condição e manifeste sua concordância individual, marcando uma opção em cada pergunta.</p><p class="imp">Importante: Qualquer discordância impede a conclusão da reserva.</p>'
+    + '<h2>1. Identificação do morador e do evento</h2><div class="box"><b>Nome completo:</b> ' + h(a.nome) + ' · <b>Condição:</b> ' + h(r.condicao || 'Morador(a)') + (r.alugado ? ' (unidade alugada' + (r.proprietario ? '; proprietário(a): ' + h(r.proprietario) : '') + ')' : '')
+    + '<br><b>Bloco / Apartamento:</b> ' + h([r.bloco, r.unidade].filter(Boolean).join(' / ') || '—') + ' · <b>Telefone / celular:</b> ' + h(a.telefone || '—') + ' · <b>E-mail:</b> ' + h(a.email)
+    + '<br><b>Data da reserva:</b> ' + h(dBR(r.data)) + ' · <b>Espaço:</b> ' + h(r.espaco) + ' · <b>Valor:</b> ' + h(r.valorTxt) + ' · <b>Respostas:</b> ' + a.total + '/' + a.total + ' "Sim, concordo com todos" (' + a.itens + ' itens)</div>'
+    + corpo
+    + '<h2>8. Assinatura</h2><div class="box">Ao assinar, declaro que li e compreendi todos os itens e que as respostas representam minha livre manifestação de concordância com as condições do termo. Confirmo que sou o(a) morador(a) identificado(a) e assumo as obrigações declaradas.'
+    + '<br><br><b>Data/hora da assinatura:</b> ' + h(quandoBR) + ' (horário de Brasília, registrado pelo sistema)<br><b>Forma:</b> ' + h(a.via) + (a.rep ? ' — atendimento: ' + h(a.rep) : '') + '<br><b>Método:</b> aceite eletrônico pergunta a pergunta' + (a.png ? ' e assinatura desenhada na tela' : '') + ' (sem certificado digital)'
+    + (a.otp ? '<br><b>Código de confirmação:</b> enviado para ' + h(a.otp.email) + ' (e-mail cadastrado na reserva) e confirmado em ' + h(dt(a.otp.em)) : '')
+    + (a.ua ? '<br><b>Aparelho:</b> ' + h(a.ua) : '') + '</div>'
+    + '<table class="ass"><tr><td>' + (a.png ? '<img src="data:image/png;base64,' + a.png + '" style="height:66px;max-width:100%;display:block">' : '') + '<div class="lin"><b>Assinatura do(a) morador(a)</b><br>Nome: ' + h(a.nome) + '<br>Bl/Apt: ' + h([r.bloco, r.unidade].filter(Boolean).join(' / ') || '—') + '<br>Data: ' + h(quandoBR.slice(0, 10)) + '</div></td><td><div class="lin"><b>Representante do Condomínio</b><br>'
+      + (a.rep2 ? 'Nome: ' + h(a.rep2.nome) + '<br>Cargo: ' + h(a.rep2.cargo) + '<br>Data: ' + h(dt(a.rep2.em)) + ' (assinado eletronicamente)<br><small>Conta do Pier Gestão: ' + h(a.rep2.usuario) + ' (acesso com usuário e senha)</small>'
+        : 'Nome: ______________________________<br>Cargo: ______________________________<br>Data: ____/____/______') + '</div></td></tr></table>'
+    + (a.aut ? '<div class="box" style="margin-top:12px"><b>Código de autenticidade:</b> <span style="font-size:12pt;letter-spacing:.06em"><b>' + h(a.aut) + '</b></span><br>Confira em ' + h(GR_SITE) + '/verificar.html#c=' + h(a.aut)
+      + '<br><small>Registro (SHA-256): ' + h(a.shaReg) + '</small></div>' : '')
+    + '<div class="rod"><b>' + h(TERMO_REVISAO) + '</b> · A reserva depende da validação deste termo pela Administração.<br>' + h(d.rodape) + '</div></body></html>';
 }
 function grTermoHtml(d, a) {
   const r = d.reserva, h = comH;
@@ -7339,4 +7505,4 @@ const TERMO_GOURMET = [
   '@mapa',
   '! EU, {NOME}, {CONDICAO} DO BLOCO {BLOCO}, UNIDADE {UNIDADE}, DECLARO QUE TENHO CIÊNCIA DO COMPROMISSO DE UTILIZAÇÃO QUE ESTOU ASSUMINDO COM O CONDOMÍNIO E DEMAIS MORADORES, COM AS OBRIGAÇÕES QUE DEVO CUMPRIR LISTADAS ACIMA NA RESERVA FEITA DO ESPAÇO GOURMET PARA O DIA {DATA}. COM A ASSINATURA DESTE TERMO, RECONHEÇO E AUTORIZO, BASEANDO-SE NO REGULAMENTO INTERNO E CONVENÇÃO DO CONDOMÍNIO, A AUTOMÁTICA NOTIFICAÇÃO/PENALIZAÇÃO POR PARTE DA ADMINISTRAÇÃO, CASO AS REGRAS SUPRACITADAS SEJAM QUEBRADAS. A PENALIZAÇÃO SERÁ PECUNIÁRIA NO VALOR DE R$ 1.500,00, POR QUALQUER DESCUMPRIMENTO DAS REGRAS SE, APÓS INFORMADO PELO COLABORADOR DO CONDOMÍNIO, NÃO SE FIZER CESSAR TAL DESCUMPRIMENTO. ESTE TERMO SERVE COMO DOCUMENTO HÁBIL PARA EVENTUAL COBRANÇA DA PENALIDADE, CASO A MESMA SEJA APLICADA.'
 ];
-const TERMO_RODAPE = 'Est. da Barra da Tijuca, 231 - Barra da Tijuca - Rio de Janeiro - RJ - CEP 22.611-201 · Tel.: (21) 2117-1847 / 2117-1834 · E-mail: adm@condominiopier.com.br';
+const TERMO_RODAPE = 'Est. da Barra da Tijuca, 231 - Barra da Tijuca - Rio de Janeiro - RJ - CEP 22.611-201 · Tel.: (21) 2117-1847 / 2117-1834 · Celular: (21) 96869-3707 · E-mail: adm@condominiopier.com.br';

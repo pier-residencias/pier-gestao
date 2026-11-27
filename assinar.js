@@ -1,4 +1,4 @@
-// Página pública do link do termo: abre o termo pelo código do link, obriga a leitura, o aceite e a assinatura.
+// Página pública do link do termo: abre o termo eletrônico pelo código do link; para assinar, pede o código de confirmação enviado ao e-mail da reserva.
 (function () {
   "use strict";
   const caixa = document.getElementById("caixa");
@@ -15,6 +15,6 @@
   if (!t) { estado("Link incompleto", "Abra o link exatamente como chegou no seu e-mail."); return; }
   api("termoVer").then(j => {
     caixa.innerHTML = "";
-    window.TermoGourmet.montar(caixa, j.termo, { onAssinar: async a => { const r = await api("termoAssinar", a); estado("Termo assinado", r.msg || "Sua reserva foi atualizada.", true); window.scrollTo(0, 0); } });
+    window.TermoGourmet.montar(caixa, j.termo, { pedirCodigo: async () => (await api("termoCodigo")).msg, onAssinar: async a => { const r = await api("termoAssinar", a); estado("Termo assinado", r.msg || "Sua reserva foi atualizada.", true); window.scrollTo(0, 0); } });
   }).catch(e => estado("Não foi possível abrir o termo", e.message));
 })();
