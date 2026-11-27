@@ -5217,6 +5217,9 @@ $("#pd-body").addEventListener("click", e => {
   else if (b.dataset.sub) pdAbrirForm({pai:b.dataset.sub});
   else if (b.dataset.editar) pdAbrirForm({editar:b.dataset.editar});
 });
+// cabeçalho do Controle de pendências fixo: ganha uma linha/sombra quando está preso no topo
+(() => { const t = document.getElementById("pd-topo"); if (!t || !("IntersectionObserver" in window)) return; const s = document.createElement("div"); s.style.height = "1px"; t.before(s);
+  new IntersectionObserver(([e]) => t.classList.toggle("preso", !e.isIntersecting && e.boundingClientRect.top < 0), {threshold:0}).observe(s); })();
 $("#pd-q").addEventListener("input", e => { PD.q = e.target.value.trim(); PD.late = false; pdGuardarFiltros(); renderPend(); });
 $("#pd-fs").addEventListener("change", e => { PD.st = e.target.value; PD.late = false; pdGuardarFiltros(); renderPend(); });
 $("#pd-fc").addEventListener("change", e => { PD.crit = e.target.value; pdGuardarFiltros(); renderPend(); });

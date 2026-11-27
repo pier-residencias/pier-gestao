@@ -356,3 +356,9 @@
 .gr-delbox{grid-template-columns:1fr;border-color:color-mix(in srgb,var(--crit,#c0392b) 50%,var(--line))}.gr-delbox p{margin:0}
 .gr-auto{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin:0 0 12px;padding:10px 14px;border-radius:12px;border:1px solid var(--line);border-left:4px solid var(--muted);font-size:13px}.gr-auto.on{border-left-color:#2e8b57}.gr-auto span{color:var(--muted)}
 .gr-prazo{border-color:color-mix(in srgb,var(--warn) 60%,var(--line));color:var(--fg)}
+
+/* Controle de pendências: cabeçalho (título, números, progresso e filtros) fixo ao rolar a lista */
+.pd-topo{position:sticky;top:0;z-index:6;background:var(--bg);margin:0 -4px;padding:4px 4px 10px;border-bottom:1px solid transparent;transition:border-color .15s,box-shadow .15s}
+.pd-topo.preso{border-bottom-color:var(--line);box-shadow:0 8px 14px -12px rgba(0,0,0,.45)}
+.pd-topo .toolbar{margin-bottom:0}
+@media (max-width:899px){.pd-topo{position:static}}
